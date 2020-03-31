@@ -175,16 +175,16 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
         data->total_frequencies = total_frequencies;
 
         for(int f=0; f < data->nfields; f++) {
-            fields[f].visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
-            fields[f].device_visibilities.resize(data->total_frequencies, std::vector<DVis>(data->nstokes, DVis()));
-            fields[f].numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
-            fields[f].numVisibilitiesPerFreq.resize(data->total_frequencies,0);
-            if(gridding){
-              fields[f].gridded_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
-              fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
-              fields[f].backup_numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
-              fields[f].backup_numVisibilitiesPerFreq.resize(data->total_frequencies,0);
-            }
+                fields[f].visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
+                fields[f].device_visibilities.resize(data->total_frequencies, std::vector<DVis>(data->nstokes, DVis()));
+                fields[f].numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
+                fields[f].numVisibilitiesPerFreq.resize(data->total_frequencies,0);
+                if(gridding) {
+                        fields[f].gridded_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
+                        fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
+                        fields[f].backup_numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
+                        fields[f].backup_numVisibilitiesPerFreq.resize(data->total_frequencies,0);
+                }
         }
 
         casacore::Vector<float> weights;
@@ -235,9 +235,9 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
                                                         MS_vis.y = dataCol(sto,j).imag();
 
                                                         if(noise)
-                                                          fields[f].visibilities[g+j][sto].Vo.push_back(addNoiseToVis(MS_vis, weights[sto]));
+                                                                fields[f].visibilities[g+j][sto].Vo.push_back(addNoiseToVis(MS_vis, weights[sto]));
                                                         else
-                                                          fields[f].visibilities[g+j][sto].Vo.push_back(MS_vis);
+                                                                fields[f].visibilities[g+j][sto].Vo.push_back(MS_vis);
 
                                                         fields[f].visibilities[g+j][sto].weight.push_back(weights[sto]);
                                                         fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto]++;
@@ -358,13 +358,13 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
 
 }
 
-__host__ void writeMS(char const *infile, char const *outfile, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
+__host__ void writeMS(char const *infile, char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
 {
         MScopy(infile, outfile);
-        char* out_col = "DATA";
         std::string dir = outfile;
         casacore::Table main_tab(dir,casacore::Table::Update);
         std::string column_name(out_col);
+        std::string query;
 
         if (main_tab.tableDesc().isColumn(column_name))
         {
@@ -373,11 +373,14 @@ __host__ void writeMS(char const *infile, char const *outfile, std::vector<Field
                 printf("Adding %s to the main table...\n", out_col);
                 main_tab.addColumn(casacore::ArrayColumnDesc <casacore::Complex>(column_name,"created by gpuvmem"));
                 main_tab.flush();
+                query = "UPDATE "+dir+" set "+column_name+"=DATA";
+                printf("Duplicating DATA column into %s ...\n", column_name.c_str());
+                casacore::tableCommand(query);
         }
 
 
         for(int f=0; f < data.nfields; f++)
-          std:fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
+std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
 
 
         int g = 0;
@@ -386,7 +389,6 @@ __host__ void writeMS(char const *infile, char const *outfile, std::vector<Field
         casacore::Vector<float> weights;
         casacore::Matrix<casacore::Complex> dataCol;
         casacore::Matrix<bool> flagCol;
-        std::string query;
         float real_n, imag_n;
         SelectStream(0);
         PutSeed(-1);
@@ -394,7 +396,7 @@ __host__ void writeMS(char const *infile, char const *outfile, std::vector<Field
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
-                        query = "select WEIGHT,DATA,FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
+                        query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 
                         if(W_projection)
                                 query += " ORDERBY ASC UVW[2]";
@@ -402,7 +404,7 @@ __host__ void writeMS(char const *infile, char const *outfile, std::vector<Field
                         casacore::Table query_tab = casacore::tableCommand(query.c_str());
 
                         casacore::ArrayColumn<float> weight_col(query_tab,"WEIGHT");
-                        casacore::ArrayColumn<casacore::Complex> data_col(query_tab,"DATA");
+                        casacore::ArrayColumn<casacore::Complex> data_col(query_tab, column_name);
                         casacore::ArrayColumn<bool> flag_col(query_tab,"FLAG");
 
                         for (int k=0; k < query_tab.nrow(); k++) {
@@ -439,7 +441,7 @@ __host__ void writeMS(char const *infile, char const *outfile, std::vector<Field
                         if(W_projection)
                                 sub_query += " ORDERBY ASC UVW[2]";
 
-                        query = "update ["+sub_query+"], $1 tq set DATA[!FLAG]=tq.DATA[!tq.FLAG], WEIGHT=tq.WEIGHT";
+                        query = "update ["+sub_query+"], $1 tq set "+ column_name +"[!FLAG]=tq."+column_name+"[!tq.FLAG], WEIGHT=tq.WEIGHT";
 
                         casacore::TaQLResult result1 = casacore::tableCommand(query.c_str(), query_tab);
 

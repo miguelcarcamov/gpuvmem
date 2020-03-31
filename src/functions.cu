@@ -36,7 +36,7 @@ namespace cg = cooperative_groups;
 
 extern long M, N;
 extern int iterations, iterthreadsVectorNN, blocksVectorNN, nopositivity, image_count, \
-           status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, apply_noise, print_images, gridding;
+           status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, save_model, apply_noise, print_images, gridding;
 
 extern cufftHandle plan1GPU;
 extern cufftComplex *device_V, *device_fg_image, *device_I_nu;
@@ -248,6 +248,7 @@ __host__ void print_help() {
         printf("    -T  --threshold        Threshold to calculate the spectral index image from a certain number of sigmas in I_nu_0\n");
         printf("    -c  --copyright        Shows copyright conditions\n");
         printf("    -w  --warranty         Shows no warranty details\n");
+        printf("        --savemodel        Saves the model visibilities on the model column\n");
         printf("        --nopositivity     Run gpuvmem using chi2 with no posititivy restriction\n");
         printf("        --apply-noise      Apply random gaussian noise to visibilities\n");
         printf("        --clipping         Clips the image to positive values\n");
@@ -309,6 +310,7 @@ __host__ Vars getOptions(int argc, char **argv) {
                 {"apply-noise", 0, &apply_noise, 1},
                 {"print-images", 0, &print_images, 1},
                 {"print-errors", 0, &print_errors, 1},
+                {"savemodel", 0, &save_model, 1},
                 /* These options don’t set a flag. */
                 {"input", 1, NULL, 'i' }, {"output", 1, NULL, 'o'}, {"output-image", 1, NULL, 'O'},
                 {"threshold", 0, NULL, 'T'}, {"nu_0", 0, NULL, 'F'},
@@ -814,9 +816,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         for(int f=0; f < data->nfields; f++) {
                 for(int i=0; i < data->total_frequencies; i++) {
                         for(int s=0; s< data->nstokes; s++) {
-                        fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                        fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                        fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                         #pragma omp parallel for schedule(static, 1)
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++) {
 

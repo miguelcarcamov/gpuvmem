@@ -15,9 +15,9 @@ void IoMS::IoreadMS(char const *MS_name, std::vector<Field>& fields, MSData *dat
 {
         readMS(MS_name, fields, data, noise, W_projection, random_prob, gridding);
 };
-void IoMS::IowriteMS(char const *infile, char const *outfile, std::vector<Field>& fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
+void IoMS::IowriteMS(char const *infile, char const *outfile, char const *out_col, std::vector<Field>& fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
 {
-        writeMS(infile, outfile, fields, data, random_probability, sim, noise, W_projection, verbose_flag);
+        writeMS(infile, outfile, out_col, fields, data, random_probability, sim, noise, W_projection, verbose_flag);
 };
 
 void IoMS::IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)

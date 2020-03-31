@@ -92,14 +92,14 @@ typedef struct field {
         float phs_xobs, phs_yobs;
         float *atten_image;
         std::vector<float> nu;
-        std::vector<std::vector<long>> numVisibilitiesPerFreqPerStoke;
+        std::vector<std::vector<long> > numVisibilitiesPerFreqPerStoke;
         std::vector<long> numVisibilitiesPerFreq;
-        std::vector<std::vector<long>> backup_numVisibilitiesPerFreqPerStoke;
+        std::vector<std::vector<long> > backup_numVisibilitiesPerFreqPerStoke;
         std::vector<long> backup_numVisibilitiesPerFreq;
-        std::vector<std::vector<HVis>> visibilities;
-        std::vector<std::vector<DVis>> device_visibilities;
-        std::vector<std::vector<HVis>> gridded_visibilities;
-        std::vector<std::vector<HVis>> backup_visibilities;
+        std::vector<std::vector<HVis> > visibilities;
+        std::vector<std::vector<DVis> > device_visibilities;
+        std::vector<std::vector<HVis> > gridded_visibilities;
+        std::vector<std::vector<HVis> > backup_visibilities;
 }Field;
 
 typedef struct MSDataset {
@@ -129,7 +129,7 @@ __host__ void MScopy(char const *in_dir, char const *in_dir_dest);
 
 __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu);
 
-__host__ void writeMS(char const *infile, char const *outfile, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag);
+__host__ void writeMS(char const *infile, char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag);
 
 __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option);
 __host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N);
