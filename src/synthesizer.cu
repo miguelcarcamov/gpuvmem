@@ -14,7 +14,8 @@ Telescope *telescope;
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
 
-int threadsVectorReduceNN, blocksVectorReduceNN, nopositivity = 0, verbose_flag = 0, clip_flag = 0, apply_noise = 0, print_images = 0, gridding, it_maximum, status_mod_in;
+int threadsVectorReduceNN, blocksVectorReduceNN, nopositivity = 0, verbose_flag = 0, clip_flag = 0, apply_noise = 0, print_images = 0, save_model = 0;
+int gridding, it_maximum, status_mod_in;
 int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, print_errors, nMeasurementSets=0, max_number_vis;
 char *output, *mempath, *out_image, *msinput, *msoutput, *inputdat, *modinput;
 char *t_telescope;
@@ -972,8 +973,11 @@ void MFS::run()
         }
 
         printf("Saving residuals to MS...\n");
-        for(int d=0; d<nMeasurementSets; d++)
-                iohandler->IowriteMS(datasets[d].name, datasets[d].oname, datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
+        for(int d=0; d<nMeasurementSets; d++) {
+                iohandler->IowriteMS(datasets[d].name, datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
+                if(save_model)
+                        iohandler->IowriteMS(datasets[d].name, datasets[d].oname, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
+        }
 
         printf("Residuals saved.\n");
 

@@ -28,10 +28,10 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 1.  Install git-lfs
 
   a. `sudo apt-get install git-lfs`
-  
-2.  Install casacore latest stable version v3.1.2
 
-  a. `git clone --single-branch --branch v3.1.2 https://github.com/casacore/casacore.git`
+2.  Install casacore latest stable version v3.2.1
+
+  a. `git clone --single-branch --branch v3.2.1 https://github.com/casacore/casacore.git`
 
   b. `sudo apt-get install -y build-essential cmake gfortran g++ libncurses5-dev libreadline-dev flex bison libblas-dev liblapacke-dev libcfitsio-dev wcslib-dev libhdf5-serial-dev libfftw3-dev python-numpy libboost-python-dev libpython2.7-dev`
 
@@ -153,6 +153,7 @@ Example: `./bin/gpuvmem options [ arguments ...]`
     -T  --threshold        Threshold to calculate the spectral index image from above a certain number of sigmas in I_nu_0
     -c  --copyright        Shows copyright conditions
     -w  --warranty     Shows no warranty details
+    --savemodel        Saves the model visibilities on the model column
     --nopositivity     Run gpuvmem using chi2 with no posititivy restriction
     --apply-noise      Apply random gaussian noise to visibilities
     --clipping         Clips the image to positive values
