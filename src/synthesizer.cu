@@ -483,9 +483,9 @@ void MFS::setDevice()
                 }
         }
 
-        for(int d=0; d<nMeasurementSets; d++) {
-                sum_weights = calculateNoise(datasets[d].fields, datasets[d].data, &total_visibilities, variables.blockSizeV, gridding);
-        }
+
+        sum_weights = calculateNoise(datasets, &total_visibilities, variables.blockSizeV, gridding);
+
 
         this->visibilities->setTotalVisibilities(total_visibilities);
 

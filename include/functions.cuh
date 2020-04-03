@@ -35,7 +35,7 @@ __host__ float chiCuadrado(float *I);
 __host__ void dchiCuadrado(float *I, float *dxi2);
 __host__ void do_gridding(Field *fields, MSData *data, double deltau, double deltav, int M, int N, float robust);
 __host__ void degridding(Field *fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N);
-__host__ float calculateNoise(Field *fields, MSData data, int *total_visibilities, int blockSizeV, int gridding);
+__host__ float calculateNoise(MSDataset *datasets, int *total_visibilities, int blockSizeV, int gridding);
 __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int num_gpus);
 __host__ void clipping(cufftComplex *I, int iterations);
 template <class T>

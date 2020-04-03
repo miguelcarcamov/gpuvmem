@@ -958,40 +958,42 @@ __host__ void do_gridding(Field *fields, MSData *data, double deltau, double del
 }
 
 
-__host__ float calculateNoise(Field *fields, MSData data, int *total_visibilities, int blockSizeV, int gridding)
+__host__ float calculateNoise(MSDataset *datasets, int *total_visibilities, int blockSizeV, int gridding)
 {
         //Declaring block size and number of blocks for visibilities
-        float sum_inverse_weight = 0.0;
+
         float sum_weights = 0.0;
         long UVpow2;
 
-        for(int f=0; f<data.nfields; f++) {
-                for(int i=0; i< data.total_frequencies; i++) {
-                        for(int s=0; s<data.nstokes; s++) {
-                                //Calculating beam noise
-                                for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
-                                        if (fields[f].visibilities[i][s].weight[j] > 0.0) {
-                                                sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
-                                                sum_weights += fields[f].visibilities[i][s].weight[j];
+        for(int d=0; d<nMeasurementSets; d++) {
+                for(int f=0; f< datasets[d].data.nfields; f++) {
+                        for(int i=0; i< datasets[d].data.total_frequencies; i++) {
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                        //Calculating beam noise
+                                        for (int j = 0; j < datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
+                                                if (datasets[d].fields[f].visibilities[i][s].weight[j] > 0.0) {
+                                                        sum_weights += datasets[d].fields[f].visibilities[i][s].weight[j];
+                                                }
                                         }
+                                        *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+                                        UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                        datasets[d].fields[f].visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                        datasets[d].fields[f].visibilities[i][s].numBlocksUV = UVpow2 / datasets[d].fields[f].visibilities[i][s].threadsPerBlockUV;
                                 }
-                                *total_visibilities += fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-                                UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                fields[f].visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                fields[f].visibilities[i][s].numBlocksUV = UVpow2 / fields[f].visibilities[i][s].threadsPerBlockUV;
                         }
                 }
         }
 
+        float sum_inverse_weight = 1.0/sum_weights;
 
         if(verbose_flag) {
-                float aux_noise = sqrt(sum_inverse_weight)/ *total_visibilities;
+                float aux_noise = sqrt(sum_inverse_weight);// *total_visibilities;
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
         if(beam_noise == -1 || gridding > 0)
         {
-                beam_noise = sqrt(sum_inverse_weight)/ *total_visibilities;
+                beam_noise = sqrt(sum_inverse_weight);// *total_visibilities;
                 if(verbose_flag) {
                         printf("No NOISE keyword detected in header or you might be using gridding\n");
                         printf("Using NOISE: %e ...\n", beam_noise);
