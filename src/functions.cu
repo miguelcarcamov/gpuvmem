@@ -36,7 +36,7 @@ namespace cg = cooperative_groups;
 
 extern long M, N;
 extern int iterations, iterthreadsVectorNN, blocksVectorNN, nopositivity, image_count, \
-           status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, save_model, apply_noise, print_images, gridding;
+           status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, save_model_input, apply_noise, print_images, gridding;
 
 extern cufftHandle plan1GPU;
 extern cufftComplex *device_V, *device_fg_image, *device_I_nu;
@@ -248,7 +248,7 @@ __host__ void print_help() {
         printf("    -T  --threshold        Threshold to calculate the spectral index image from a certain number of sigmas in I_nu_0\n");
         printf("    -c  --copyright        Shows copyright conditions\n");
         printf("    -w  --warranty         Shows no warranty details\n");
-        printf("        --savemodel        Saves the model visibilities on the model column\n");
+        printf("        --savemodel-input  Saves the model visibilities on the model column of the input MS\n");
         printf("        --nopositivity     Run gpuvmem using chi2 with no posititivy restriction\n");
         printf("        --apply-noise      Apply random gaussian noise to visibilities\n");
         printf("        --clipping         Clips the image to positive values\n");
@@ -310,7 +310,7 @@ __host__ Vars getOptions(int argc, char **argv) {
                 {"apply-noise", 0, &apply_noise, 1},
                 {"print-images", 0, &print_images, 1},
                 {"print-errors", 0, &print_errors, 1},
-                {"savemodel", 0, &save_model, 1},
+                {"savemodel-input", 0, &save_model_input, 1},
                 /* These options don’t set a flag. */
                 {"input", 1, NULL, 'i' }, {"output", 1, NULL, 'o'}, {"output-image", 1, NULL, 'O'},
                 {"threshold", 0, NULL, 'T'}, {"nu_0", 0, NULL, 'F'},
@@ -960,40 +960,44 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 }
 
 
-__host__ float calculateNoise(std::vector<Field>& fields, MSData data, int *total_visibilities, int blockSizeV, int gridding)
+__host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding)
 {
         //Declaring block size and number of blocks for visibilities
-        float sum_inverse_weight = 0.0;
+        float variance;
         float sum_weights = 0.0;
         long UVpow2;
-
-        for(int f=0; f<data.nfields; f++) {
-                for(int i=0; i< data.total_frequencies; i++) {
-                        for(int s=0; s<data.nstokes; s++) {
-                                //Calculating beam noise
-                                for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
-                                        if (fields[f].visibilities[i][s].weight[j] > 0.0) {
-                                                sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
-                                                sum_weights += fields[f].visibilities[i][s].weight[j];
+        for(int d=0; d<nMeasurementSets; d++) {
+                for(int f=0; f<datasets[d].data.nfields; f++) {
+                        for(int i=0; i< datasets[d].data.total_frequencies; i++) {
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                        //Calculating beam noise
+                                        for (int j = 0; j < datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
+                                                if (datasets[d].fields[f].visibilities[i][s].weight[j] > 0.0) {
+                                                        //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
+                                                        sum_weights += datasets[d].fields[f].visibilities[i][s].weight[j];
+                                                }
                                         }
+                                        *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+                                        UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = UVpow2 / datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV;
                                 }
-                                *total_visibilities += fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-                                UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                fields[f].device_visibilities[i][s].numBlocksUV = UVpow2 / fields[f].device_visibilities[i][s].threadsPerBlockUV;
                         }
                 }
         }
 
 
+
+        variance = 1.0/sum_weights;
+
         if(verbose_flag) {
-                float aux_noise = sqrt(sum_inverse_weight)/ *total_visibilities;
+                float aux_noise = sqrt(variance);
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
         if(beam_noise == -1 || gridding > 0)
         {
-                beam_noise = sqrt(sum_inverse_weight)/ *total_visibilities;
+                beam_noise = sqrt(variance);
                 if(verbose_flag) {
                         printf("No NOISE keyword detected in header or you might be using gridding\n");
                         printf("Using NOISE: %e ...\n", beam_noise);
