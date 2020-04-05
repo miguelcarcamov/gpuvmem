@@ -54,7 +54,7 @@ extern float *initial_values, *penalizators, robust_param;
 extern double ra, dec, DELTAX, DELTAY, deltau, deltav, crpix1, crpix2;
 extern float threshold;
 extern float nu_0;
-extern int nPenalizators, print_errors, save_model, nMeasurementSets, max_number_vis;
+extern int nPenalizators, print_errors, save_model_input, nMeasurementSets, max_number_vis;
 
 extern char* mempath, *out_image, *t_telescope;
 
@@ -248,7 +248,7 @@ __host__ void print_help() {
         printf("    -T  --threshold        Threshold to calculate the spectral index image from a certain number of sigmas in I_nu_0\n");
         printf("    -c  --copyright        Shows copyright conditions\n");
         printf("    -w  --warranty         Shows no warranty details\n");
-        printf("        --savemodel        Saves the model visibilities on the model column\n");
+        printf("        --savemodel-input  Saves the model visibilities on the input MS model column\n");
         printf("        --nopositivity     Run gpuvmem using chi2 with no posititivy restriction\n");
         printf("        --apply-noise      Apply random gaussian noise to visibilities\n");
         printf("        --clipping         Clips the image to positive values\n");
@@ -310,7 +310,7 @@ __host__ Vars getOptions(int argc, char **argv) {
                 {"apply-noise", 0, &apply_noise, 1},
                 {"print-images", 0, &print_images, 1},
                 {"print-errors", 0, &print_errors, 1},
-                {"savemodel", 0, &save_model, 1},
+                {"savemodel-input", 0, &save_model_input, 1},
                 /* These options don’t set a flag. */
                 {"input", 1, NULL, 'i' }, {"output", 1, NULL, 'o'}, {"output-image", 1, NULL, 'O'},
                 {"threshold", 0, NULL, 'T'}, {"nu_0", 0, NULL, 'F'},

@@ -152,14 +152,14 @@ Example: `./bin/gpuvmem options [ arguments ...]`
     -R  --robust-parameter Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0 for natural weighting and 0.0 for a tradeoff between these two. (Default R = 2.0).\n
     -T  --threshold        Threshold to calculate the spectral index image from above a certain number of sigmas in I_nu_0
     -c  --copyright        Shows copyright conditions
-    -w  --warranty     Shows no warranty details
-    --savemodel        Saves the model visibilities on the model column
-    --nopositivity     Run gpuvmem using chi2 with no posititivy restriction
-    --apply-noise      Apply random gaussian noise to visibilities
-    --clipping         Clips the image to positive values
-    --print-images     Prints images per iteration
-    --print-errors     Prints final error images
-    --verbose          Shows information through all the execution
+    -w  --warranty         Shows no warranty details
+    --savemodel-input      Saves the model visibilities on the input MS model column
+    --nopositivity         Run gpuvmem using chi2 with no posititivy restriction
+    --apply-noise          Apply random gaussian noise to visibilities
+    --clipping             Clips the image to positive values
+    --print-images         Prints images per iteration
+    --print-errors         Prints final error images
+    --verbose              Shows information through all the execution
 
 # Framework usage
 
