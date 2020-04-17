@@ -1976,7 +1976,6 @@ __host__ void do_gridding(Field *fields, freqData *data, double deltau, double d
 __host__ float calculateNoise(Field *fields, freqData data, int *total_visibilities, int blockSizeV, int gridding)
 {
         //Declaring block size and number of blocks for visibilities
-        float sum_inverse_weight = 0.0;
         float sum_weights = 0.0;
         long UVpow2;
 
@@ -1985,7 +1984,6 @@ __host__ float calculateNoise(Field *fields, freqData data, int *total_visibilit
                         //Calculating beam noise
                         for(int j=0; j< fields[f].numVisibilitiesPerFreq[i]; j++) {
                                 if(fields[f].visibilities[i].weight[j] > 0.0) {
-                                        sum_inverse_weight += 1/fields[f].visibilities[i].weight[j];
                                         sum_weights += fields[f].visibilities[i].weight[j];
                                 }
                         }
@@ -1997,15 +1995,16 @@ __host__ float calculateNoise(Field *fields, freqData data, int *total_visibilit
                 }
         }
 
+        float sum_inverse_weight = 1.0/sum_weights;
 
         if(verbose_flag) {
-                float aux_noise = sqrt(sum_inverse_weight)/ *total_visibilities;
+                float aux_noise = sqrt(sum_inverse_weight);
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
         if(beam_noise == -1 || gridding > 0)
         {
-                beam_noise = sqrt(sum_inverse_weight)/ *total_visibilities;
+                beam_noise = sqrt(sum_inverse_weight);
                 if(verbose_flag) {
                         printf("No NOISE keyword detected in header or you might be using gridding\n");
                         printf("Using NOISE: %e ...\n", beam_noise);
