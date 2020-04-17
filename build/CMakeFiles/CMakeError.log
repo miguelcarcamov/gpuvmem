@@ -1,0 +1,55 @@
+Determining if the pthread_create exist failed with the following output:
+Change Dir: /home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/make" "cmTC_df254/fast"
+/usr/bin/make -f CMakeFiles/cmTC_df254.dir/build.make CMakeFiles/cmTC_df254.dir/build
+make[1]: Entering directory '/home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_df254.dir/CheckSymbolExists.cxx.o
+/usr/bin/c++     -o CMakeFiles/cmTC_df254.dir/CheckSymbolExists.cxx.o -c /home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp/CheckSymbolExists.cxx
+Linking CXX executable cmTC_df254
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_df254.dir/link.txt --verbose=1
+/usr/bin/c++       CMakeFiles/cmTC_df254.dir/CheckSymbolExists.cxx.o  -o cmTC_df254 
+CMakeFiles/cmTC_df254.dir/CheckSymbolExists.cxx.o: In function `main':
+CheckSymbolExists.cxx:(.text+0x1b): undefined reference to `pthread_create'
+collect2: error: ld returned 1 exit status
+CMakeFiles/cmTC_df254.dir/build.make:86: recipe for target 'cmTC_df254' failed
+make[1]: *** [cmTC_df254] Error 1
+make[1]: Leaving directory '/home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp'
+Makefile:121: recipe for target 'cmTC_df254/fast' failed
+make: *** [cmTC_df254/fast] Error 2
+
+File /home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp/CheckSymbolExists.cxx:
+/* */
+#include <pthread.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef pthread_create
+  return ((int*)(&pthread_create))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+
+Determining if the function pthread_create exists in the pthreads failed with the following output:
+Change Dir: /home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/make" "cmTC_dd932/fast"
+/usr/bin/make -f CMakeFiles/cmTC_dd932.dir/build.make CMakeFiles/cmTC_dd932.dir/build
+make[1]: Entering directory '/home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_dd932.dir/CheckFunctionExists.cxx.o
+/usr/bin/c++    -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_dd932.dir/CheckFunctionExists.cxx.o -c /home/miguel/Documents/gpuvmem/build/CMakeFiles/CheckLibraryExists/CheckFunctionExists.cxx
+Linking CXX executable cmTC_dd932
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_dd932.dir/link.txt --verbose=1
+/usr/bin/c++   -DCHECK_FUNCTION_EXISTS=pthread_create    CMakeFiles/cmTC_dd932.dir/CheckFunctionExists.cxx.o  -o cmTC_dd932 -lpthreads 
+/usr/bin/ld: cannot find -lpthreads
+collect2: error: ld returned 1 exit status
+CMakeFiles/cmTC_dd932.dir/build.make:86: recipe for target 'cmTC_dd932' failed
+make[1]: *** [cmTC_dd932] Error 1
+make[1]: Leaving directory '/home/miguel/Documents/gpuvmem/build/CMakeFiles/CMakeTmp'
+Makefile:121: recipe for target 'cmTC_dd932/fast' failed
+make: *** [cmTC_dd932/fast] Error 2
+
+
