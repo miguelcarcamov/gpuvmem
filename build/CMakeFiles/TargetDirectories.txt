@@ -1,4 +1,0 @@
-/home/miguel/Documents/gpuvmem/build/CMakeFiles/rebuild_cache.dir
-/home/miguel/Documents/gpuvmem/build/CMakeFiles/edit_cache.dir
-/home/miguel/Documents/gpuvmem/build/CMakeFiles/gpuvmem.dir
-/home/miguel/Documents/gpuvmem/build/CMakeFiles/test.dir
