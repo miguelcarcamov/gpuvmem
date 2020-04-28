@@ -2340,12 +2340,6 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
         /**************** GPU MEMORY FOR TOTAL OUT I_nu_0 and alpha ***************/
 
         gpuErrchk(cudaMalloc((void**)&M_k_out, sizeof(double2)*M*N));
-        gpuErrchk(cudaMemset(M_k_out, 0, sizeof(double2)*M*N));
-
-
-
-        /**************** GPU MEMORY FOR TOTAL OUT ^ 2 I_nu_0 and alpha ***************/
-
         gpuErrchk(cudaMalloc((void**)&Q_k_out, sizeof(double2)*M*N));
 
         if(checkpoint) {
@@ -2526,10 +2520,6 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
         /**************** GPU MEMORY FOR TOTAL OUT I_nu_0 and alpha ***************/
 
         gpuErrchk(cudaMalloc((void**)&M_k_out, sizeof(double2)*M*N));
-
-
-        /**************** GPU MEMORY FOR TOTAL OUT ^ 2 I_nu_0 and alpha ***************/
-
         gpuErrchk(cudaMalloc((void**)&Q_k_out, sizeof(double2)*M*N));
 
         if(checkpoint) {
