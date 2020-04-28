@@ -2144,7 +2144,6 @@ __host__ float chiCuadrado(float2 *I)
         float resultS_alpha = 0.0;
 
         //if(clip_flag){
-        printf("%f\n", MINPIX);
         clip2I<<<numBlocksNN, threadsPerBlockNN>>>(I, N, MINPIX, fg_scale);
         gpuErrchk(cudaDeviceSynchronize());
         //}
