@@ -2099,11 +2099,14 @@ __global__ void sumI(double2 *M_k, double2 *Q_k, float2 *I, int k, long N)
         double dif_I_nu_0 = I[N*i+j].x - M_k[N*i+j].x;
         double dif_alpha = I[N*i+j].y - M_k[N*i+j].y;
 
-        M_k[N*i+j].x = __dadd_rn(M_k[N*i+j].x, (dif_I_nu_0)/k);
-        M_k[N*i+j].y = __dadd_rn(M_k[N*i+j].y, (dif_alpha)/k);
+        double dif_I_nu_02 = dif_I_nu_0 * dif_I_nu_0;
+        double dif_alpha2 = dif_alpha * dif_alpha;
 
-        Q_k[N*i+j].x = __dadd_rn(Q_k[N*i+j].x, (k-1)*(dif_I_nu_0)*(dif_I_nu_0)/k);
-        Q_k[N*i+j].y = __dadd_rn(Q_k[N*i+j].y, (k-1)*(dif_alpha)*(dif_alpha)/k);
+        M_k[N*i+j].x = M_k[N*i+j].x + (dif_I_nu_0/k);
+        M_k[N*i+j].y = M_k[N*i+j].y + (dif_alpha/k);
+
+        Q_k[N*i+j].x = Q_k[N*i+j].x + ((k-1) * dif_I_nu_02 / k);
+        Q_k[N*i+j].y = Q_k[N*i+j].y + ((k-1) * dif_alpha2 / k);
 }
 
 __global__ void floatToDoubleKernel(double2 *a, float2 *b, long N)
