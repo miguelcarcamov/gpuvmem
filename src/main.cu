@@ -468,8 +468,8 @@ __host__ int main(int argc, char **argv) {
         double decimage = dec * RPDEG_D;
 
         if(verbose_flag) {
-            printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
-            printf("FITS: Center pix: (%lf,%lf)\n", crpix1-1, crpix2-1);
+                printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
+                printf("FITS: Center pix: (%lf,%lf)\n", crpix1-1, crpix2-1);
         }
 
         double lobs, mobs, lphs, mphs;
@@ -477,46 +477,46 @@ __host__ int main(int argc, char **argv) {
 
         for(int f=0; f<data.nfields; f++) {
 
-            direccos(fields[f].ref_ra, fields[f].ref_dec, raimage, decimage, &lobs,  &mobs);
-            direccos(fields[f].phs_ra, fields[f].phs_dec, raimage, decimage, &lphs,  &mphs);
+                direccos(fields[f].ref_ra, fields[f].ref_dec, raimage, decimage, &lobs,  &mobs);
+                direccos(fields[f].phs_ra, fields[f].phs_dec, raimage, decimage, &lphs,  &mphs);
 
-            dcosines_l_pix_ref = lobs/-deltax; // Radians to pixels
-            dcosines_m_pix_ref = mobs/fabs(deltay); // Radians to pixels
+                dcosines_l_pix_ref = lobs/ -deltax; // Radians to pixels
+                dcosines_m_pix_ref = mobs/fabs(deltay); // Radians to pixels
 
-            dcosines_l_pix_phs = lphs/-deltax; // Radians to pixels
-            dcosines_m_pix_phs = mphs/fabs(deltay); // Radians to pixels
+                dcosines_l_pix_phs = lphs/ -deltax; // Radians to pixels
+                dcosines_m_pix_phs = mphs/fabs(deltay); // Radians to pixels
 
-            if(verbose_flag)
-            {
-                printf("Ref: l (pix): %e, m (pix): %e\n", dcosines_l_pix_ref, dcosines_m_pix_ref);
-                printf("Phase: l (pix): %e, m (pix): %e\n", dcosines_l_pix_phs, dcosines_m_pix_phs);
+                if(verbose_flag)
+                {
+                        printf("Ref: l (pix): %e, m (pix): %e\n", dcosines_l_pix_ref, dcosines_m_pix_ref);
+                        printf("Phase: l (pix): %e, m (pix): %e\n", dcosines_l_pix_phs, dcosines_m_pix_phs);
 
-            }
-
-
-            fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_ref;// + 6.0f;
-            fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_ref;// - 7.0f;
-
-            fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;// + 5.0f;
-            fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;// - 7.0f;
+                }
 
 
-            if(verbose_flag) {
-                printf("Ref: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), y0: %f (pix)\n", f, fields[f].ref_ra, fields[f].ref_dec,
-                       fields[f].ref_xobs, fields[f].ref_yobs);
-                printf("Phase: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), y0: %f (pix)\n", f, fields[f].phs_ra, fields[f].phs_dec,
-                       fields[f].phs_xobs, fields[f].phs_yobs);
-            }
+                fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_ref;// + 6.0f;
+                fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_ref;// - 7.0f;
 
-            if(fields[f].ref_xobs < 0 || fields[f].ref_xobs >= M || fields[f].ref_xobs < 0 || fields[f].ref_yobs >= N) {
-                printf("Pointing reference center (%f,%f) is outside the range of the image\n", fields[f].ref_xobs, fields[f].ref_yobs);
-                goToError();
-            }
+                fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;// + 5.0f;
+                fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;// - 7.0f;
 
-            if(fields[f].phs_xobs < 0 || fields[f].phs_xobs >= M || fields[f].phs_xobs < 0 || fields[f].phs_yobs >= N) {
-                printf("Pointing phase center (%f,%f) is outside the range of the image\n", fields[f].phs_xobs, fields[f].phs_yobs);
-                goToError();
-            }
+
+                if(verbose_flag) {
+                        printf("Ref: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), y0: %f (pix)\n", f, fields[f].ref_ra, fields[f].ref_dec,
+                               fields[f].ref_xobs, fields[f].ref_yobs);
+                        printf("Phase: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), y0: %f (pix)\n", f, fields[f].phs_ra, fields[f].phs_dec,
+                               fields[f].phs_xobs, fields[f].phs_yobs);
+                }
+
+                if(fields[f].ref_xobs < 0 || fields[f].ref_xobs >= M || fields[f].ref_xobs < 0 || fields[f].ref_yobs >= N) {
+                        printf("Pointing reference center (%f,%f) is outside the range of the image\n", fields[f].ref_xobs, fields[f].ref_yobs);
+                        goToError();
+                }
+
+                if(fields[f].phs_xobs < 0 || fields[f].phs_xobs >= M || fields[f].phs_xobs < 0 || fields[f].phs_yobs >= N) {
+                        printf("Pointing phase center (%f,%f) is outside the range of the image\n", fields[f].phs_xobs, fields[f].phs_yobs);
+                        goToError();
+                }
         }
         ////////////////////////////////////////////////////////MAKE STARTING IMAGE////////////////////////////////////////////////////////
         float2 *host_2I = (float2*)malloc(M*N*sizeof(float2));
@@ -533,14 +533,14 @@ __host__ int main(int argc, char **argv) {
         open_read_fits<float>(&input_alpha, alpha_name, M*N, TFLOAT);
 
         if(use_mask)
-          host_mask = (float*)malloc(M*N*sizeof(float));
+                host_mask = (float*)malloc(M*N*sizeof(float));
 
         for(int i=0; i<M; i++) {
                 for(int j=0; j<N; j++) {
                         host_2I[N*i+j].x = input_Inu_0[N*i+j]; // I_nu
                         host_2I[N*i+j].y = input_alpha[N*i+j];
                         if(use_mask)
-                          host_mask[N*i+j] = input_Inu_0[N*i+j];
+                                host_mask[N*i+j] = input_Inu_0[N*i+j];
                 }
         }
 
@@ -620,14 +620,13 @@ __host__ int main(int argc, char **argv) {
         }
         gpuErrchk(cudaMalloc((void**)&device_2I, sizeof(float2)*M*N));
         gpuErrchk(cudaMemset(device_2I, 0, sizeof(float2)*M*N));
+        gpuErrchk(cudaMemcpy(device_2I, host_2I, M*N*sizeof(float2), cudaMemcpyHostToDevice));
 
-        gpuErrchk(cudaMemcpy2D(device_2I, sizeof(float2), host_2I, sizeof(float2), sizeof(float2), M*N, cudaMemcpyHostToDevice));
 
-        if(use_mask){
-          gpuErrchk(cudaMalloc((void**)&device_mask, sizeof(float)*M*N));
-          gpuErrchk(cudaMemset(device_mask, 0, sizeof(float)*M*N));
-
-          gpuErrchk(cudaMemcpy2D(device_mask, sizeof(float),host_mask, sizeof(float), sizeof(float), M*N, cudaMemcpyHostToDevice));
+        if(use_mask) {
+                gpuErrchk(cudaMalloc((void**)&device_mask, sizeof(float)*M*N));
+                gpuErrchk(cudaMemset(device_mask, 0, sizeof(float)*M*N));
+                gpuErrchk(cudaMemcpy(device_mask, host_mask, sizeof(float)*M*N, cudaMemcpyHostToDevice));
         }
 
         gpuErrchk(cudaMalloc((void**)&device_noise_image, sizeof(float)*M*N));
@@ -779,7 +778,7 @@ __host__ int main(int argc, char **argv) {
         host_noise_image = (float*)malloc(M*N*sizeof(float));
         pixels = (int2*)malloc(1*sizeof(int2));
         //pixels[N*i+j] = N*i+j;
-        gpuErrchk(cudaMemcpy2D(host_noise_image, sizeof(float), device_noise_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(host_noise_image, device_noise_image, sizeof(float)*M*N, cudaMemcpyDeviceToHost));
         float noise_min = *std::min_element(host_noise_image,host_noise_image+(M*N));
 
         fg_scale = noise_min;
@@ -852,9 +851,9 @@ __host__ int main(int argc, char **argv) {
                 for(int j=0; j<N; j++) {
                         theta_host[N*i+j].x = theta_init.x;
                         if(input_Inu_0[N*i+j]>= 5*analytical_noise_jypix)
-                          theta_host[N*i+j].y = sqrt(2) * (analytical_noise_gpuvmem/input_Inu_0[N*i+j]) / logf(nu_2/nu_1);
+                                theta_host[N*i+j].y = sqrt(2) * (analytical_noise_gpuvmem/input_Inu_0[N*i+j]) / logf(nu_2/nu_1);
                         else
-                          theta_host[N*i+j].y = sqrt(2) * (analytical_noise_gpuvmem/peak_I_nu_0) / logf(nu_2/nu_1);
+                                theta_host[N*i+j].y = sqrt(2) * (analytical_noise_gpuvmem/peak_I_nu_0) / logf(nu_2/nu_1);
                 }
         }
 
@@ -868,7 +867,7 @@ __host__ int main(int argc, char **argv) {
 
         gpuErrchk(cudaMalloc((void**)&theta_device, sizeof(float2)*M*N));
         gpuErrchk(cudaMemset(theta_device, 0, sizeof(float2)*M*N));
-        gpuErrchk(cudaMemcpy2D(theta_device, sizeof(float2), theta_host, sizeof(float2), sizeof(float2), M*N, cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(theta_device, theta_host, sizeof(float2)*M*N, cudaMemcpyHostToDevice));
 
         printf("Iterations: %d\n", it_maximum);
         printf("Burn in steps: %d\n", variables.burndown_steps);

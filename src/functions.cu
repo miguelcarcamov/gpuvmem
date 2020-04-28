@@ -2349,9 +2349,12 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
         gpuErrchk(cudaMalloc((void**)&Q_k_out, sizeof(double2)*M*N));
 
         if(checkpoint) {
-                gpuErrchk(cudaMemcpy2D(Q_k_out, sizeof(double2), host_Q_k, sizeof(double2), sizeof(double2), M*N, cudaMemcpyHostToDevice));
+                gpuErrchk(cudaMemcpy(Q_k_out, host_Q_k, sizeof(double2)*M*N, cudaMemcpyHostToDevice));
+                gpuErrchk(cudaMemcpy(M_k_out, host_M_k, sizeof(double2)*M*N, cudaMemcpyHostToDevice));
         }else{
                 gpuErrchk(cudaMemset(Q_k_out, 0, sizeof(double2)*M*N));
+                floatToDoubleKernel<<<numBlocksNN, threadsPerBlockNN>>>(M_k_out, I, N);
+                gpuErrchk(cudaDeviceSynchronize());
         }
 
 
@@ -2401,7 +2404,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
 
                 if(real_iterations == *burndown_steps) {
                         if(checkpoint) {
-                                gpuErrchk(cudaMemcpy2D(M_k_out, sizeof(double2), host_M_k, sizeof(double2), sizeof(double2), M*N, cudaMemcpyHostToDevice));
+                                gpuErrchk(cudaMemcpy(M_k_out, host_M_k, sizeof(double2)*M*N, cudaMemcpyHostToDevice));
                         }
                         else
                         {
@@ -2443,7 +2446,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                         delta_chi2 = chi2_t_1 - chi2_t_0;
                         if(delta_chi2 <= 0) {
                                 //printf("Acccepted Delta chi2: %f\n", delta_chi2);
-                                gpuErrchk(cudaMemcpy2D(I, sizeof(float2), temp, sizeof(float2), sizeof(float2), M*N, cudaMemcpyDeviceToDevice));
+                                gpuErrchk(cudaMemcpy(I, temp, sizeof(float2), sizeof(float2)*M*N, cudaMemcpyDeviceToDevice));
                                 /*if(print_images && i%3 == 0)
                                    float2toImage(I, mod_in, out_image, mempath, i, M, N, 1);*/
                                 if(real_iterations >= *burndown_steps) {
@@ -2457,7 +2460,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                                 //printf("Not Accepted Delta chi2: %f\n", delta_chi2);
                                 un_rand = Random();
                                 if(-log(un_rand) > delta_chi2) {
-                                        gpuErrchk(cudaMemcpy2D(I, sizeof(float2), temp, sizeof(float2), sizeof(float2), M*N, cudaMemcpyDeviceToDevice));
+                                        gpuErrchk(cudaMemcpy(I, temp, sizeof(float2)*M*N, cudaMemcpyDeviceToDevice));
                                         if(real_iterations >= *burndown_steps) {
                                                 accepted_afterburndown++;
                                                 sumI<<<numBlocksNN, threadsPerBlockNN>>>(M_k_out, Q_k_out, I, accepted_afterburndown, N);
@@ -2523,16 +2526,19 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
         /**************** GPU MEMORY FOR TOTAL OUT I_nu_0 and alpha ***************/
 
         gpuErrchk(cudaMalloc((void**)&M_k_out, sizeof(double2)*M*N));
-        gpuErrchk(cudaMemset(M_k_out, 0, sizeof(double2)*M*N));
+
 
         /**************** GPU MEMORY FOR TOTAL OUT ^ 2 I_nu_0 and alpha ***************/
 
         gpuErrchk(cudaMalloc((void**)&Q_k_out, sizeof(double2)*M*N));
 
         if(checkpoint) {
-                gpuErrchk(cudaMemcpy2D(Q_k_out, sizeof(double2), host_Q_k, sizeof(double2), sizeof(double2), M*N, cudaMemcpyHostToDevice));
+                gpuErrchk(cudaMemcpy(Q_k_out, host_Q_k, sizeof(double2)*M*N, cudaMemcpyHostToDevice));
+                gpuErrchk(cudaMemcpy(M_k_out, host_M_k, sizeof(double2)*M*N, cudaMemcpyHostToDevice));
         }else{
                 gpuErrchk(cudaMemset(Q_k_out, 0, sizeof(double2)*M*N));
+                floatToDoubleKernel<<<numBlocksNN, threadsPerBlockNN>>>(M_k_out, I, N);
+                gpuErrchk(cudaDeviceSynchronize());
         }
 
 
@@ -2580,7 +2586,7 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
 
                 if(real_iterations == burndown_steps) {
                         if(checkpoint) {
-                                gpuErrchk(cudaMemcpy2D(M_k_out, sizeof(double2), host_M_k, sizeof(double2), sizeof(double2), M*N, cudaMemcpyHostToDevice));
+                                gpuErrchk(cudaMemcpy(M_k_out, host_M_k, sizeof(double2)*M*N, cudaMemcpyHostToDevice));
                         }
                         else
                         {
@@ -2628,7 +2634,7 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
                         delta_chi2 = chi2_t_1 - chi2_t_0;
                         if(delta_chi2 <= 0.0f) {
                                 //printf("Accepted Delta chi2: %f\n", delta_chi2);
-                                gpuErrchk(cudaMemcpy2D(I, sizeof(float2), temp, sizeof(float2), sizeof(float2), M*N, cudaMemcpyDeviceToDevice));
+                                gpuErrchk(cudaMemcpy(I, temp, sizeof(float2)*M*N, cudaMemcpyDeviceToDevice));
                                 /*if(print_images && i%3 == 0)
                                    float2toImage(I, mod_in, out_image, mempath, i, M, N, 1);*/
                                 if(real_iterations >= burndown_steps) {
