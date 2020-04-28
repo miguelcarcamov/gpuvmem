@@ -2446,7 +2446,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                         delta_chi2 = chi2_t_1 - chi2_t_0;
                         if(delta_chi2 <= 0) {
                                 //printf("Acccepted Delta chi2: %f\n", delta_chi2);
-                                gpuErrchk(cudaMemcpy(I, temp, sizeof(float2), sizeof(float2)*M*N, cudaMemcpyDeviceToDevice));
+                                gpuErrchk(cudaMemcpy(I, temp, sizeof(float2)*M*N, cudaMemcpyDeviceToDevice));
                                 /*if(print_images && i%3 == 0)
                                    float2toImage(I, mod_in, out_image, mempath, i, M, N, 1);*/
                                 if(real_iterations >= *burndown_steps) {
