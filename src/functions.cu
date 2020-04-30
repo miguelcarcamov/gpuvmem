@@ -905,10 +905,11 @@ __host__ Vars getOptions(int argc, char **argv) {
         variables.gridding = 0;
         variables.robust_param = 2.0;
         variables.current_k = 1;
+        variables.noise_factorInu0 = 1.0;
 
 
         long next_op;
-        const char* const short_op = "hcwi:o:O:I:m:x:n:N:l:r:f:M:s:p:P:X:R:Y:V:t:F:a:e:E:B:A:g:k:";
+        const char* const short_op = "hcwi:o:O:I:m:x:n:N:l:r:f:M:s:p:P:X:R:Y:V:t:F:a:e:E:B:A:g:k:z:";
 
         const struct option long_op[] = { //Flag for help, copyright and warranty
                 {"help", 0, NULL, 'h' },
@@ -933,6 +934,7 @@ __host__ Vars getOptions(int argc, char **argv) {
                 {"iterations", 0, NULL, 't'}, {"burndown_steps", 1, NULL, 'B'}, {"noise-cut", 0, NULL, 'N' }, {"minpix", 0, NULL, 'x' },
                 {"randoms", 0, NULL, 'r' }, {"nu_0", 1, NULL, 'F' }, {"file", 0, NULL, 'f' }, {"current_k", 1, NULL, 'k' },
                 {"epsilon", 0, NULL, 'E' }, {"alpha_name", 1, NULL, 'a' }, {"alpha_value", 1, NULL, 'A' }, {"gridding", 0, NULL, 'g' },
+                {"noise-factor", 0, NULL, 'z' },
                 { NULL, 0, NULL, 0 }
         };
 
@@ -1059,6 +1061,9 @@ __host__ Vars getOptions(int argc, char **argv) {
                         break;
                 case 'g':
                         variables.gridding = atoi(optarg);
+                        break;
+                case 'z':
+                        variables.noise_factorInu0 = atof(optarg);
                         break;
                 case '?':
                         print_help();
@@ -1528,7 +1533,7 @@ __global__ void clip2IWNoise(float *noise, float2 *I, long N, float noise_cut, f
                         I[N*i+j].x = 0.0;
                 }
                 else{
-                        I[N*i+j].x = -1.0 * eta * minpix * fg_scale;
+                        I[N*i+j].x = -1.0f * eta * minpix * fg_scale;
                 }
 
                 I[N*i+j].y = 0.0f;
@@ -1537,14 +1542,14 @@ __global__ void clip2IWNoise(float *noise, float2 *I, long N, float noise_cut, f
 
 }
 
-__global__ void clip2I(float2 *I, long N, float minpix, float fg_scale)
+__global__ void clip2I(float2 *I, long N, float minpix, float fg_scale, float eta)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         //I_nu_0
-        if(I[N*i+j].x < minpix * fg_scale) {
-                I[N*i+j].x = minpix * fg_scale;
+        if(I[N*i+j].x < -1.0f * eta * minpix * fg_scale) {
+                I[N*i+j].x = -1.0f * eta * minpix * fg_scale;
         }
         /*/ /alpha
            if(I[N*i+j].y < minpix_alpha) {
@@ -1561,7 +1566,7 @@ __global__ void clip(cufftComplex *I, long N, float MINPIX)
         if(I[N*i+j].x < MINPIX && MINPIX >= 0.0) {
                 I[N*i+j].x = MINPIX;
         }
-        I[N*i+j].y = 0;
+        I[N*i+j].y = 0.0f;
 }
 
 __global__ void newP(float2 *p, float2 *xi, float xmin, long N, float minpix, float fg_scale, float eta)
@@ -1790,10 +1795,6 @@ __global__ void calculateInu(cufftComplex *I_nu, float2 *image2, float nu, float
         nudiv_pow_alpha = powf(nudiv, alpha);
 
         I_nu[N*i+j].x = I_nu_0 * nudiv_pow_alpha;
-
-        if(I_nu[N*i+j].x < -1.0*eta*minpix) {
-                I_nu[N*i+j].x = -1.0*eta*minpix;
-        }
 
         I_nu[N*i+j].y = 0.0f;
 }
@@ -2147,7 +2148,7 @@ __host__ float chiCuadrado(float2 *I)
         float resultS_alpha = 0.0;
 
         //if(clip_flag){
-        clip2I<<<numBlocksNN, threadsPerBlockNN>>>(I, N, MINPIX, fg_scale);
+        clip2I<<<numBlocksNN, threadsPerBlockNN>>>(I, N, MINPIX, fg_scale, eta);
         gpuErrchk(cudaDeviceSynchronize());
         //}
 

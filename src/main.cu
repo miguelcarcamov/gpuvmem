@@ -818,7 +818,7 @@ __host__ int main(int argc, char **argv) {
         float analytical_noise_jypix = noise_jypix;
         float gpuvmem_factor = sqrtf(PI * (1.0/3.0) * beam_bmaj * (1.0/3.0) * beam_bmin / (4 * log(2) ));
         float analytical_noise_gpuvmem = analytical_noise_jypix * gpuvmem_factor;
-        theta_init.x = analytical_noise_gpuvmem;
+        theta_init.x = analytical_noise_gpuvmem * variables.noise_factorInu0;
         float peak_I_nu_0 = *std::max_element(input_Inu_0,input_Inu_0+(M*N));
         float peak_alpha = *std::max_element(input_alpha,input_alpha+(M*N));
         //theta_init.y = peak_alpha / 1000;

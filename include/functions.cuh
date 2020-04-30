@@ -13,7 +13,7 @@
 #include <curand.h>
 #include <curand_kernel.h>
 #include <time.h>
-#include<signal.h>
+#include <signal.h>
 #include "MSFITSIO.cuh"
 
 #define FLOAT_IMG   -32
@@ -36,47 +36,48 @@ const float RPARCM = (PI/(180.0*60.0));
 const float LIGHTSPEED = 2.99792458E8;
 const float RZ = 1.2196698912665045;
 
-typedef struct varsPerGPU{
-  float *device_chi2;
-  float *device_dchi2;
-  cufftHandle plan;
-  cufftComplex *device_Inu;
-  cufftComplex *device_V;
+typedef struct varsPerGPU {
+        float *device_chi2;
+        float *device_dchi2;
+        cufftHandle plan;
+        cufftComplex *device_Inu;
+        cufftComplex *device_V;
 }varsPerGPU;
 
-typedef struct variablesPerField{
-  float *atten_image;
+typedef struct variablesPerField {
+        float *atten_image;
 }VariablesPerField;
 
 typedef struct variables {
-	char *input;
-  char *output;
-  char *inputdat;
-  char *modin;
-  char *ofile;
-  char *path;
-  char *output_image;
-  char *multigpu;
-  char *alpha_name;
-  int select;
-  int blockSizeX;
-  int blockSizeY;
-  int blockSizeV;
-  int it_max;
-  int burndown_steps;
-  int reg_term;
-  int gridding;
-  float noise;
-  float noise_cut;
-  float randoms;
-  float lambda;
-  float minpix;
-  float nu_0;
-  float eta;
-  float epsilon;
-  float alpha_value;
-  float robust_param;
-  int current_k;
+        char *input;
+        char *output;
+        char *inputdat;
+        char *modin;
+        char *ofile;
+        char *path;
+        char *output_image;
+        char *multigpu;
+        char *alpha_name;
+        int select;
+        int blockSizeX;
+        int blockSizeY;
+        int blockSizeV;
+        int it_max;
+        int burndown_steps;
+        int reg_term;
+        int gridding;
+        float noise;
+        float noise_cut;
+        float randoms;
+        float lambda;
+        float minpix;
+        float nu_0;
+        float eta;
+        float epsilon;
+        float alpha_value;
+        float robust_param;
+        float noise_factorInu0;
+        int current_k;
 } Vars;
 
 __host__ void goToError();
