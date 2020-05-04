@@ -787,11 +787,10 @@ __host__ int main(int argc, char **argv) {
         valid_pixels = 0;
         for(int i=0; i<M; i++) {
                 for(int j=0; j<N; j++) {
-                        if(host_noise_image[N*i+j] < noise_cut) {
-                                pixels = (int2*)realloc(pixels, (valid_pixels+1)*sizeof(int2));
-                                pixels[valid_pixels].x = i;
-                                pixels[valid_pixels].y = j;
-                                valid_pixels++;
+                        if(host_noise_image[N*i+j] <= noise_cut) {
+                                pixels = (int2*)realloc(pixels, (valid_pixels++)*sizeof(int2));
+                                pixels[valid_pixels - 1].x = i;
+                                pixels[valid_pixels - 1].y = j;
                         }
                 }
         }
@@ -868,6 +867,7 @@ __host__ int main(int argc, char **argv) {
         gpuErrchk(cudaMalloc((void**)&theta_device, sizeof(float2)*M*N));
         gpuErrchk(cudaMemset(theta_device, 0, sizeof(float2)*M*N));
         gpuErrchk(cudaMemcpy(theta_device, theta_host, sizeof(float2)*M*N, cudaMemcpyHostToDevice));
+        free(theta_host);
 
         printf("Iterations: %d\n", it_maximum);
         printf("Burn in steps: %d\n", variables.burndown_steps);
