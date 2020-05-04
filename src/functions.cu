@@ -871,7 +871,7 @@ void randomize(int2 arr[], int n)
         {
                 // Pick a random index from 0 to i
 
-                int j = Uniform(0.0, (float)i);
+                int j = Uniform(0, (float)i);
 
                 // Swap arr[i] with the element at random index
                 swap(&arr[i].x, &arr[j].x);
