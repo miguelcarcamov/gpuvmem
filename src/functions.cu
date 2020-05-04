@@ -863,8 +863,7 @@ void randomize(int2 arr[], int n)
 {
         // Use a different seed value so that we don't get same
         // result each time we run this program
-        SelectStream(0);
-        PutSeed(-1);
+        SelectStream(3);
 
         // Start from the last element and swap one by one. We don't
         // need to run for the first element that's why i > 0
@@ -2323,6 +2322,7 @@ __host__ float chiCuadrado(float2 *I)
 
 __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *burndown_steps, int *accepted)
 {
+        PlantSeeds(-1);
         if(num_gpus == 1) {
                 cudaSetDevice(selected);
         }else{
@@ -2360,8 +2360,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
         gpuErrchk(cudaMalloc((void**)&temp, sizeof(float2)*M*N));
         gpuErrchk(cudaMemset(temp, 0, sizeof(float2)*M*N));
 
-        SelectStream(0);
-        PutSeed(-1);
+
         random_init<<<numBlocksNN, threadsPerBlockNN>>>(time(0), states_0, N);
         gpuErrchk(cudaDeviceSynchronize());
         random_init<<<numBlocksNN, threadsPerBlockNN>>>(time(0), states_1, N);
@@ -2416,7 +2415,9 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                         gpuErrchk(cudaMemcpy(temp, I, M*N*sizeof(float2), cudaMemcpyDeviceToDevice));
 
                         if(use_mask) {
+                                SelectStream(0);
                                 n_I_nu_0 = Normal(0.0, 1.0);
+                                SelectStream(1);
                                 n_alpha = Normal(0.0, 1.0);
                                 changeGibbsEllipticalMaskAlpha<<<numBlocksNN, threadsPerBlockNN>>>(temp, theta, device_mask, n_I_nu_0, n_alpha, beam_bmaj, beam_bmin, beam_bpa, (1.0/3.0), 10.0, noise_jypix, pixels[j], DELTAX, DELTAY, N);
                                 gpuErrchk(cudaDeviceSynchronize());
@@ -2424,11 +2425,14 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                                 //changeGibbs<<<1, 1>>>(temp, theta, states, pixels[j], N);
                                 if(spec_idx)
                                 {
+                                        SelectStream(0);
                                         n_I_nu_0 = Normal(0.0, 1.0);
+                                        SelectStream(1);
                                         n_alpha = Normal(0.0, 1.0);
                                         changeGibbsEllipticalGaussianSpecIdx<<<numBlocksNN, threadsPerBlockNN>>>(temp, theta, n_I_nu_0, n_alpha, beam_bmaj, beam_bmin, beam_bpa, (1.0/3.0), pixels[j], DELTAX, DELTAY, N);
                                         gpuErrchk(cudaDeviceSynchronize());
                                 }else{
+                                        SelectStream(0);
                                         n_I_nu_0 = Normal(0.0, 1.0);
                                         changeGibbsEllipticalGaussian<<<numBlocksNN, threadsPerBlockNN>>>(temp, theta, n_I_nu_0, beam_bmaj, beam_bmin, beam_bpa, (1.0/3.0), pixels[j], DELTAX, DELTAY, N);
                                         gpuErrchk(cudaDeviceSynchronize());
@@ -2456,6 +2460,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                         }
                         else{
                                 //printf("Not Accepted Delta chi2: %f\n", delta_chi2);
+                                SelectStream(2);
                                 un_rand = Random();
                                 if(-log(un_rand) > delta_chi2) {
                                         gpuErrchk(cudaMemcpy(I, temp, sizeof(float2)*M*N, cudaMemcpyDeviceToDevice));
@@ -2502,6 +2507,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
 
 __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_steps, int accepted)
 {
+        PlantSeeds(-1);
         if(num_gpus == 1) {
                 cudaSetDevice(selected);
         }else{
@@ -2540,8 +2546,6 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
         gpuErrchk(cudaMalloc((void**)&temp, sizeof(float2)*M*N));
         gpuErrchk(cudaMemset(temp, 0, sizeof(float2)*M*N));
 
-        SelectStream(0);
-        PutSeed(-1);
         random_init<<<numBlocksNN, threadsPerBlockNN>>>(time(0), states_0, N);
         gpuErrchk(cudaDeviceSynchronize());
         random_init<<<numBlocksNN, threadsPerBlockNN>>>(time(0), states_1, N);
@@ -2598,7 +2602,9 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
                         gpuErrchk(cudaMemcpy(temp, I, M*N*sizeof(float2), cudaMemcpyDeviceToDevice));
 
                         if(use_mask) {
+                                SelectStream(0);
                                 n_I_nu_0 = Normal(0.0, 1.0);
+                                SelectStream(1);
                                 n_alpha = Normal(0.0, 1.0);
                                 changeGibbsEllipticalMaskAlpha<<<numBlocksNN, threadsPerBlockNN>>>(temp, theta, device_mask, n_I_nu_0, n_alpha, beam_bmaj, beam_bmin, beam_bpa, (1.0/3.0), 10.0, noise_jypix, pixels[j], DELTAX, DELTAY, N);
                                 gpuErrchk(cudaDeviceSynchronize());
@@ -2606,11 +2612,14 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
                                 //changeGibbs<<<1, 1>>>(temp, theta, states, pixels[j], N);
                                 if(spec_idx)
                                 {
+                                        SelectStream(0);
                                         n_I_nu_0 = Normal(0.0, 1.0);
+                                        SelectStream(1);
                                         n_alpha = Normal(0.0, 1.0);
                                         changeGibbsEllipticalGaussianSpecIdx<<<numBlocksNN, threadsPerBlockNN>>>(temp, theta, n_I_nu_0, n_alpha, beam_bmaj, beam_bmin, beam_bpa, (1.0/3.0), pixels[j], DELTAX, DELTAY, N);
                                         gpuErrchk(cudaDeviceSynchronize());
                                 }else{
+                                        SelectStream(0);
                                         n_I_nu_0 = Normal(0.0, 1.0);
                                         changeGibbsEllipticalGaussian<<<numBlocksNN, threadsPerBlockNN>>>(temp, theta, n_I_nu_0, beam_bmaj, beam_bmin, beam_bpa, (1.0/3.0), pixels[j], DELTAX, DELTAY, N);
                                         gpuErrchk(cudaDeviceSynchronize());
