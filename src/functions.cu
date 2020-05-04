@@ -2360,7 +2360,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
         outfile_its = fopen(iter_file_name, "w");
 
         position_in_file = ftell(outfile_its);
-        std::random_shuffle(&a[0], &a[valid_pixels]);
+        std::random_shuffle(&pixels[0], &pixels[valid_pixels]);
 
         float n_I_nu_0;
         float n_alpha;
@@ -2456,7 +2456,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                 double2toImage(M_k_out, mod_in, out_image, checkp, 0, M, N, 1.0, accepted_afterburndown, 1);
                 double2toImage(Q_k_out, mod_in, out_image, checkp, 1, M, N, 1.0/(accepted_afterburndown-1), accepted_afterburndown, 1);
                 float2toImage(I, mod_in, out_image, checkp, 2, M, N, 1.0, 1);
-                std::random_shuffle(&a[0], &a[valid_pixels]);
+                std::random_shuffle(&pixels[0], &pixels[valid_pixels]);
         }
 
         printf("ACCEPTED AFTER BURNDOWN: %d\n", accepted_afterburndown);
@@ -2545,7 +2545,7 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
         outfile_its = fopen(iter_file_name, "w");
 
         position_in_file = ftell(outfile_its);
-        std::random_shuffle(&a[0], &a[valid_pixels]);
+        std::random_shuffle(&pixels[0], &pixels[valid_pixels]);
 
         float n_I_nu_0;
         float n_alpha;
@@ -2651,7 +2651,7 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
                 double2toImage(M_k_out, mod_in, out_image, checkp, 0, M, N, 1.0, accepted_afterburndown, 1);
                 double2toImage(Q_k_out, mod_in, out_image, checkp, 1, M, N, 1.0/(accepted_afterburndown-1), accepted_afterburndown, 1);
                 float2toImage(I, mod_in, out_image, checkp, 2, M, N, 1.0, 1);
-                std::random_shuffle(&a[0], &a[valid_pixels]);
+                std::random_shuffle(&pixels[0], &pixels[valid_pixels]);
         }
 
         //avgI<<<numBlocksNN, threadsPerBlockNN>>>(total_out, total2_out, accepted_afterburndown, N);
