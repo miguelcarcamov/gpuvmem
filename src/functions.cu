@@ -2457,6 +2457,7 @@ __host__ void MetropolisHasting(float2 *I, float2 *theta, int iterations, int *b
                 double2toImage(Q_k_out, mod_in, out_image, checkp, 1, M, N, 1.0/(accepted_afterburndown-1), accepted_afterburndown, 1);
                 float2toImage(I, mod_in, out_image, checkp, 2, M, N, 1.0, 1);
                 std::random_shuffle(&pixels[0], &pixels[valid_pixels]);
+                PlantSeeds(-1);
         }
 
         printf("ACCEPTED AFTER BURNDOWN: %d\n", accepted_afterburndown);
@@ -2652,6 +2653,7 @@ __host__ void Metropolis(float2 *I, float2 *theta, int iterations, int burndown_
                 double2toImage(Q_k_out, mod_in, out_image, checkp, 1, M, N, 1.0/(accepted_afterburndown-1), accepted_afterburndown, 1);
                 float2toImage(I, mod_in, out_image, checkp, 2, M, N, 1.0, 1);
                 std::random_shuffle(&pixels[0], &pixels[valid_pixels]);
+                PlantSeeds(-1);
         }
 
         //avgI<<<numBlocksNN, threadsPerBlockNN>>>(total_out, total2_out, accepted_afterburndown, N);
