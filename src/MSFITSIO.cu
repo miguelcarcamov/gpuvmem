@@ -187,11 +187,6 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
                 }
         }
 
-        casacore::Vector<float> weights;
-        casacore::Vector<double> uvw;
-        casacore::Matrix<casacore::Complex> dataCol;
-        casacore::Matrix<bool> flagCol;
-
         std::string query;
 
         double3 MS_uvw;
@@ -199,6 +194,11 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
         for(int f=0; f<data->nfields; f++) {
                 g=0;
                 for(int i=0; i < data->n_internal_frequencies; i++) {
+
+                        casacore::Vector<float> weights;
+                        casacore::Vector<double> uvw;
+                        casacore::Matrix<casacore::Complex> dataCol;
+                        casacore::Matrix<bool> flagCol;
 
                         query = "select UVW,WEIGHT,DATA,FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
@@ -386,9 +386,6 @@ std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f]
         int g = 0;
         long c;
         cufftComplex vis;
-        casacore::Vector<float> weights;
-        casacore::Matrix<casacore::Complex> dataCol;
-        casacore::Matrix<bool> flagCol;
         float real_n, imag_n;
         SelectStream(0);
         PutSeed(-1);
@@ -396,6 +393,11 @@ std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f]
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
+
+                        casacore::Vector<float> weights;
+                        casacore::Matrix<casacore::Complex> dataCol;
+                        casacore::Matrix<bool> flagCol;
+
                         query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 
                         if(W_projection)
