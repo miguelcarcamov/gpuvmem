@@ -449,9 +449,7 @@ __host__ void writeMS(char const *infile, char const *outfile, char const *out_c
         int g = 0;
         long c;
         cufftComplex vis;
-        casacore::Vector<float> weights;
-        casacore::Matrix<casacore::Complex> dataCol;
-        casacore::Matrix<bool> flagCol;
+
         float real_n, imag_n;
         SelectStream(0);
         PutSeed(-1);
@@ -459,6 +457,10 @@ __host__ void writeMS(char const *infile, char const *outfile, char const *out_c
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
+                        casacore::Vector<float> weights;
+                        casacore::Matrix<casacore::Complex> dataCol;
+                        casacore::Matrix<bool> flagCol;
+
                         query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 
                         if(W_projection)
