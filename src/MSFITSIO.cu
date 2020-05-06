@@ -122,9 +122,6 @@ __host__ MSData countVisibilities(char const* MS_name, Field *&fields, int gridd
                 }
         }
 
-        casacore::Vector<float> weights;
-        casacore::Matrix<bool> flagCol;
-
         int counter;
         std::string query;
 
@@ -133,6 +130,9 @@ __host__ MSData countVisibilities(char const* MS_name, Field *&fields, int gridd
         for(int f=0; f<freqsAndVisibilities.nfields; f++) {
                 counter = 0;
                 for(int i=0; i < freqsAndVisibilities.n_internal_frequencies; i++) {
+                        casacore::Vector<float> weights;
+                        casacore::Matrix<bool> flagCol;
+
                         // Query for data with forced IF and FIELD
                         query = "select WEIGHT,FLAG from "+ dir +" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 
@@ -262,11 +262,6 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
 
         casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,"CHAN_FREQ");
 
-        casacore::Vector<float> weights;
-        casacore::Vector<double> uvw;
-        casacore::Matrix<casacore::Complex> dataCol;
-        casacore::Matrix<bool> flagCol;
-
         for(int f=0; f < data.nfields; f++)
                 for(int i = 0; i < data.total_frequencies; i++)
                         memset(fields[f].numVisibilitiesPerFreqPerStoke[i], 0, data.nstokes*sizeof(long));
@@ -279,6 +274,11 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
+
+                        casacore::Vector<float> weights;
+                        casacore::Vector<double> uvw;
+                        casacore::Matrix<casacore::Complex> dataCol;
+                        casacore::Matrix<bool> flagCol;
 
                         query = "select UVW,WEIGHT,DATA,FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
