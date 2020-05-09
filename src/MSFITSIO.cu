@@ -114,12 +114,24 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
 
         std::string dir(MS_name);
         casacore::Table main_tab(dir);
+        std::string data_column;
+
+        if (main_tab.tableDesc().isColumn("CORRECTED"))
+                data_column="CORRECTED";
+        else if (main_tab.tableDesc().isColumn("DATA"))
+                data_column="DATA";
+        else{
+                printf("ERROR: There is no column CORRECTED OR DATA in this Measurement SET. Exiting...\n");
+                exit(-1);
+        }
+
         casacore::Vector<double> pointing_ref;
         casacore::Vector<double> pointing_phs;
 
         casacore::Table field_tab(main_tab.keywordSet().asTable("FIELD"));
         casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
         casacore::Table polarization_tab(main_tab.keywordSet().asTable("POLARIZATION"));
+        casacore::Table antenna_tab(main_tab.keywordSet().asTable("ANTENNA"));
 
         data->nfields = field_tab.nrow();
         casacore::ROTableRow field_row(field_tab, casacore::stringToVector("REFERENCE_DIR,PHASE_DIR"));
@@ -154,7 +166,7 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
 
         data->nsamples = main_tab.nrow();
         if (data->nsamples == 0) {
-                printf("ERROR : nsamples is zero... exiting....\n");
+                printf("ERROR: nsamples is zero... exiting....\n");
                 exit(-1);
         }
 
@@ -200,7 +212,7 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
                         casacore::Matrix<casacore::Complex> dataCol;
                         casacore::Matrix<bool> flagCol;
 
-                        query = "select UVW,WEIGHT,DATA,FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
+                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
                         {
                                 query += " and RAND()<%f ORDERBY ASC UVW[2]";
@@ -214,7 +226,7 @@ __host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *da
 
                         casacore::ROArrayColumn<double> uvw_col(query_tab,"UVW");
                         casacore::ROArrayColumn<float> weight_col(query_tab,"WEIGHT");
-                        casacore::ROArrayColumn<casacore::Complex> data_col(query_tab,"DATA");
+                        casacore::ROArrayColumn<casacore::Complex> data_col(query_tab, data_column);
                         casacore::ROArrayColumn<bool> flag_col(query_tab,"FLAG");
 
                         for (int k=0; k < query_tab.nrow(); k++) {
