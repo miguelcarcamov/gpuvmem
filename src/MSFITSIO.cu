@@ -41,6 +41,13 @@ __host__ MSData countVisibilities(char const* MS_name, Field *&fields, int gridd
         casacore::Vector<double> pointing_ref;
         casacore::Vector<double> pointing_phs;
         casacore::Table main_tab(dir);
+
+        if (main_tab.tableDesc().isColumn("CORRECTED") == false && main_tab.tableDesc().isColumn("DATA") == false)
+        {
+                printf("ERROR: There is no column CORRECTED OR DATA in this Measurement SET. Exiting...\n");
+                exit(-1);
+        }
+
         casacore::Table field_tab(main_tab.keywordSet().asTable("FIELD"));
         casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
         casacore::Table polarization_tab(main_tab.keywordSet().asTable("POLARIZATION"));
@@ -258,6 +265,14 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
         std::string dir(MS_name);
         casacore::Table main_tab(dir);
 
+        std::string data_column;
+
+        if (main_tab.tableDesc().isColumn("CORRECTED"))
+                data_column="CORRECTED";
+        else
+             data_column="DATA";
+        
+
         casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
 
         casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,"CHAN_FREQ");
@@ -280,7 +295,7 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
                         casacore::Matrix<casacore::Complex> dataCol;
                         casacore::Matrix<bool> flagCol;
 
-                        query = "select UVW,WEIGHT,DATA,FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
+                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
                         {
                                 query += " and RAND()<%f ORDERBY ASC UVW[2]";
@@ -294,7 +309,7 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
 
                         casacore::ROArrayColumn<double> uvw_col(query_tab,"UVW");
                         casacore::ROArrayColumn<float> weight_col(query_tab,"WEIGHT");
-                        casacore::ROArrayColumn<casacore::Complex> data_col(query_tab,"DATA");
+                        casacore::ROArrayColumn<casacore::Complex> data_col(query_tab, data_column);
                         casacore::ROArrayColumn<bool> flag_col(query_tab,"FLAG");
 
                         for (int k=0; k < query_tab.nrow(); k++) {
