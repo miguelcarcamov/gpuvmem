@@ -102,14 +102,21 @@ typedef struct field {
         std::vector<std::vector<HVis> > backup_visibilities;
 }Field;
 
+typedef struct MSAntenna {
+        int antenna_id;
+        float antenna_diameter;
+        float pb_factor;
+        float pb_cutoff;
+        std::string name;
+        std::string primary_beam;
+}MSAntenna;
+
 typedef struct MSDataset {
         char *name;
         char *oname;
         std::vector<Field> fields;
+        std::vector<MSAntenna> antennas;
         MSData data;
-        float antenna_diameter;
-        float pb_factor;
-        float pb_cutoff;
 }MSDataset;
 
 typedef struct canvas_variables {
@@ -123,7 +130,7 @@ typedef struct canvas_variables {
 
 __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag);
 __host__ void readFITSImageValues(char *imageName, fitsfile *file, float *&values, int status, long M, long N);
-__host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding);
+__host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding);
 
 __host__ void MScopy(char const *in_dir, char const *in_dir_dest);
 

@@ -106,7 +106,7 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
         return noise_vis;
 }
 
-__host__ void readMS(char const *MS_name, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
+__host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
 {
 
         char *error = 0;
