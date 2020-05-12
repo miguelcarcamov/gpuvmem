@@ -988,7 +988,7 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
 
 
 
-        variance = 1.0/sum_weights;
+        variance = 1.0f/sum_weights;
 
         if(verbose_flag) {
                 float aux_noise = sqrt(variance);
