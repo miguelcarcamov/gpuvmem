@@ -201,25 +201,28 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
         std::string query;
 
+        casacore::Vector<float> weights;
+        casacore::Vector<double> uvw;
+        casacore::Matrix<casacore::Complex> dataCol;
+        casacore::Matrix<bool> flagCol;
+
         double3 MS_uvw;
         cufftComplex MS_vis;
         for(int f=0; f<data->nfields; f++) {
                 g=0;
                 for(int i=0; i < data->n_internal_frequencies; i++) {
 
-                        casacore::Vector<float> weights;
-                        casacore::Vector<double> uvw;
-                        casacore::Matrix<casacore::Complex> dataCol;
-                        casacore::Matrix<bool> flagCol;
+                        dataCol.resize(data.nstokes, data.channels[i]);
+                        flagCol.resize(data.nstokes, data.channels[i]);
 
                         query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
                         {
-                                query += " and RAND()<%f ORDERBY ASC UVW[2]";
+                                query += " and RAND()<"+to_string(random_prob)+" ORDERBY ASC UVW[2]";
                         }else if(W_projection) {
                                 query += " ORDERBY ASC UVW[2]";
                         }else if(random_prob < 1.0) {
-                                query += " RAND()<%f";
+                                query += " RAND()<"+std::to_string(random_prob);
                         }
 
                         casacore::Table query_tab = casacore::tableCommand(query.c_str());
@@ -370,9 +373,8 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
 
 }
 
-__host__ void writeMS(char const *infile, char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
+__host__ void writeMS(char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
 {
-        MScopy(infile, outfile);
         std::string dir = outfile;
         casacore::Table main_tab(dir,casacore::Table::Update);
         std::string column_name(out_col);
@@ -384,10 +386,11 @@ __host__ void writeMS(char const *infile, char const *outfile, char const *out_c
         }else{
                 printf("Adding %s to the main table...\n", out_col);
                 main_tab.addColumn(casacore::ArrayColumnDesc <casacore::Complex>(column_name,"created by gpuvmem"));
-                main_tab.flush();
-                query = "UPDATE "+dir+" set "+column_name+"=DATA";
+                query = "UPDATE "+dir+" SET "+column_name+"=DATA";
+                //query = "COPY COLUMN DATA TO MODEL";
                 printf("Duplicating DATA column into %s ...\n", column_name.c_str());
-                casacore::tableCommand(query);
+                casacore::tableCommand(query.c_str());
+                main_tab.flush();
         }
 
 
@@ -402,13 +405,16 @@ std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f]
         SelectStream(0);
         PutSeed(-1);
 
+        casacore::Vector<float> weights;
+        casacore::Matrix<casacore::Complex> dataCol;
+        casacore::Matrix<bool> flagCol;
+
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
 
-                        casacore::Vector<float> weights;
-                        casacore::Matrix<casacore::Complex> dataCol;
-                        casacore::Matrix<bool> flagCol;
+                        dataCol.resize(data.nstokes, data.channels[i]);
+                        flagCol.resize(data.nstokes, data.channels[i]);
 
                         query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 

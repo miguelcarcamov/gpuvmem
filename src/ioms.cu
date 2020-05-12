@@ -15,6 +15,12 @@ void IoMS::IoreadMS(char const *MS_name, std::vector<Field>& fields, MSData *dat
 {
         readMS(MS_name, fields, data, noise, W_projection, random_prob, gridding);
 };
+
+void IoMS::IocopyMS(char const *infile, char const *outfile)
+{
+        MScopy(infile, outfile);
+};
+
 void IoMS::IowriteMS(char const *infile, char const *outfile, char const *out_col, std::vector<Field>& fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
 {
         writeMS(infile, outfile, out_col, fields, data, random_probability, sim, noise, W_projection, verbose_flag);
