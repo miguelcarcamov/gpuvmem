@@ -249,7 +249,8 @@ public:
 virtual MSData IocountVisibilities(char const *MS_name, Field *&fields, int gridding) = 0;
 virtual canvasVariables IoreadCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag) = 0;
 virtual void IoreadMS(char const *MS_name, Field *fields, MSData data, bool noise, bool W_projection, float random_prob) = 0;
-virtual void IowriteMS(char const *infile, char const *outfile, char const *out_col, Field *fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag) = 0;
+virtual void IocopyMS(char const *infile, char const *outfile) = 0;
+virtual void IowriteMS(char const *outfile, char const *out_col, Field *fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag) = 0;
 virtual void IocloseCanvas(fitsfile *canvas) = 0;
 virtual void IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)= 0;
 virtual void IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char const *name_image, char *units, int iteration, int index, float fg_scale, long M, long N) = 0;

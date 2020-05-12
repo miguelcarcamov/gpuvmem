@@ -41,13 +41,6 @@ __host__ MSData countVisibilities(char const* MS_name, Field *&fields, int gridd
         casacore::Vector<double> pointing_ref;
         casacore::Vector<double> pointing_phs;
         casacore::Table main_tab(dir);
-
-        if (main_tab.tableDesc().isColumn("CORRECTED") == false && main_tab.tableDesc().isColumn("DATA") == false)
-        {
-                printf("ERROR: There is no column CORRECTED OR DATA in this Measurement SET. Exiting...\n");
-                exit(-1);
-        }
-
         casacore::Table field_tab(main_tab.keywordSet().asTable("FIELD"));
         casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
         casacore::Table polarization_tab(main_tab.keywordSet().asTable("POLARIZATION"));
@@ -129,6 +122,9 @@ __host__ MSData countVisibilities(char const* MS_name, Field *&fields, int gridd
                 }
         }
 
+        casacore::Vector<float> weights;
+        casacore::Matrix<bool> flagCol;
+
         int counter;
         std::string query;
 
@@ -137,9 +133,6 @@ __host__ MSData countVisibilities(char const* MS_name, Field *&fields, int gridd
         for(int f=0; f<freqsAndVisibilities.nfields; f++) {
                 counter = 0;
                 for(int i=0; i < freqsAndVisibilities.n_internal_frequencies; i++) {
-                        casacore::Vector<float> weights;
-                        casacore::Matrix<bool> flagCol;
-
                         // Query for data with forced IF and FIELD
                         query = "select WEIGHT,FLAG from "+ dir +" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 
@@ -270,12 +263,17 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
         if (main_tab.tableDesc().isColumn("CORRECTED"))
                 data_column="CORRECTED";
         else
-             data_column="DATA";
-        
+                data_column="DATA";
+
 
         casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
 
         casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,"CHAN_FREQ");
+
+        casacore::Vector<float> weights;
+        casacore::Vector<double> uvw;
+        casacore::Matrix<casacore::Complex> dataCol;
+        casacore::Matrix<bool> flagCol;
 
         for(int f=0; f < data.nfields; f++)
                 for(int i = 0; i < data.total_frequencies; i++)
@@ -286,14 +284,10 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
         PutSeed(-1);
         std::string query;
 
+
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
-
-                        casacore::Vector<float> weights;
-                        casacore::Vector<double> uvw;
-                        casacore::Matrix<casacore::Complex> dataCol;
-                        casacore::Matrix<bool> flagCol;
 
                         query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
@@ -302,7 +296,7 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
                         }else if(W_projection) {
                                 query += " ORDERBY ASC UVW[2]";
                         }else if(random_prob < 1.0) {
-                                query += " RAND()<%f";
+                                query += " and RAND()< "+std::to_string(random_prob);
                         }
 
                         casacore::Table query_tab = casacore::tableCommand(query.c_str());
@@ -433,9 +427,8 @@ __host__ void residualsToHost(Field *fields, MSData data, int num_gpus, int firs
 
 }
 
-__host__ void writeMS(char const *infile, char const *outfile, char const *out_col, Field *fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
+__host__ void writeMS(char const *outfile, char const *out_col, Field *fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
 {
-        MScopy(infile, outfile);
         std::string dir = outfile;
         casacore::Table main_tab(dir,casacore::Table::Update);
         std::string column_name(out_col);
@@ -447,10 +440,11 @@ __host__ void writeMS(char const *infile, char const *outfile, char const *out_c
         }else{
                 printf("Adding %s to the main table...\n", out_col);
                 main_tab.addColumn(casacore::ArrayColumnDesc <casacore::Complex>(column_name,"created by gpuvmem"));
-                main_tab.flush();
-                query = "UPDATE "+dir+" set "+column_name+"=DATA";
+                query = "UPDATE "+dir+" SET "+column_name+"=DATA";
+                //query = "COPY COLUMN DATA TO MODEL";
                 printf("Duplicating DATA column into %s ...\n", column_name.c_str());
-                casacore::tableCommand(query);
+                casacore::tableCommand(query.c_str());
+                main_tab.flush();
 
         }
 
@@ -464,6 +458,9 @@ __host__ void writeMS(char const *infile, char const *outfile, char const *out_c
         int g = 0;
         long c;
         cufftComplex vis;
+        casacore::Vector<float> weights;
+        casacore::Matrix<casacore::Complex> dataCol;
+        casacore::Matrix<bool> flagCol;
 
         float real_n, imag_n;
         SelectStream(0);
@@ -472,9 +469,9 @@ __host__ void writeMS(char const *infile, char const *outfile, char const *out_c
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
-                        casacore::Vector<float> weights;
-                        casacore::Matrix<casacore::Complex> dataCol;
-                        casacore::Matrix<bool> flagCol;
+
+                        dataCol.resize(data.nstokes, data.channels[i]);
+                        flagCol.resize(data.nstokes, data.channels[i]);
 
                         query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 
@@ -496,11 +493,11 @@ __host__ void writeMS(char const *infile, char const *outfile, char const *out_c
                                                 if(flagCol(sto,j) == false && weights[sto] > 0.0) {
                                                         c = fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto];
 
-                                                        if(sim && noise) {
+                                                        if(sim && noise)
                                                                 vis = addNoiseToVis(fields[f].visibilities[g+j][sto].Vm[c], weights[sto]);
-                                                        }else if(sim) {
+                                                        else if(sim)
                                                                 vis = fields[f].visibilities[g+j][sto].Vm[c];
-                                                        }else{
+                                                        else{
                                                                 vis.x = fields[f].visibilities[g+j][sto].Vo[c].x - fields[f].visibilities[g+j][sto].Vm[c].x;
                                                                 vis.y = fields[f].visibilities[g+j][sto].Vo[c].y - fields[f].visibilities[g+j][sto].Vm[c].y;
                                                         }

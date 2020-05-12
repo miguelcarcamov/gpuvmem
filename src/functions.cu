@@ -972,7 +972,7 @@ __host__ float calculateNoise(MSDataset *datasets, int *total_visibilities, int 
                                         //Calculating beam noise
                                         for (int j = 0; j < datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
                                                 if (datasets[d].fields[f].visibilities[i][s].weight[j] > 0.0) {
-                                                        sum_weights += 1.0f/datasets[d].fields[f].visibilities[i][s].weight[j];
+                                                        sum_weights += datasets[d].fields[f].visibilities[i][s].weight[j];
                                                 }
                                         }
                                         *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
@@ -984,16 +984,16 @@ __host__ float calculateNoise(MSDataset *datasets, int *total_visibilities, int 
                 }
         }
 
-        float sum_inverse_weight = sum_weights;
+        float variance = 1.0f/sum_weights;
 
         if(verbose_flag) {
-                float aux_noise = sqrt(sum_inverse_weight)/ *total_visibilities;// *total_visibilities;
+                float aux_noise = sqrt(variance);// *total_visibilities;
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
         if(beam_noise == -1 || gridding > 0)
         {
-                beam_noise = sqrt(sum_inverse_weight)/ *total_visibilities;// *total_visibilities;
+                beam_noise = sqrt(variance);// *total_visibilities;
                 if(verbose_flag) {
                         printf("No NOISE keyword detected in header or you might be using gridding\n");
                         printf("Using NOISE: %e ...\n", beam_noise);
