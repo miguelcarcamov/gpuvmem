@@ -133,6 +133,8 @@ __host__ MSData countVisibilities(char const* MS_name, Field *&fields, int gridd
         for(int f=0; f<freqsAndVisibilities.nfields; f++) {
                 counter = 0;
                 for(int i=0; i < freqsAndVisibilities.n_internal_frequencies; i++) {
+
+                        flagCol.resize(freqsAndVisibilities.nstokes, freqsAndVisibilities.channels[i]);
                         // Query for data with forced IF and FIELD
                         query = "select WEIGHT,FLAG from "+ dir +" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
 
@@ -288,6 +290,9 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
         for(int f=0; f<data.nfields; f++) {
                 g=0;
                 for(int i=0; i < data.n_internal_frequencies; i++) {
+
+                        dataCol.resize(data.nstokes, data.channels[i]);
+                        flagCol.resize(data.nstokes, data.channels[i]);
 
                         query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
