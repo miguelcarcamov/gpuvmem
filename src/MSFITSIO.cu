@@ -297,7 +297,7 @@ __host__ void readMS(char const *MS_name, Field *fields, MSData data, bool noise
                         query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
                         {
-                                query += " and RAND()<%f ORDERBY ASC UVW[2]";
+                                query += " and RAND()<"+std::to_string(random_prob)+" ORDERBY ASC UVW[2]";
                         }else if(W_projection) {
                                 query += " ORDERBY ASC UVW[2]";
                         }else if(random_prob < 1.0) {
