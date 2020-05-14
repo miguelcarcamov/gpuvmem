@@ -44,7 +44,7 @@ void IoMS::IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char co
         free(full_name);
 }
 
-void IoMS::IoPrintMEMImageIteration(float *I, char *name_image, char *units, int index)
+void IoMS::IoPrintOptImageIteration(float *I, char *name_image, char *units, int index)
 {
         size_t needed;
         char *full_name;
@@ -53,7 +53,11 @@ void IoMS::IoPrintMEMImageIteration(float *I, char *name_image, char *units, int
         full_name = (char*)malloc(needed*sizeof(char));
         snprintf(full_name, needed*sizeof(char), "%s_%d.fits", name_image, iter);
 
-        OFITS(I, mod_in, mempath, full_name, units, iter, index, fg_scale, M, N);
+        std::string unit_str(units);
+        if(unit_str == "JY/PIXEL")
+                OFITS(I, mod_in, mempath, full_name, units, iter, index, fg_scale, M, N);
+        else
+                OFITS(I, mod_in, mempath, full_name, units, iter, index, 1.0, M, N);
         free(full_name);
 }
 

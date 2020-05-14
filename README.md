@@ -147,6 +147,7 @@ Example: `./bin/gpuvmem options [ arguments ...]`
     -s  --select           If multigpu option is OFF, then select the GPU ID of the GPU you will work on. (Default = 0)
     -t  --iterations       Number of iterations for optimization (Default = 500)
     -g  --gridding         Use count in cell gridding to decrease the number of visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)
+    -F  --nu_0             Reference frequency in Hz (if alpha is not zero)
     -z  --initial_values   Initial values for image/s
     -Z  --penalizators     penalizators for prior terms
     -R  --robust-parameter Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0 for natural weighting and 0.0 for a tradeoff between these two. (Default R = 2.0).\n
