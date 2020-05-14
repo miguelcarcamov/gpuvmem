@@ -242,6 +242,7 @@ __host__ void print_help() {
         printf("    -s  --select           If multigpu option is OFF, then select the GPU ID of the GPU you will work on. (Default = 0)\n");
         printf("    -t  --iterations       Number of iterations for optimization (Default = 500)\n");
         printf("    -g  --gridding         Use gridding to decrease the number of visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)\n");
+        printf("    -F  --nu_0             Reference frequency in Hz (if alpha is not zero)");
         printf("    -z  --initial_values   Initial conditions for image/s\n");
         printf("    -Z  --penalizators     penalizators for Fi\n");
         printf("    -R  --robust-parameter Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0 for natural weighting and 0.0 for a tradeoff between these two. (Default R = 2.0).\n");

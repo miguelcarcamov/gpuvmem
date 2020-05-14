@@ -254,7 +254,7 @@ virtual void IowriteMS(char const *outfile, char const *out_col, Field *fields, 
 virtual void IocloseCanvas(fitsfile *canvas) = 0;
 virtual void IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)= 0;
 virtual void IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char const *name_image, char *units, int iteration, int index, float fg_scale, long M, long N) = 0;
-virtual void IoPrintMEMImageIteration(float *I, char *name_image, char *units, int index) = 0;
+virtual void IoPrintOptImageIteration(float *I, char *name_image, char *units, int index) = 0;
 virtual void IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option)=0;
 void setPrintImagesPath(char * pip){
         this->printImagesPath = pip;
@@ -290,8 +290,8 @@ void calcGradient(float *p, float *xi)
 {
         if(print_images) {
                 if(IoOrderIterations == NULL) {
-                        io->IoPrintMEMImageIteration(p,"I_nu_0","JY/PIXEL",0);
-                        io->IoPrintMEMImageIteration(p,"alpha","",1);
+                        io->IoPrintOptImageIteration(p,"I_nu_0","JY/PIXEL",0);
+                        io->IoPrintOptImageIteration(p,"alpha","",1);
                 }else{
                         (IoOrderIterations)(p, io);
                 }
