@@ -53,8 +53,6 @@ extern int flag_opt;
 #define EPS 1.0e-10
 extern int it_maximum;
 
-#define ALPHA 1.e-4
-
 #define FREEALL cudaFree(d_y); cudaFree(d_s); cudaFree(xi); cudaFree(xi_old); cudaFree(p_old); cudaFree(norm_vector);
 
 __host__ void LBFGS::allocateMemoryGpu()

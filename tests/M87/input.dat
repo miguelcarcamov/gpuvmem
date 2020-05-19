@@ -1,4 +1,3 @@
-noise_cut	0.999999999767
-t_telescope	4
-ftol		1.0e-12
-random_probability	1.0
+version https://git-lfs.github.com/spec/v1
+oid sha256:3c151066419ef3f1c1207f03496e5492387a0fa8ed940726d008d4de818cce6d
+size 76
