@@ -378,11 +378,16 @@ void MFS::configure(int argc, char **argv)
                         for(int f=0; f<datasets[d].data.nfields; f++) {
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                datasets[d].fields[f].gridded_visibilities[i][s].uvw.resize(M*N, zeros);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].weight.resize(M*N, 0.0f);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].S.resize(M*N, 0);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].Vo.resize(M*N, cufft_zeroval);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].Vm.resize(M*N, cufft_zeroval);
+                                                datasets[d].fields[f].gridded_visibilities[i][s].uvw.reserve(M*N);
+                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].uvw.begin(), M*N, zeros);
+                                                datasets[d].fields[f].gridded_visibilities[i][s].weight.reserve(M*N);
+                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].weight.begin(), M*N, 0.0f);
+                                                datasets[d].fields[f].gridded_visibilities[i][s].S.reserve(M*N);
+                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].S.begin() ,M*N, 0);
+                                                datasets[d].fields[f].gridded_visibilities[i][s].Vo.reserve(M*N);
+                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].Vo.begin(), M*N, cufft_zeroval);
+                                                datasets[d].fields[f].gridded_visibilities[i][s].Vm.reserve(M*N);
+                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].Vm.begin(), M*N, cufft_zeroval);
                                         }
                                 }
                         }
