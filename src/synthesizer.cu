@@ -389,12 +389,6 @@ void MFS::configure(int argc, char **argv)
                 }
         }
 
-
-
-        if(verbose_flag) {
-                printf("Reading visibilities and FITS input files...\n");
-        }
-
         this->visibilities = new Visibilities();
         this->visibilities->setMSDataset(datasets);
         this->visibilities->setNDatasets(nMeasurementSets);
