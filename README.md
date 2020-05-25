@@ -96,15 +96,8 @@ cmake ..
 make -j
 ```
 
-# t_telescope references the following telescopes:
+# Now the telescopes are read from the MS file:
 
-1.  CBI2
-2.  ALMA
-3.  ATCA
-4.  VLA
-5.  SZA
-6.  CBI
-7.  EHT
 
 # Usage
 
@@ -115,14 +108,12 @@ Create your input.dat file with the following data and change the parameters as 
     noise_cut	100.5
     ftol		1.0e-12
     random_probability 0.0
-    t_telescope        2
 
 However, if you want to reconstruct a multi-antenna dataset. For example, CBI and CBI2.
 
     noise_cut	100.5
     ftol		1.0e-12
     random_probability 0.0
-    t_telescope        6,1
 
 # Use GPUVMEM:
 

@@ -17,7 +17,6 @@ int threadsVectorReduceNN, blocksVectorReduceNN, nopositivity = 0, verbose_flag 
 int gridding, it_maximum, status_mod_in;
 int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, print_errors, nMeasurementSets=0, max_number_vis;
 char *output, *mempath, *out_image, *msinput, *msoutput, *inputdat, *modinput;
-char *t_telescope;
 float nu_0, threshold;
 extern int num_gpus;
 
@@ -152,18 +151,8 @@ void MFS::configure(int argc, char **argv)
         {
                 initial_values[1] = 0.0f;
                 image_count++;
-                nu_0 = 1.0f;
                 imagesChanged = 1;
         }
-
-        if(image_count > 1 && nu_0 == -1)
-        {
-                print_help();
-                printf("for 2 or more images, nu_0 (-F) is mandatory\n");
-                exit(-1);
-        }
-
-
 
         /*
          *
@@ -232,14 +221,35 @@ void MFS::configure(int argc, char **argv)
         if(verbose_flag)
                 printf("Reading data from MSs\n");
 
-
+        std::vector<float> ms_ref_freqs;
         for(int d=0; d<nMeasurementSets; d++) {
                 if(apply_noise) {
                         iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, true, false, random_probability, gridding);
                 }else{
                         iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, false, false, random_probability, gridding);
                 }
+                ms_ref_freqs.push_back(datasets[d].data.ref_freq);
         }
+
+        if(nu_0 < 0) {
+                printf("Reference frequency not provided. It will be calculated as the median of all the arrays of frequencies.\n");
+                int vec_size = ms_ref_freqs.size();
+                if(vec_size > 1) {
+                        // Sort the frequencies vector
+                        sort(ms_ref_freqs.begin(), ms_ref_freqs.end());
+                        if(vec_size % 2 == 0)
+                                nu_0 = (ms_ref_freqs[(vec_size-1)/2] + ms_ref_freqs[vec_size/2])/2.0;
+                        else
+                                nu_0 = ms_ref_freqs[vec_size/2];
+
+                }else
+                        nu_0 = ms_ref_freqs[0];
+
+
+        }
+        printf("Reference frequency: %e Hz\n", nu_0);
+
+
 
         if(verbose_flag) {
                 for(int i=0; i<nMeasurementSets; i++) {
@@ -1012,7 +1022,6 @@ void MFS::unSetDevice()
         }
         free(host_I);
         free(msinput);
-        free(t_telescope);
         free(msoutput);
         free(modinput);
 

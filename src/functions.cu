@@ -55,7 +55,7 @@ extern float threshold;
 extern float nu_0;
 extern int nPenalizators, print_errors, nMeasurementSets, max_number_vis;
 
-extern char* mempath, *out_image, *t_telescope;
+extern char* mempath, *out_image;
 
 extern fitsfile *mod_in;
 
@@ -156,9 +156,6 @@ __host__ void readInputDat(char *file)
                                         if(noise_cut == -1) {
                                                 noise_cut = atof(status);
                                         }
-                                }else if (strcmp(item,"t_telescope")==0) {
-                                        t_telescope = (char*)malloc((strlen(status)+1));
-                                        strcpy(t_telescope, status);
                                 }else if(strcmp(item,"ftol")==0) {
                                         ftol = atof(status);
                                 } else if(strcmp(item,"random_probability")==0) {

@@ -148,8 +148,6 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         casacore::ROScalarColumn<casacore::Double> min_freq_col(min_freq_tab,"MIN_FREQ");
         casacore::ROScalarColumn<casacore::Double> ref_freq_col(ref_freq_tab,"REF_FREQ");
 
-
-
         data->nantennas = antenna_tab.nrow();
         data->nbaselines = (data->nantennas) * (data->nantennas - 1) / 2;
         data->ref_freq = ref_freq_col(0);
