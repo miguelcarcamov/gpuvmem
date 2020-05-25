@@ -180,7 +180,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                         antennas[a].primary_beam = "Gaussian";
                 }
 
-                antennas[a].pb_cutoff = max_wavelength/antennas[a].antenna_diameter;
+                antennas[a].pb_cutoff = 10.0f * antennas[a].pb_factor * (max_wavelength/antennas[a].antenna_diameter);
         }
 
         data->nfields = field_tab.nrow();
