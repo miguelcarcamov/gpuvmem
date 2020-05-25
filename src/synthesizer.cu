@@ -9,7 +9,6 @@ float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, b
 float beam_bmin, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
 float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
 float *host_I, sum_weights, *initial_values, *penalizators;
-Telescope *telescope;
 
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
@@ -216,30 +215,6 @@ void MFS::configure(int argc, char **argv)
 
         readInputDat(inputdat);
 
-        int n_telescopes;
-        if(strcmp(t_telescope, "NULL")!=0) {
-                string_values = countAndSeparateStrings(t_telescope);
-                n_telescopes = string_values.size();
-        }else{
-                printf("Telescope codes were not provided\n");
-                print_help();
-                exit(-1);
-        }
-
-        if(n_telescopes != nMeasurementSets) {
-                printf("Number of telescope codes cannot be different to the number of Measurement Sets\n");
-                print_help();
-                exit(-1);
-        }
-
-        int telescope;
-        for(int i=0; i< nMeasurementSets; i++) {
-
-                telescope = atoi(string_values[i].c_str());
-                init_beam(telescope, &datasets[i].antenna_diameter, &datasets[i].pb_factor, &datasets[i].pb_cutoff);
-        }
-
-
         canvasVariables canvas_vars = iohandler->IoreadCanvas(modinput, mod_in, b_noise_aux, status_mod_in, verbose_flag);
 
         M = canvas_vars.M;
@@ -255,14 +230,14 @@ void MFS::configure(int argc, char **argv)
         beam_noise = canvas_vars.beam_noise;
 
         if(verbose_flag)
-                printf("Counting data for memory allocation\n");
+                printf("Reading data from MSs\n");
 
 
         for(int d=0; d<nMeasurementSets; d++) {
                 if(apply_noise) {
-                        iohandler->IoreadMS(datasets[d].name, datasets[d].fields, &datasets[d].data, true, false, random_probability, gridding);
+                        iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, true, false, random_probability, gridding);
                 }else{
-                        iohandler->IoreadMS(datasets[d].name, datasets[d].fields, &datasets[d].data, false, false, random_probability, gridding);
+                        iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, false, false, random_probability, gridding);
                 }
         }
 
@@ -722,7 +697,7 @@ void MFS::setDevice()
                         for(int f=0; f<datasets[d].data.nfields; f++) {
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antenna_diameter, datasets[d].pb_factor, datasets[d].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N);
+                                                total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N);
                                                 gpuErrchk(cudaDeviceSynchronize());
                                         }
                                 }
@@ -741,7 +716,7 @@ void MFS::setDevice()
                                         if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
                                                 #pragma omp critical
                                                 {
-                                                        total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antenna_diameter, datasets[d].pb_factor, datasets[d].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N);
+                                                        total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N);
                                                         gpuErrchk(cudaDeviceSynchronize());
                                                 }
                                         }

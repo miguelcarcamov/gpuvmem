@@ -11,9 +11,9 @@ canvasVariables IoMS::IoreadCanvas(char *canvas_name, fitsfile *&canvas, float b
         return readCanvas(canvas_name, canvas, b_noise_aux, status_canvas, verbose_flag);
 };
 
-void IoMS::IoreadMS(char const *MS_name, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
+void IoMS::IoreadMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
 {
-        readMS(MS_name, fields, data, noise, W_projection, random_prob, gridding);
+        readMS(MS_name, antennas, fields, data, noise, W_projection, random_prob, gridding);
 };
 
 void IoMS::IocopyMS(char const *infile, char const *outfile)
@@ -21,9 +21,9 @@ void IoMS::IocopyMS(char const *infile, char const *outfile)
         MScopy(infile, outfile);
 };
 
-void IoMS::IowriteMS(char const *infile, char const *outfile, char const *out_col, std::vector<Field>& fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
+void IoMS::IowriteMS(char const *outfile, char const *out_col, std::vector<Field>& fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
 {
-        writeMS(infile, outfile, out_col, fields, data, random_probability, sim, noise, W_projection, verbose_flag);
+        writeMS(outfile, out_col, fields, data, random_probability, sim, noise, W_projection, verbose_flag);
 };
 
 void IoMS::IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)

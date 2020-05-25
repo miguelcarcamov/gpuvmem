@@ -39,6 +39,7 @@
 
 const float PI = CUDART_PI_F;
 const double PI_D = CUDART_PI;
+const float LIGHTSPEED = 2.99792458E8;
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -57,6 +58,11 @@ typedef struct MSData {
         int nfields;
         int nsamples;
         int nstokes;
+        int nantennas;
+        int nbaselines;
+        float ref_freq;
+        float min_freq;
+        std::string telescope_name;
         std::vector<int> corr_type;
 
         int max_number_visibilities_in_channel_and_stokes;
@@ -103,11 +109,12 @@ typedef struct field {
 }Field;
 
 typedef struct MSAntenna {
-        int antenna_id;
+        std::string antenna_id;
+        std::string station;
+        double3 position;
         float antenna_diameter;
         float pb_factor;
         float pb_cutoff;
-        std::string name;
         std::string primary_beam;
 }MSAntenna;
 
@@ -135,7 +142,6 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 __host__ void MScopy(char const *in_dir, char const *in_dir_dest);
 
 __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu);
-
 __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag);
 
 __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option);

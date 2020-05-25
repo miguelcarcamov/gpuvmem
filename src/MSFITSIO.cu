@@ -128,10 +128,62 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         casacore::Vector<double> pointing_ref;
         casacore::Vector<double> pointing_phs;
 
+        casacore::Table observation_tab(main_tab.keywordSet().asTable("OBSERVATION"));
+        casacore::ROScalarColumn<casacore::String> obs_col(observation_tab,"TELESCOPE_NAME");
+
+        data->telescope_name = obs_col(0);
+
         casacore::Table field_tab(main_tab.keywordSet().asTable("FIELD"));
         casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
         casacore::Table polarization_tab(main_tab.keywordSet().asTable("POLARIZATION"));
-        casacore::Table antenna_tab(main_tab.keywordSet().asTable("ANTENNA"));
+
+
+        std::string antenna_tab_query = "select POSITION,DISH_DIAMETER,NAME,STATION FROM "+dir+"/ANTENNA where !FLAG_ROW";
+        std::string min_freq_query = "select GMIN(CHAN_FREQ) as MIN_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
+        std::string ref_freq_query = "select GMEDIAN(CHAN_FREQ) as REF_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
+        casacore::Table antenna_tab(casacore::tableCommand(antenna_tab_query.c_str()));
+        casacore::Table min_freq_tab(casacore::tableCommand(min_freq_query.c_str()));
+        casacore::Table ref_freq_tab(casacore::tableCommand(ref_freq_query.c_str()));
+
+        casacore::ROScalarColumn<casacore::Double> min_freq_col(min_freq_tab,"MIN_FREQ");
+        casacore::ROScalarColumn<casacore::Double> ref_freq_col(ref_freq_tab,"REF_FREQ");
+
+
+
+        data->nantennas = antenna_tab.nrow();
+        data->nbaselines = (data->nantennas) * (data->nantennas - 1) / 2;
+        data->ref_freq = ref_freq_col(0);
+        data->min_freq = min_freq_col(0);
+
+        float max_wavelength = LIGHTSPEED/data->min_freq;
+
+        casacore::ROArrayColumn<double> dishposition_col(antenna_tab,"POSITION");
+        casacore::ROScalarColumn<double> dishdiameter_col(antenna_tab,"DISH_DIAMETER");
+        casacore::ROScalarColumn<casacore::String> dishname_col(antenna_tab,"NAME");
+        casacore::ROScalarColumn<casacore::String> dishstation_col(antenna_tab,"STATION");
+
+        casacore::Vector<double> antenna_positions;
+
+        for(int a=0; a<data->nantennas; a++) {
+                antennas.push_back(MSAntenna());
+                antennas[a].antenna_id = dishname_col(a);
+                antennas[a].station = dishstation_col(a);
+                antenna_positions = dishposition_col(a);
+                antennas[a].position.x = antenna_positions[0];
+                antennas[a].position.y = antenna_positions[1];
+                antennas[a].position.z = antenna_positions[2];
+                antennas[a].antenna_diameter = dishdiameter_col(a);
+
+                if(data->telescope_name == "ALMA"){
+                        antennas[a].pb_factor = 1.13;
+                        antennas[a].primary_beam = "AiryDisk";
+                }else{
+                        antennas[a].pb_factor = 1.22;
+                        antennas[a].primary_beam = "Gaussian";
+                }
+
+                antennas[a].pb_cutoff = max_wavelength/antennas[a].antenna_diameter;
+        }
 
         data->nfields = field_tab.nrow();
         casacore::ROTableRow field_row(field_tab, casacore::stringToVector("REFERENCE_DIR,PHASE_DIR"));
@@ -212,13 +264,13 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 g=0;
                 for(int i=0; i < data->n_internal_frequencies; i++) {
 
-                        dataCol.resize(data.nstokes, data.channels[i]);
-                        flagCol.resize(data.nstokes, data.channels[i]);
+                        dataCol.resize(data->nstokes, data->channels[i]);
+                        flagCol.resize(data->nstokes, data->channels[i]);
 
                         query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
                         {
-                                query += " and RAND()<"+to_string(random_prob)+" ORDERBY ASC UVW[2]";
+                                query += " and RAND()<"+std::to_string(random_prob)+" ORDERBY ASC UVW[2]";
                         }else if(W_projection) {
                                 query += " ORDERBY ASC UVW[2]";
                         }else if(random_prob < 1.0) {
