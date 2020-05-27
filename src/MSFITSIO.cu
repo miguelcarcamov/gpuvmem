@@ -172,7 +172,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 antennas[a].position.z = antenna_positions[2];
                 antennas[a].antenna_diameter = dishdiameter_col(a);
 
-                if(data->telescope_name == "ALMA"){
+                if(data->telescope_name == "ALMA") {
                         antennas[a].pb_factor = 1.13;
                         antennas[a].primary_beam = "AiryDisk";
                 }else{
@@ -445,7 +445,7 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
 
 
         for(int f=0; f < data.nfields; f++)
-std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
+                std::fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
 
 
         int g = 0;
