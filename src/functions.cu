@@ -1273,7 +1273,7 @@ __device__ float GaussianBeam(float distance, float lambda, float antenna_diamet
 }
 
 
-__device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY)
+__device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, char* primary_beam)
 {
 
         int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -1327,12 +1327,12 @@ __device__ cufftComplex WKernel(double w, float xobs, float yobs, double DELTAX,
 
 
 }
-__global__ void total_attenuation(float *total_atten, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, long N)
+__global__ void total_attenuation(float *total_atten, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, long N, char* primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        float attenPerFreq = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY);
+        float attenPerFreq = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
         total_atten[N*i+j] += attenPerFreq;
 }
@@ -1365,12 +1365,12 @@ __global__ void noise_image(float *noise_image, float *weight_image, float noise
         noise_image[N*i+j] = noiseval;
 }
 
-__global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY)
+__global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY, char* primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY);
+        float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
         image[N*i+j].x = image[N*i+j].x * atten * fg_scale;
         //image[N*i+j].x = image[N*i+j].x * atten;
@@ -2239,7 +2239,7 @@ __global__ void DL(float *dL, float *I, float *noise, float noise_cut, float lam
 }
 
 
-__global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq)
+__global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, char* primary_beam)
 {
 
         int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2274,7 +2274,7 @@ __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr,
         cg::sync(cta);
 
 
-        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY);
+        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
 
         float dchi2 = 0.0;
         if(noise[N*i+j] <= noise_cut) {
@@ -2296,7 +2296,7 @@ __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr,
 }
 
 
-__global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq)
+__global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, char* primary_beam)
 {
 
         int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2310,7 +2310,7 @@ __global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW
 
         float Ukv, Vkv, Wkv, cosk, sink, atten;
 
-        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY);
+        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
 
         float dchi2 = 0.0;
         if(noise[N*i+j] <= noise_cut) {
@@ -2495,14 +2495,14 @@ __global__ void DChi2_2I(float *noise, float *chain, float *I, float *dchi2, flo
 }
 
 
-__global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float noise_cut, float nu, float nu_0, float *w, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, double DELTAX, double DELTAY, long numVisibilities, long N, long M)
+__global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float noise_cut, float nu, float nu_0, float *w, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, double DELTAX, double DELTAY, long numVisibilities, long N, long M, char* primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float alpha, nudiv, nudiv_pow_alpha, sum_noise, atten;
 
-        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, nu, xobs, yobs, DELTAX, DELTAY);
+        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, nu, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
         nudiv = nu/nu_0;
         alpha = images[N*M+N*i+j];
@@ -2523,7 +2523,7 @@ __global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float 
 }
 
 
-__global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0, float *w, double3 *UVW, cufftComplex *Vr, float *noise, float noise_cut, double DELTAX, double DELTAY, float xobs, float yobs, float antenna_diameter, float pb_factor, float pb_cutoff, float fg_scale, long numVisibilities, long N, long M)
+__global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0, float *w, double3 *UVW, cufftComplex *Vr, float *noise, float noise_cut, double DELTAX, double DELTAY, float xobs, float yobs, float antenna_diameter, float pb_factor, float pb_cutoff, float fg_scale, long numVisibilities, long N, long M, char* primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -2536,7 +2536,7 @@ __global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0,
         x = (j - x0) * DELTAX * RPDEG_D;
         y = (i - y0) * DELTAY * RPDEG_D;
 
-        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, nu, xobs, yobs, DELTAX, DELTAY);
+        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, nu, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
         nudiv = nu/nu_0;
         I_nu_0 = images[N*i+j];
@@ -2608,7 +2608,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
                                         ip->calculateInu(vars_gpu[0].device_I_nu, I, datasets[d].fields[f].nu[i]);
 
-                                        ip->apply_beam(vars_gpu[0].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i]);
+                                        ip->apply_beam(vars_gpu[0].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
                                         gpuErrchk(cudaDeviceSynchronize());
 
                                         //FFT 2D
@@ -2669,7 +2669,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
                                         //apply_beam<<<numBlocksNN, threadsPerBlockNN>>>(beam_fwhm, beam_freq, beam_cutoff, vars_gpu[i%num_gpus].device_I_nu, device_fg_image, N, fields[f].ref_xobs, fields[f].ref_yobs, fg_scale, fields[f].visibilities[i].freq, DELTAX, DELTAY);
                                         ip->apply_beam(vars_gpu[i % num_gpus].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs,
-                                                       datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i]);
+                                                       datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
                                         gpuErrchk(cudaDeviceSynchronize());
 
 
@@ -2744,7 +2744,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                         //size_t shared_memory;
                                                         //shared_memory = 3*fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(double) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(float) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(cufftComplex);
                                                         DChi2 <<< numBlocksNN, threadsPerBlockNN >>>
-                                                        (device_noise_image, vars_gpu[0].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i]);
+                                                        (device_noise_image, vars_gpu[0].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
                                                         //DChi2_SharedMemory<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[0].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
                                                         gpuErrchk(cudaDeviceSynchronize());
 
@@ -2778,7 +2778,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                                              M*N));
                                                         //size_t shared_memory;
                                                         //shared_memory = 3*fields[f].numVisibilitiesPerFreq[i]*sizeof(float) + fields[f].numVisibilitiesPerFreq[i]*sizeof(cufftComplex);
-                                                        DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[i % num_gpus].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i]);
+                                                        DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[i % num_gpus].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
                                                         //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[i%num_gpus].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
                                                         gpuErrchk(cudaDeviceSynchronize());
 
@@ -2838,9 +2838,9 @@ __host__ void linkClipWNoise2I(float *I)
         gpuErrchk(cudaDeviceSynchronize());
 };
 
-__host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq)
+__host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, char* primary_beam)
 {
-        apply_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, fg_scale, freq, DELTAX, DELTAY);
+        apply_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, fg_scale, freq, DELTAX, DELTAY, primary_beam);
         gpuErrchk(cudaDeviceSynchronize());
 };
 
@@ -3048,10 +3048,10 @@ __host__ void calculateErrors(Image *image){
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
                                                         I_nu_0_Noise <<< numBlocksNN, threadsPerBlockNN >>>
-                                                        (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M);
+                                                        (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
                                                         gpuErrchk(cudaDeviceSynchronize());
                                                         alpha_Noise <<< numBlocksNN, threadsPerBlockNN >>>
-                                                        (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M);
+                                                        (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
                                                         gpuErrchk(cudaDeviceSynchronize());
                                                 }
                                         }
@@ -3074,10 +3074,10 @@ __host__ void calculateErrors(Image *image){
                                           #pragma omp critical
                                                         {
                                                                 I_nu_0_Noise << < numBlocksNN, threadsPerBlockNN >> >
-                                                                (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M);
+                                                                (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
                                                                 gpuErrchk(cudaDeviceSynchronize());
                                                                 alpha_Noise << < numBlocksNN, threadsPerBlockNN >> >
-                                                                (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M);
+                                                                (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
                                                                 gpuErrchk(cudaDeviceSynchronize());
                                                         }
                                                 }

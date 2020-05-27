@@ -706,7 +706,7 @@ void MFS::setDevice()
                         for(int f=0; f<datasets[d].data.nfields; f++) {
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N);
+                                                total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N, datasets[d].antennas[0].primary_beam);
                                                 gpuErrchk(cudaDeviceSynchronize());
                                         }
                                 }
@@ -725,7 +725,7 @@ void MFS::setDevice()
                                         if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
                                                 #pragma omp critical
                                                 {
-                                                        total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N);
+                                                        total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N, datasets[d].antennas[0].primary_beam);
                                                         gpuErrchk(cudaDeviceSynchronize());
                                                 }
                                         }

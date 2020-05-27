@@ -115,7 +115,7 @@ typedef struct MSAntenna {
         float antenna_diameter;
         float pb_factor;
         float pb_cutoff;
-        std::string primary_beam;
+        char* primary_beam;
 }MSAntenna;
 
 typedef struct MSDataset {
