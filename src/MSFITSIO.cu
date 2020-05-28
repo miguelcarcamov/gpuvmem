@@ -172,12 +172,19 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 antennas[a].position.z = antenna_positions[2];
                 antennas[a].antenna_diameter = dishdiameter_col(a);
 
-                if(data->telescope_name == "ALMA") {
-                        antennas[a].pb_factor = 1.13;
-                        antennas[a].primary_beam = "AiryDisk";
-                }else{
-                        antennas[a].pb_factor = 1.22;
-                        antennas[a].primary_beam = "Gaussian";
+                switch(data->telescope_name){
+                  case "ALMA":
+                    antennas[a].pb_factor = 1.13;
+                    antennas[a].primary_beam = "AiryDisk";
+                    break;
+                  case "VLA":
+                    antennas[a].pb_factor = 1.25;
+                    antennas[a].primary_beam = "Gaussian";
+                    break;
+                  default:
+                    antennas[a].pb_factor = 1.22;
+                    antennas[a].primary_beam = "Gaussian";
+                    break;
                 }
 
                 antennas[a].pb_cutoff = 10.0f * antennas[a].pb_factor * (max_wavelength/antennas[a].antenna_diameter);
