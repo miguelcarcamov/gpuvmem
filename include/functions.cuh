@@ -67,6 +67,8 @@ __host__ float L1Norm(float *I, float * ds, float penalization_factor, int mod, 
 __host__ void DL1Norm(float *I, float *dgi, float penalization_factor, int mod, int order, int index);
 __host__ void calculateErrors(Image *image);
 
+__device__ float AiryDiskBeam(float distance, float lambda, float antenna_diameter, float pb_factor);
+__device__ float GaussianBeam(float distance, float lambda, float antenna_diameter, float pb_factor);
 
 __global__ void deviceReduceKernel(float *g_idata, float *g_odata, unsigned int n);
 __global__ void clipWNoise(cufftComplex *fg_image, float *noise, float *I, long N, float noise_cut, float MINPIX);
