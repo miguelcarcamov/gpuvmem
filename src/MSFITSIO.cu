@@ -106,6 +106,11 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
         return noise_vis;
 }
 
+constexpr unsigned int str2int(const char* str, int h = 0)
+{
+    return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
+}
+
 __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
 {
 
@@ -172,12 +177,12 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 antennas[a].position.z = antenna_positions[2];
                 antennas[a].antenna_diameter = dishdiameter_col(a);
 
-                switch(data->telescope_name){
-                  case "ALMA":
+                switch(str2int((data->telescope_name).c_str())){
+                  case str2int("ALMA"):
                     antennas[a].pb_factor = 1.13;
                     antennas[a].primary_beam = "AiryDisk";
                     break;
-                  case "VLA":
+                  case str2int("VLA"):
                     antennas[a].pb_factor = 1.25;
                     antennas[a].primary_beam = "Gaussian";
                     break;

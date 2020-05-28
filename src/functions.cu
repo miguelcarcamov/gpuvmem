@@ -63,8 +63,6 @@ extern MSDataset *datasets;
 
 extern varsPerGPU *vars_gpu;
 
-typedef float (*beamPtr)(float, float, float, float);
-
 std::map<std::string, beamPtr> beam_maps = {
   {"AiryDisk", AiryDiskBeam},
   {"Gaussian", GaussianBeam}
@@ -2851,7 +2849,7 @@ __host__ void linkClipWNoise2I(float *I)
 
 __host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, beamPtr beam_function)
 {
-        apply_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, fg_scale, freq, DELTAX, DELTAY, beamPtr beam_function);
+        apply_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, fg_scale, freq, DELTAX, DELTAY, beam_function);
         gpuErrchk(cudaDeviceSynchronize());
 };
 

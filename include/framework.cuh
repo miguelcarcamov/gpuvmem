@@ -21,6 +21,8 @@
 #include "copyrightwarranty.cuh"
 #include <cooperative_groups.h>
 
+typedef float (*beamPtr)(float, float, float, float);
+
 typedef struct varsPerGPU {
         float *device_chi2;
         float *device_dchi2;
