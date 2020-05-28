@@ -63,7 +63,7 @@ extern MSDataset *datasets;
 
 extern varsPerGPU *vars_gpu;
 
-std::map<std::string, beamPtr> beam_maps = {
+__device__ std::map<std::string, beamPtr> beam_maps = {
   {"AiryDisk", AiryDiskBeam},
   {"Gaussian", GaussianBeam}
 };
