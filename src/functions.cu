@@ -69,6 +69,10 @@ std::map<std::string, FnPtr> beam_maps = {
   {"Gaussian", GaussianBeam}
 };
 
+FnPtr searchInMap(char* function_name){
+  return beam_maps[function_name];
+}
+
 // Utility class used to avoid linker errors with extern
 // unsized shared memory arrays with templated type
 template<class T>
@@ -1295,7 +1299,7 @@ __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_c
         float arc = sqrtf(x*x+y*y);
         float lambda = LIGHTSPEED/freq;
 
-        atten = beam_maps[primary_beam](arc, lambda, antenna_diameter, pb_factor);
+        atten = searchInMap(primary_beam)(arc, lambda, antenna_diameter, pb_factor);
 
         if(arc <= pb_cutoff) {
                 atten_result = atten;
