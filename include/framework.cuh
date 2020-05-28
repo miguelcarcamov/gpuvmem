@@ -66,7 +66,7 @@ class VirtualImageProcessor
 public:
 virtual void clip(float *I) = 0;
 virtual void clipWNoise(float *I) = 0;
-virtual void apply_beam(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, char* primary_beam) = 0;
+virtual void apply_beam(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, beamPtr beam_function) = 0;
 virtual void calculateInu(cufftComplex *image, float *I, float freq) = 0;
 virtual void chainRule(float *I, float freq) = 0;
 virtual void configure(int I) = 0;
