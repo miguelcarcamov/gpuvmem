@@ -51,7 +51,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
         }
 }
 
-enum {AIRYDISK, GAUSSIANBEAM};
+enum {AIRYDISK, GAUSSIAN};
 
 typedef struct MSData {
         int n_internal_frequencies;

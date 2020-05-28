@@ -106,6 +106,11 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
         return noise_vis;
 }
 
+constexpr unsigned int str2int(const char* str, int h = 0)
+{
+    return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
+}
+
 __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
 {
 
@@ -172,12 +177,19 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 antennas[a].position.z = antenna_positions[2];
                 antennas[a].antenna_diameter = dishdiameter_col(a);
 
-                if(data->telescope_name == "ALMA"){
-                        antennas[a].pb_factor = 1.13;
-                        antennas[a].primary_beam = AIRYDISK;
-                }else{
-                        antennas[a].pb_factor = 1.22;
-                        antennas[a].primary_beam = GAUSSIANBEAM;
+                switch(str2int((data->telescope_name).c_str())){
+                  case str2int("ALMA"):
+                    antennas[a].pb_factor = 1.13;
+                    antennas[a].primary_beam = AIRYDISK;
+                    break;
+                  case str2int("VLA"):
+                    antennas[a].pb_factor = 1.25;
+                    antennas[a].primary_beam = GAUSSIAN;
+                    break;
+                  default:
+                    antennas[a].pb_factor = 1.22;
+                    antennas[a].primary_beam = GAUSSIAN;
+                    break;
                 }
 
                 antennas[a].pb_cutoff = 10.0f * antennas[a].pb_factor * (max_wavelength/antennas[a].antenna_diameter);
