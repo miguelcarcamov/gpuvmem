@@ -65,7 +65,7 @@ extern varsPerGPU *vars_gpu;
 
 typedef float (*FnPtr)(float, float, float, float);
 
-__device__ FnPtr beam_maps[2] = {
+__device__  FnPtr beam_maps[2] = {
   AiryDiskBeam, GaussianBeam
 };
 
