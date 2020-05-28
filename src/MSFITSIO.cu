@@ -174,10 +174,10 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
                 if(data->telescope_name == "ALMA"){
                         antennas[a].pb_factor = 1.13;
-                        antennas[a].primary_beam = "AiryDisk";
+                        antennas[a].primary_beam = AIRYDISK;
                 }else{
                         antennas[a].pb_factor = 1.22;
-                        antennas[a].primary_beam = "Gaussian";
+                        antennas[a].primary_beam = GAUSSIANBEAM;
                 }
 
                 antennas[a].pb_cutoff = 10.0f * antennas[a].pb_factor * (max_wavelength/antennas[a].antenna_diameter);

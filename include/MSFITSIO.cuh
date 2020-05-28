@@ -51,6 +51,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
         }
 }
 
+enum {AIRYDISK, GAUSSIANBEAM};
+
 typedef struct MSData {
         int n_internal_frequencies;
         int total_frequencies;
@@ -115,7 +117,7 @@ typedef struct MSAntenna {
         float antenna_diameter;
         float pb_factor;
         float pb_cutoff;
-        char* primary_beam;
+        int primary_beam;
 }MSAntenna;
 
 typedef struct MSDataset {

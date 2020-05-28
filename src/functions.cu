@@ -64,14 +64,11 @@ extern MSDataset *datasets;
 extern varsPerGPU *vars_gpu;
 
 typedef float (*FnPtr)(float, float, float, float);
-std::map<std::string, FnPtr> beam_maps = {
-  {"AiryDisk", AiryDiskBeam},
-  {"Gaussian", GaussianBeam}
+
+__device__ FnPtr beam_maps[2] = {
+  AiryDiskBeam, GaussianBeam
 };
 
-FnPtr searchInMap(char* function_name){
-  return beam_maps[function_name];
-}
 
 // Utility class used to avoid linker errors with extern
 // unsized shared memory arrays with templated type
@@ -1283,7 +1280,7 @@ __device__ float GaussianBeam(float distance, float lambda, float antenna_diamet
 }
 
 
-__device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, char* primary_beam)
+__device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, int primary_beam)
 {
 
         int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -1299,7 +1296,7 @@ __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_c
         float arc = sqrtf(x*x+y*y);
         float lambda = LIGHTSPEED/freq;
 
-        atten = searchInMap(primary_beam)(arc, lambda, antenna_diameter, pb_factor);
+        atten = (*beam_maps[primary_beam])(arc, lambda, antenna_diameter, pb_factor);
 
         if(arc <= pb_cutoff) {
                 atten_result = atten;
@@ -1337,7 +1334,7 @@ __device__ cufftComplex WKernel(double w, float xobs, float yobs, double DELTAX,
 
 
 }
-__global__ void total_attenuation(float *total_atten, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, long N, char* primary_beam)
+__global__ void total_attenuation(float *total_atten, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, long N, int primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -1375,7 +1372,7 @@ __global__ void noise_image(float *noise_image, float *weight_image, float noise
         noise_image[N*i+j] = noiseval;
 }
 
-__global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY, char* primary_beam)
+__global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY, int primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -2249,7 +2246,7 @@ __global__ void DL(float *dL, float *I, float *noise, float noise_cut, float lam
 }
 
 
-__global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, char* primary_beam)
+__global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, int primary_beam)
 {
 
         int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2306,7 +2303,7 @@ __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr,
 }
 
 
-__global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, char* primary_beam)
+__global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, int primary_beam)
 {
 
         int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2505,7 +2502,7 @@ __global__ void DChi2_2I(float *noise, float *chain, float *I, float *dchi2, flo
 }
 
 
-__global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float noise_cut, float nu, float nu_0, float *w, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, double DELTAX, double DELTAY, long numVisibilities, long N, long M, char* primary_beam)
+__global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float noise_cut, float nu, float nu_0, float *w, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, double DELTAX, double DELTAY, long numVisibilities, long N, long M, int primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -2533,7 +2530,7 @@ __global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float 
 }
 
 
-__global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0, float *w, double3 *UVW, cufftComplex *Vr, float *noise, float noise_cut, double DELTAX, double DELTAY, float xobs, float yobs, float antenna_diameter, float pb_factor, float pb_cutoff, float fg_scale, long numVisibilities, long N, long M, char* primary_beam)
+__global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0, float *w, double3 *UVW, cufftComplex *Vr, float *noise, float noise_cut, double DELTAX, double DELTAY, float xobs, float yobs, float antenna_diameter, float pb_factor, float pb_cutoff, float fg_scale, long numVisibilities, long N, long M, int primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -2848,7 +2845,7 @@ __host__ void linkClipWNoise2I(float *I)
         gpuErrchk(cudaDeviceSynchronize());
 };
 
-__host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, char* primary_beam)
+__host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, int primary_beam)
 {
         apply_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, fg_scale, freq, DELTAX, DELTAY, primary_beam);
         gpuErrchk(cudaDeviceSynchronize());
