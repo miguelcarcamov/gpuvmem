@@ -229,6 +229,8 @@ void MFS::configure(int argc, char **argv)
                         iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, false, false, random_probability, gridding);
                 }
                 ms_ref_freqs.push_back(datasets[d].data.ref_freq);
+
+                printf("Dataset: %s - Antenna diameter: %.3f metres\n", datasets[d].name, datasets[d].antennas[0].antenna_diameter);
         }
 
         if(nu_0 < 0) {
@@ -236,7 +238,7 @@ void MFS::configure(int argc, char **argv)
                 int vec_size = ms_ref_freqs.size();
                 if(vec_size > 1) {
                         // Sort the frequencies vector
-                        sort(ms_ref_freqs.begin(), ms_ref_freqs.end());
+                        std::sort(ms_ref_freqs.begin(), ms_ref_freqs.end());
                         if(vec_size % 2 == 0)
                                 nu_0 = (ms_ref_freqs[(vec_size-1)/2] + ms_ref_freqs[vec_size/2])/2.0;
                         else
@@ -244,8 +246,6 @@ void MFS::configure(int argc, char **argv)
 
                 }else
                         nu_0 = ms_ref_freqs[0];
-
-
         }
         printf("Reference frequency: %e Hz\n", nu_0);
 
