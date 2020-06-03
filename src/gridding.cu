@@ -21,17 +21,6 @@ void Gridding::applyCriteria(Visibilities *v)
         complexValZero.x = 0.0f;
         complexValZero.y = 0.0f;
         for(int d=0; d< v->getNDatasets(); d++) {
-                for(int f=0; f< v->getMSDataset()[d].data.nfields; f++) {
-                        for(int i=0; i < v->getMSDataset()[d].data.total_frequencies; i++) {
-                                for(int s=0; i < v->getMSDataset()[d].data.nstokes; s++) {
-                                        double3 val;
-                                        v->getMSDataset()[d].fields[f].gridded_visibilities[i][s].uvw.assign(M * N, valzero);
-                                        v->getMSDataset()[d].fields[f].gridded_visibilities[i][s].weight.assign(M * N, 0.0f);
-                                        v->getMSDataset()[d].fields[f].gridded_visibilities[i][s].Vo.assign(M * N, complexValZero);
-
-                                }
-                        }
-                }
                 omp_set_num_threads(threads);
                 do_gridding(v->getMSDataset()[d].fields,&v->getMSDataset()[d].data, deltau, deltav, M, N, robust_param);
                 omp_set_num_threads(num_gpus);

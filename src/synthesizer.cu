@@ -364,35 +364,6 @@ void MFS::configure(int argc, char **argv)
 
         vars_gpu = (varsPerGPU*)malloc(num_gpus*sizeof(varsPerGPU));
 
-        // REMEMBER TO INITIALIZE GRIDDED VISIBILITIES VECTORS AS M*N ZEROS!
-        cufftComplex cufft_zeroval;
-        cufft_zeroval.x = 0.0f;
-        cufft_zeroval.x = 0.0f;
-        double3 zeros;
-        zeros.x = 0.0;
-        zeros.y = 0.0;
-        zeros.z = 0.0;
-        if(gridding) {
-                for(int d=0; d<nMeasurementSets; d++) {
-                        for(int f=0; f<datasets[d].data.nfields; f++) {
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                datasets[d].fields[f].gridded_visibilities[i][s].uvw.reserve(M*N);
-                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].uvw.begin(), M*N, zeros);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].weight.reserve(M*N);
-                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].weight.begin(), M*N, 0.0f);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].S.reserve(M*N);
-                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].S.begin() ,M*N, 0);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].Vo.reserve(M*N);
-                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].Vo.begin(), M*N, cufft_zeroval);
-                                                datasets[d].fields[f].gridded_visibilities[i][s].Vm.reserve(M*N);
-                                                std::fill_n(datasets[d].fields[f].gridded_visibilities[i][s].Vm.begin(), M*N, cufft_zeroval);
-                                        }
-                                }
-                        }
-                }
-        }
-
         this->visibilities = new Visibilities();
         this->visibilities->setMSDataset(datasets);
         this->visibilities->setNDatasets(nMeasurementSets);
@@ -906,7 +877,7 @@ void MFS::run()
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
                 omp_set_num_threads(gridding);
                 for(int d=0; d<nMeasurementSets; d++)
-                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N);
+                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N, gridding);
 
                 omp_set_num_threads(num_gpus);
 

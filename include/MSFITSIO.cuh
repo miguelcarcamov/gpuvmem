@@ -106,7 +106,6 @@ typedef struct field {
         std::vector<long> backup_numVisibilitiesPerFreq;
         std::vector<std::vector<HVis> > visibilities;
         std::vector<std::vector<DVis> > device_visibilities;
-        std::vector<std::vector<HVis> > gridded_visibilities;
         std::vector<std::vector<HVis> > backup_visibilities;
 }Field;
 

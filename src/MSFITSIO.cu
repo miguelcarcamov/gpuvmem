@@ -254,7 +254,6 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 fields[f].numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
                 fields[f].numVisibilitiesPerFreq.resize(data->total_frequencies,0);
                 if(gridding) {
-                        fields[f].gridded_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                         fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                         fields[f].backup_numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
                         fields[f].backup_numVisibilitiesPerFreq.resize(data->total_frequencies,0);

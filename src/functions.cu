@@ -767,6 +767,18 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
 
 __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust)
 {
+        std::vector<float> g_weights(M*N);
+        std::vector<cufftComplex> g_Vo(M*N);
+        std::vector<double3> g_uvw(M*N);
+        std::vector<float> S(M*N);
+        cufftComplex complex_zero;
+        complex_zero.x = 0.0f;
+        complex_zero.y = 0.0f;
+
+        double3 double3_zero;
+        double3_zero.x = 0.0;
+        double3_zero.y = 0.0;
+        double3_zero.z = 0.0;
 
         int local_max = 0;
         int max = 0;
@@ -812,10 +824,10 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         if (k < M && j < N) {
                                 #pragma omp critical
                                                 {
-                                                        fields[f].gridded_visibilities[i][s].Vo[N * k + j].x += w * Vo.x;
-                                                        fields[f].gridded_visibilities[i][s].Vo[N * k + j].y += w * Vo.y;
-                                                        fields[f].gridded_visibilities[i][s].weight[N * k + j] += w;
-                                                        fields[f].gridded_visibilities[i][s].S[N * k + j] = 1;
+                                                        g_Vo[N * k + j].x += w * Vo.x;
+                                                        g_Vo[N * k + j].y += w * Vo.y;
+                                                        g_weights[N * k + j] += w;
+                                                        S[N * k + j] = 1;
                                                 }
                                         }
                                 }
@@ -825,7 +837,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                 for (int k = 0; k < M; k++) {
                                         for (int j = 0; j < N; j++) {
-                                                float weight = fields[f].gridded_visibilities[i][s].weight[N * k + j];
+                                                float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         gridWeightSum += weight;
                                                         visCounter++;
@@ -847,16 +859,16 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                 double u_meters = (j - (N / 2)) * deltau_meters;
                                                 double v_meters = (k - (M / 2)) * deltav_meters;
 
-                                                fields[f].gridded_visibilities[i][s].uvw[N * k + j].x = u_meters;
-                                                fields[f].gridded_visibilities[i][s].uvw[N * k + j].y = v_meters;
+                                                g_uvw[N * k + j].x = u_meters;
+                                                g_uvw[N * k + j].y = v_meters;
 
-                                                float weight = fields[f].gridded_visibilities[i][s].weight[N * k + j];
+                                                float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
-                                                        fields[f].gridded_visibilities[i][s].Vo[N * k + j].x /= weight;
-                                                        fields[f].gridded_visibilities[i][s].Vo[N * k + j].y /= weight;
-                                                        fields[f].gridded_visibilities[i][s].weight[N * k + j] /= (1 + weight * S2);
+                                                        g_Vo[N * k + j].x /= weight;
+                                                        g_Vo[N * k + j].y /= weight;
+                                                        g_weights[N * k + j] /= (1 + weight * S2);
                                                 } else {
-                                                        fields[f].gridded_visibilities[i][s].weight[N * k + j] = 0.0f;
+                                                        g_weights[N * k + j] = 0.0f;
                                                 }
                                         }
                                 }
@@ -874,26 +886,18 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 int l = 0;
                                 for (int k = 0; k < M; k++) {
                                         for (int j = 0; j < N; j++) {
-                                                float weight = fields[f].gridded_visibilities[i][s].weight[N * k + j];
+                                                float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
-                                                        fields[f].visibilities[i][s].uvw[l].x = fields[f].gridded_visibilities[i][s].uvw[
-                                                                N * k + j].x;
-                                                        fields[f].visibilities[i][s].uvw[l].y = fields[f].gridded_visibilities[i][s].uvw[
-                                                                N * k + j].y;
-                                                        fields[f].visibilities[i][s].Vo[l].x = fields[f].gridded_visibilities[i][s].Vo[
-                                                                N * k + j].x;
-                                                        fields[f].visibilities[i][s].Vo[l].y = fields[f].gridded_visibilities[i][s].Vo[
-                                                                N * k + j].y;
-                                                        fields[f].visibilities[i][s].weight[l] = fields[f].gridded_visibilities[i][s].weight[
-                                                                N * k + j];
+                                                        fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
+                                                        fields[f].visibilities[i][s].uvw[l].y = g_uvw[N * k + j].y;
+                                                        fields[f].visibilities[i][s].Vo[l].x = g_Vo[N * k + j].x;
+                                                        fields[f].visibilities[i][s].Vo[l].y = g_Vo[N * k + j].y;
+                                                        fields[f].visibilities[i][s].weight[l] = g_weights[N * k + j];
                                                         l++;
                                                 }
                                         }
                                 }
 
-                                fields[f].gridded_visibilities[i][s].uvw.clear();
-                                fields[f].gridded_visibilities[i][s].Vo.clear();
-                                fields[f].gridded_visibilities[i][s].weight.clear();
 
                                 fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s] = fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
@@ -902,6 +906,11 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 }else{
                                         fields[f].numVisibilitiesPerFreqPerStoke[i][s] = 0;
                                 }
+
+                                std::fill_n(g_weights.begin(), M*N, 0.0f);
+                                std::fill_n(g_uvw.begin(), M*N,double3_zero);
+                                std::fill_n(g_Vo.begin(), M*N, complex_zero);
+
                         }
 
                         local_max = *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].data(),fields[f].numVisibilitiesPerFreqPerStoke[i].data()+data->nstokes);
@@ -973,6 +982,13 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
 
         double deltau_meters = fabs(deltau) * (LIGHTSPEED/freq);
         double deltav_meters = fabs(deltav) * (LIGHTSPEED/freq);
+
+        cufftComplex complex_zero;
+        complex_zero.x = 0.0f;
+        complex_zero.y = 0.0f;
+
+        std::fill_n(Vm_gridded.begin(), M*N, complex_zero);
+
         int j, k;
         for(int i=0; i<numvis; i++) {
                 j = (uvw_gridded_sp[i].x / deltau_meters) + N/2;
@@ -981,12 +997,17 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
         }
 }
 
-__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N)
+__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N, int gridding)
 {
 
         long UVpow2;
 
         residualsToHost(fields, data, num_gpus, firstgpu);
+
+
+        int nthreads = gridding;
+
+        std::vector<std::vector<cufftComplex>> gridded_visibilities(nthreads, std::vector<cufftComplex> (M*N));
 
         if(num_gpus == 1) {
                 cudaSetDevice(selected);
@@ -994,7 +1015,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                         for(int i=0; i<data.total_frequencies; i++) {
                                 for(int s=0; s<data.nstokes; s++) {
                                         // Put gridded visibilities in a M*N grid
-                                        griddedTogrid(fields[f].gridded_visibilities[i][s].Vm, fields[f].visibilities[i][s].Vm,
+                                        griddedTogrid(gridded_visibilities[0], fields[f].visibilities[i][s].Vm,
                                                       fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i], M, N,
                                                       fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
@@ -1028,7 +1049,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
 
                                         // Copy gridded model visibilities to device
-                                        gpuErrchk(cudaMemcpy(vars_gpu[0].device_V, fields[f].gridded_visibilities[i][s].Vm.data(), sizeof(cufftComplex) * M * N,
+                                        gpuErrchk(cudaMemcpy(vars_gpu[0].device_V, gridded_visibilities[0].data(), sizeof(cufftComplex) * M * N,
                                                              cudaMemcpyHostToDevice));
 
                                         // Copy original (u,v) positions and weights to host and device
@@ -1080,7 +1101,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                 cudaGetDevice(&gpu_id);
                                 for(int s=0; s<data.nstokes; s++) {
                                         // Put gridded visibilities in a M*N grid
-                                        griddedTogrid(fields[f].gridded_visibilities[i][s].Vm, fields[f].visibilities[i][s].Vm,
+                                        griddedTogrid(gridded_visibilities[j], fields[f].visibilities[i][s].Vm,
                                                       fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i], M, N,
                                                       fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
@@ -1112,7 +1133,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
 
                                         // Copy gridded model visibilities to device
-                                        gpuErrchk(cudaMemcpy(vars_gpu[i % num_gpus].device_V, fields[f].gridded_visibilities[i][s].Vm.data(),
+                                        gpuErrchk(cudaMemcpy(vars_gpu[i % num_gpus].device_V, gridded_visibilities[j].data(),
                                                              sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
 
                                         // Copy original (u,v) positions and weights to host and device
