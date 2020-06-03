@@ -308,7 +308,7 @@ void MFS::configure(int argc, char **argv)
 
         //printf("number of FINAL host CPUs:\t%d\n", omp_get_num_procs());
         if(verbose_flag) {
-                printf("Number of CUDA devices and threads: \t%d\n", num_gpus);
+                printf("Number of CUDA devices and threads: %d\n", num_gpus);
         }
 
         //Check peer access if there is more than 1 GPU
@@ -363,7 +363,6 @@ void MFS::configure(int argc, char **argv)
         }
 
         vars_gpu = (varsPerGPU*)malloc(num_gpus*sizeof(varsPerGPU));
-
 
         // REMEMBER TO INITIALIZE GRIDDED VISIBILITIES VECTORS AS M*N ZEROS!
         cufftComplex cufft_zeroval;

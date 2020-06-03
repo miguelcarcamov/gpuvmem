@@ -182,7 +182,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                     antennas[a].pb_factor = 1.13;
                     antennas[a].primary_beam = AIRYDISK;
                     break;
-                  case str2int("VLA"):
+                  case str2int("EVLA"):
                     antennas[a].pb_factor = 1.25;
                     antennas[a].primary_beam = GAUSSIAN;
                     break;
@@ -284,7 +284,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                         }else if(W_projection) {
                                 query += " ORDERBY ASC UVW[2]";
                         }else if(random_prob < 1.0) {
-                                query += " RAND()<"+std::to_string(random_prob);
+                                query += " and RAND()<"+std::to_string(random_prob);
                         }
 
                         casacore::Table query_tab = casacore::tableCommand(query.c_str());
