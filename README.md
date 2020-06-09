@@ -6,7 +6,9 @@
 
 -   <https://doi.org/10.1016/j.ascom.2017.11.003>
 
+
 # Citing
+
 
 If you use GPUVMEM for your research please do not forget to cite Cárcamo et al.
 
@@ -59,8 +61,9 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 -   cmake >= 3.8
 -   git-lfs - `git-lfs`
 -   casacore >= v3.1.2 (<https://github.com/casacore/casacore> - branch v3.1.2. please make sure you have installed the github version, Ubuntu package doesn't work well since doesn't have the `put()` function).
--   CUDA 9, 9.1, 9.2, 10.0 or 10.1 **Update 2**. Remember to add binaries and libraries to the **PATH** and **LD_LIBRARY_PATH** environment variables, respectively.
+-   CUDA 9, 9.1, 9.2, 10.0 and 11.0. Remember to add binaries and libraries to the **PATH** and **LD_LIBRARY_PATH** environment variables, respectively.
 -   OpenMP
+
 
 # Installation using a Singularity container
 
@@ -96,20 +99,14 @@ cmake ..
 make -j
 ```
 
-# Now the telescopes are read from the MS file:
+# Now the antennas are read directly from the MS file
 
 
 # Usage
 
-Create your canvas or mod_in_0.fits with the image data in the header, typically we use a FITS CASA CLEAN dirty image of the desired object.
+Create your canvas or mod_in_0.fits with the image data on the header, typically we use the resulting dirty image from CASA tclean in FITS format.
 
-Create your input.dat file with the following data and change the parameters as you need. For example if you want to reconstruct a single ALMA dataset file:
-
-    noise_cut	100.5
-    ftol		1.0e-12
-    random_probability 0.0
-
-However, if you want to reconstruct a multi-antenna dataset. For example, CBI and CBI2.
+Create your input.dat file with the following data and change the parameters as you need. For example if you want to reconstruct an image:
 
     noise_cut	100.5
     ftol		1.0e-12
