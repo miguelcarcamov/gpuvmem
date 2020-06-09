@@ -178,12 +178,15 @@ We have fixed the Makefile and now you can compile gpuvmem using the new version
 
 -   This will return a restored image: A convolution of the model image with the CLEAN BEAM + residuals (JY/BEAM)
 -   Residuals (JY/BEAM)
+-   The script file is on the scripts folder and it is named restore_continuum_ms_SC.py
 
 Restoring usage:
 
 ```bash
-casapy --log2term --nogui -c restore_continuum_ms.py residual_folder.ms mem_model.fits restored_output
+casa --nologger -c restore_continuum_ms_SC.py residual_folder.ms mem_model.fits restored_output 2.0
 ```
+
+The last parameter, is the robust parameter that you want to use to clean the residuals.
 
 # CONTRIBUTORS
 
