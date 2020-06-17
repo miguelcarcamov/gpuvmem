@@ -764,26 +764,25 @@ void MFS::setDevice()
 
 void MFS::run()
 {
-        //printf("\n\nStarting Fletcher Reeves Polak Ribiere method (Conj. Grad.)\n\n");
         printf("\n\nStarting Optimizator\n");
         optimizator->getObjectiveFuntion()->setIo(iohandler);
         optimizator->getObjectiveFuntion()->setPrintImages(print_images);
-        //optimizator->getObjectiveFuntion()->setIoOrderIterations(IoOrderIterations);
+
         if(this->Order == NULL) {
                 if(imagesChanged)
                 {
                         optimizator->setImage(image);
-                        optimizator->minimizate();
+                        optimizator->optimize();
                 }else if(image_count == 2) {
                         optimizator->setImage(image);
                         optimizator->setFlag(0);
-                        optimizator->minimizate();
+                        optimizator->optimize();
                         optimizator->setFlag(1);
-                        optimizator->minimizate();
+                        optimizator->optimize();
                         optimizator->setFlag(2);
-                        optimizator->minimizate();
+                        optimizator->optimize();
                         optimizator->setFlag(3);
-                        optimizator->minimizate();
+                        optimizator->optimize();
                 }
         }else{
                 (this->Order)(optimizator, image);

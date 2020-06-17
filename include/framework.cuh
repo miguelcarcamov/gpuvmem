@@ -335,7 +335,7 @@ class Optimizator
 public:
 __host__ virtual void allocateMemoryGpu() = 0;
 __host__ virtual void deallocateMemoryGpu() = 0;
-__host__ virtual void minimizate() = 0;
+__host__ virtual void optimize() = 0;
 //__host__ virtual void configure() = 0;
 __host__ void setImage(Image *image){
         this->image = image;
