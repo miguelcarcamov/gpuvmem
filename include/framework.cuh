@@ -37,10 +37,9 @@ typedef struct variables {
         char *ofile;
         char *path;
         char *output_image;
-        char *multigpu;
+        char *gpus;
         char *initial_values;
         char *penalization_factors;
-        int select;
         int blockSizeX;
         int blockSizeY;
         int blockSizeV;

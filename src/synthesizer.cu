@@ -74,7 +74,6 @@ void MFS::configure(int argc, char **argv)
         inputdat = variables.inputdat;
         modinput = variables.modin;
         out_image = variables.output_image;
-        selected = variables.select;
         mempath = variables.path;
         it_maximum = variables.it_max;
         total_visibilities = 0;
@@ -262,11 +261,20 @@ void MFS::configure(int argc, char **argv)
 
         multigpu = 0;
         firstgpu = 0;
-        if(strcmp(variables.multigpu, "NULL")!=0) {
-                string_values = countAndSeparateStrings(variables.multigpu);
-                multigpu = string_values.size();
+        int count_gpus;
+
+        string_values = countAndSeparateStrings(variables.gpus);
+        count_gpus = string_values.size();
+        
+        if(count_gpus == 1) {
+                multigpu = 0;
+                selected = atoi(string_values[0].c_str());
+        }else{
+                multigpu = count_gpus;
                 firstgpu = atoi(string_values[0].c_str());
         }
+
+
         string_values.clear();
 
         if(strcmp(variables.penalization_factors, "NULL")!=0) {
