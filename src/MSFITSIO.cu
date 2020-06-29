@@ -167,6 +167,9 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
         casacore::Vector<double> antenna_positions;
 
+        float firstj1zero = boost::math::cyl_bessel_j_zero(1.0f, 1);
+        float pb_defaultfactor = firstj1zero/PI;
+
         for(int a=0; a<data->nantennas; a++) {
                 antennas.push_back(MSAntenna());
                 antennas[a].antenna_id = dishname_col(a);
@@ -187,7 +190,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                     antennas[a].primary_beam = GAUSSIAN;
                     break;
                   default:
-                    antennas[a].pb_factor = 1.22;
+                    antennas[a].pb_factor = pb_defaultfactor;
                     antennas[a].primary_beam = GAUSSIAN;
                     break;
                 }

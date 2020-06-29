@@ -49,13 +49,17 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 
   g. `sudo make install`
 
-3.  Install cfitsio
+3. Install Boost
+
+  a. `sudo apt-get -y install libboost-all-dev`
+
+4.  Install cfitsio
 
   a. `sudo apt-get -y install libcfitsio-dev`
 
-3.  Download or clone gpuvmem.
+5.  Download or clone gpuvmem.
 
-4.  To compile GPUVMEM you will need:
+6.  To compile GPUVMEM you will need:
 
 -   cfitsio - Usually the package is called `libcfitsio-dev`.
 -   cmake >= 3.8
