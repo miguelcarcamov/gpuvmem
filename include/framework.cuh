@@ -128,6 +128,7 @@ int mod;
 int order;
 cufftComplex * Inu = NULL;
 int imageToAdd;
+float fi_value;
 };
 
 
@@ -250,8 +251,10 @@ float calcFunction(float *p)
         float value = 0.0;
 
         for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
-        {
-                value += (*it)->calcFi(p);
+        {       
+                float iterationValue = (*it)->calcFi(p);
+                (*it)->fi_value = iterationValue;
+                value += iterationValue;
         }
 
         return value;
