@@ -46,6 +46,18 @@ inline bool IsAppBuiltAs64()
   #endif
 }
 
+void newOrder(Optimizator *optimizator, Image *image){
+        optimizator->setImage(image);
+        optimizator->setFlag(0);
+        optimizator->optimize();
+        /*optimizator->setFlag(1);
+        optimizator->optimize();
+        optimizator->setFlag(2);
+        optimizator->optimize();
+        optimizator->setFlag(3);
+        optimizator->optimize();*/
+}
+
 __host__ int main(int argc, char **argv) {
         ////CHECK FOR AVAILABLE GPUs
         cudaGetDeviceCount(&num_gpus);
@@ -79,7 +91,9 @@ __host__ int main(int argc, char **argv) {
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
         sy->setIoHandler(ioms);
-
+        void (*foo)(Optimizator*, Image*);
+        foo = &newOrder;
+        sy->order = foo;
         sy->configure(argc, argv);
         cg->setObjectiveFunction(of);
         sy->setOptimizator(cg);
