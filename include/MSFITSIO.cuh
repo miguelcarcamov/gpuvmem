@@ -25,7 +25,7 @@
 #include "rngs.cuh"
 #include "rvgs.cuh"
 #include "complexOps.cuh"
-#include <boost/math/special_functions/bessel.hpp> 
+#include <boost/math/special_functions/bessel.hpp>
 
 #define FLOAT_IMG   -32
 #define DOUBLE_IMG  -64
@@ -65,6 +65,9 @@ typedef struct MSData {
         int nbaselines;
         float ref_freq;
         float min_freq;
+        float max_freq;
+        float max_blength;
+        float min_blength;
         std::string telescope_name;
         std::vector<int> corr_type;
 
@@ -153,3 +156,5 @@ __host__ void fitsOutputCufftComplex(float *I, fitsfile *canvas, char *out_image
 __host__ void float2toImage(float *I, fitsfile *canvas, char *out_image, char*mempath, int iteration, float fg_scale, long M, long N, int option);
 __host__ void float3toImage(float3 *I, fitsfile *canvas, char *out_image, char*mempath, int iteration, long M, long N, int option);
 __host__ void closeCanvas(fitsfile *canvas);
+
+__host__ __device__ float freq_to_wavelength(float freq);

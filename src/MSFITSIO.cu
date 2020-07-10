@@ -33,6 +33,12 @@
 
 #include "MSFITSIO.cuh"
 
+__host__ __device__ float freq_to_wavelength(float freq)
+{
+        float lambda = LIGHTSPEED/freq;
+        return lambda;
+}
+
 __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag)
 {
         status_canvas = 0;
@@ -108,7 +114,7 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
 
 constexpr unsigned int str2int(const char* str, int h = 0)
 {
-    return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
+        return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
 }
 
 __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
@@ -142,23 +148,31 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
         casacore::Table polarization_tab(main_tab.keywordSet().asTable("POLARIZATION"));
 
-
         std::string antenna_tab_query = "select POSITION,DISH_DIAMETER,NAME,STATION FROM "+dir+"/ANTENNA where !FLAG_ROW";
-        std::string min_freq_query = "select GMIN(CHAN_FREQ) as MIN_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
-        std::string ref_freq_query = "select GMEDIAN(CHAN_FREQ) as REF_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
-        casacore::Table antenna_tab(casacore::tableCommand(antenna_tab_query.c_str()));
-        casacore::Table min_freq_tab(casacore::tableCommand(min_freq_query.c_str()));
-        casacore::Table ref_freq_tab(casacore::tableCommand(ref_freq_query.c_str()));
+        std::string maxmin_baseline_query = "select GMAX(B_LENGTH) AS MAX_BLENGTH, GMIN(B_LENGTH) AS MIN_BLENGTH \
+        FROM (select sqrt(sumsqr(UVW[:2])) as B_LENGTH FROM "+dir+" GROUPBY ANTENNA1,ANTENNA2)";
+        std::string freq_query = "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, GMEDIAN(CHAN_FREQ) as REF_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
 
-        casacore::ROScalarColumn<casacore::Double> min_freq_col(min_freq_tab,"MIN_FREQ");
-        casacore::ROScalarColumn<casacore::Double> ref_freq_col(ref_freq_tab,"REF_FREQ");
+        casacore::Table antenna_tab(casacore::tableCommand(antenna_tab_query.c_str()));
+        casacore::Table maxmin_baseline_tab(casacore::tableCommand(maxmin_baseline_query.c_str()));
+        casacore::Table freq_tab(casacore::tableCommand(freq_query.c_str()));
+
+        casacore::ROScalarColumn<casacore::Double> max_blength_col(maxmin_baseline_tab,"MAX_BLENGTH");
+        casacore::ROScalarColumn<casacore::Double> min_blength_col(maxmin_baseline_tab,"MIN_BLENGTH");
+
+        casacore::ROScalarColumn<casacore::Double> min_freq_col(freq_tab,"MIN_FREQ");
+        casacore::ROScalarColumn<casacore::Double> max_freq_col(freq_tab,"MAX_FREQ");
+        casacore::ROScalarColumn<casacore::Double> ref_freq_col(freq_tab,"REF_FREQ");
 
         data->nantennas = antenna_tab.nrow();
         data->nbaselines = (data->nantennas) * (data->nantennas - 1) / 2;
         data->ref_freq = ref_freq_col(0);
         data->min_freq = min_freq_col(0);
+        data->max_freq = max_freq_col(0);
+        data->max_blength = max_blength_col(0);
+        data->min_blength = min_blength_col(0);
 
-        float max_wavelength = LIGHTSPEED/data->min_freq;
+        float max_wavelength = freq_to_wavelength(data->min_freq);
 
         casacore::ROArrayColumn<double> dishposition_col(antenna_tab,"POSITION");
         casacore::ROScalarColumn<double> dishdiameter_col(antenna_tab,"DISH_DIAMETER");
@@ -180,19 +194,19 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 antennas[a].position.z = antenna_positions[2];
                 antennas[a].antenna_diameter = dishdiameter_col(a);
 
-                switch(str2int((data->telescope_name).c_str())){
-                  case str2int("ALMA"):
-                    antennas[a].pb_factor = 1.13;
-                    antennas[a].primary_beam = AIRYDISK;
-                    break;
-                  case str2int("EVLA"):
-                    antennas[a].pb_factor = 1.25;
-                    antennas[a].primary_beam = GAUSSIAN;
-                    break;
-                  default:
-                    antennas[a].pb_factor = pb_defaultfactor;
-                    antennas[a].primary_beam = GAUSSIAN;
-                    break;
+                switch(str2int((data->telescope_name).c_str())) {
+                case str2int("ALMA"):
+                        antennas[a].pb_factor = 1.13;
+                        antennas[a].primary_beam = AIRYDISK;
+                        break;
+                case str2int("EVLA"):
+                        antennas[a].pb_factor = 1.25;
+                        antennas[a].primary_beam = GAUSSIAN;
+                        break;
+                default:
+                        antennas[a].pb_factor = pb_defaultfactor;
+                        antennas[a].primary_beam = GAUSSIAN;
+                        break;
                 }
 
                 antennas[a].pb_cutoff = 10.0f * antennas[a].pb_factor * (max_wavelength/antennas[a].antenna_diameter);

@@ -202,7 +202,6 @@ void MFS::configure(int argc, char **argv)
         }
 
         readInputDat(inputdat);
-
         canvasVariables canvas_vars = iohandler->IoreadCanvas(modinput, mod_in, b_noise_aux, status_mod_in, verbose_flag);
 
         M = canvas_vars.M;
@@ -221,6 +220,9 @@ void MFS::configure(int argc, char **argv)
                 printf("Reading data from MSs\n");
 
         std::vector<float> ms_ref_freqs;
+        std::vector<float> ms_max_freqs;
+        std::vector<float> ms_max_blength;
+        std::vector<float> ms_min_blength;
         for(int d=0; d<nMeasurementSets; d++) {
                 if(apply_noise) {
                         iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, true, false, random_probability, gridding);
@@ -228,23 +230,24 @@ void MFS::configure(int argc, char **argv)
                         iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, false, false, random_probability, gridding);
                 }
                 ms_ref_freqs.push_back(datasets[d].data.ref_freq);
-
-                printf("Dataset: %s - Antenna diameter: %.3f metres\n", datasets[d].name, datasets[d].antennas[0].antenna_diameter);
+                ms_max_freqs.push_back(datasets[d].data.max_freq);
+                ms_max_blength.push_back(datasets[d].data.max_blength);
+                ms_min_blength.push_back(datasets[d].data.min_blength);
+                printf("Dataset %d: %s - Antenna diameter: %.3f metres\n", d, datasets[d].name, datasets[d].antennas[0].antenna_diameter);
         }
+
+        /*
+        Calculating theoretical resolution
+         */
+        float max_freq = *max_element(ms_max_freqs.begin(), ms_max_freqs.end());
+        float max_blength = *max_element(ms_max_blength.begin(), ms_max_blength.end());
+        float min_wlength = freq_to_wavelength(max_freq);
+        float max_resolution = (min_wlength/(4*max_blength))/RPARCSEC;
+        printf("The maximum theoretical resolution of this/these dataset/s is ~%f arcsec\n", max_resolution);
 
         if(nu_0 < 0) {
                 printf("Reference frequency not provided. It will be calculated as the median of all the arrays of frequencies.\n");
-                int vec_size = ms_ref_freqs.size();
-                if(vec_size > 1) {
-                        // Sort the frequencies vector
-                        std::sort(ms_ref_freqs.begin(), ms_ref_freqs.end());
-                        if(vec_size % 2 == 0)
-                                nu_0 = (ms_ref_freqs[(vec_size-1)/2] + ms_ref_freqs[vec_size/2])/2.0;
-                        else
-                                nu_0 = ms_ref_freqs[vec_size/2];
-
-                }else
-                        nu_0 = ms_ref_freqs[0];
+                nu_0 = median(ms_ref_freqs);
         }
         printf("Reference frequency: %e Hz\n", nu_0);
 
@@ -252,7 +255,7 @@ void MFS::configure(int argc, char **argv)
 
         if(verbose_flag) {
                 for(int i=0; i<nMeasurementSets; i++) {
-                        printf("Dataset %s\n", datasets[i].name);
+                        printf("Dataset %d: %s\n", i, datasets[i].name);
                         printf("\tNumber of fields = %d\n", datasets[i].data.nfields);
                         printf("\tNumber of frequencies = %d\n", datasets[i].data.total_frequencies);
                         printf("\tNumber of Stokes = %d\n", datasets[i].data.nstokes);
@@ -265,7 +268,7 @@ void MFS::configure(int argc, char **argv)
 
         string_values = countAndSeparateStrings(variables.gpus);
         count_gpus = string_values.size();
-        
+
         if(count_gpus == 1) {
                 multigpu = 0;
                 selected = atoi(string_values[0].c_str());

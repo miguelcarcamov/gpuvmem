@@ -127,6 +127,26 @@ __host__ void goToError()
 
 }
 
+__host__ float median(std::vector<float> v)
+{
+        size_t elements = v.size();
+        size_t n = elements / 2;
+
+        if(elements == 1) {
+                return v[0];
+        }else{
+                std::nth_element(v.begin(), v.begin()+n, v.end());
+                int vn = v[n];
+                if(v.size()%2 == 1)
+                {
+                        return vn;
+                }else{
+                        std::nth_element(v.begin(), v.begin()+n-1, v.end());
+                        return 0.5*(vn+v[n-1]);
+                }
+        }
+}
+
 __host__ long NearestPowerOf2(long x)
 {
         --x;
@@ -797,9 +817,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         fields[f].backup_visibilities[i][s].weight[z] = w;
 
                                         // Visibilities from metres to klambda
-                                        uvw.x *= fields[f].nu[i] / LIGHTSPEED;
-                                        uvw.y *= fields[f].nu[i] / LIGHTSPEED;
-                                        uvw.z *= fields[f].nu[i] / LIGHTSPEED;
+                                        uvw.x *= 1.0f/freq_to_wavelength(fields[f].nu[i]);
+                                        uvw.y *= 1.0f/freq_to_wavelength(fields[f].nu[i]);
+                                        uvw.z *= 1.0f/freq_to_wavelength(fields[f].nu[i]);
 
                                         //Apply hermitian symmetry (it will be applied afterwards)
                                         if (uvw.x < 0.0) {
@@ -1249,7 +1269,6 @@ __host__ void FFT2D(cufftComplex *V, cufftComplex *I, cufftHandle plan, int M, i
     w_g[N*i+j] = 0.0;
    }
    }*/
-
 __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, int numVisibilities)
 {
         int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -1260,9 +1279,9 @@ __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, in
                         UVW[i].y *= -1.0;
                         Vo[i].y *= -1.0;
                 }
-                UVW[i].x *= freq / LIGHTSPEED;
-                UVW[i].y *= freq / LIGHTSPEED;
-                UVW[i].z *= freq / LIGHTSPEED;
+                UVW[i].x *= 1.0f/freq_to_wavelength(freq);
+                UVW[i].y *= 1.0f/freq_to_wavelength(freq);
+                UVW[i].z *= 1.0f/freq_to_wavelength(freq);
         }
 }
 
@@ -1305,7 +1324,7 @@ __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_c
         float y = (i - y0) * DELTAY * RPDEG_D;
 
         float arc = sqrtf(x*x+y*y);
-        float lambda = LIGHTSPEED/freq;
+        float lambda = freq_to_wavelength(freq);
 
         atten = (*beam_maps[primary_beam])(arc, lambda, antenna_diameter, pb_factor);
 
