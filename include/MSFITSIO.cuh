@@ -68,6 +68,7 @@ typedef struct MSData {
         float max_freq;
         float max_blength;
         float min_blength;
+        double uvmax_wavelength;
         std::string telescope_name;
         std::vector<int> corr_type;
 
@@ -158,3 +159,4 @@ __host__ void float3toImage(float3 *I, fitsfile *canvas, char *out_image, char*m
 __host__ void closeCanvas(fitsfile *canvas);
 
 __host__ __device__ float freq_to_wavelength(float freq);
+__host__ __device__ double metres_to_lambda(double uvw_metres, float freq);

@@ -817,9 +817,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         fields[f].backup_visibilities[i][s].weight[z] = w;
 
                                         // Visibilities from metres to klambda
-                                        uvw.x *= 1.0f/freq_to_wavelength(fields[f].nu[i]);
-                                        uvw.y *= 1.0f/freq_to_wavelength(fields[f].nu[i]);
-                                        uvw.z *= 1.0f/freq_to_wavelength(fields[f].nu[i]);
+                                        uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
+                                        uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
+                                        uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
 
                                         //Apply hermitian symmetry (it will be applied afterwards)
                                         if (uvw.x < 0.0) {
@@ -863,8 +863,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         #pragma omp parallel for schedule(static, 1)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = 0; j < N; j++) {
-                                                double deltau_meters = fabs(deltau) * (LIGHTSPEED / fields[f].nu[i]);
-                                                double deltav_meters = fabs(deltav) * (LIGHTSPEED / fields[f].nu[i]);
+                                                double deltau_meters = fabs(deltau) * freq_to_wavelength(fields[f].nu[i]);
+                                                double deltav_meters = fabs(deltav) * freq_to_wavelength(fields[f].nu[i]);
 
                                                 double u_meters = (j - (N / 2)) * deltau_meters;
                                                 double v_meters = (k - (M / 2)) * deltav_meters;
@@ -1200,25 +1200,25 @@ __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int nu
         }
 }
 
-__host__ void FFT2D(cufftComplex *V, cufftComplex *I, cufftHandle plan, int M, int N, bool shift)
+__host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHandle plan, int M, int N, int direction, bool shift)
 {
 
         if(shift) {
-                fftshift_2D << < numBlocksNN, threadsPerBlockNN >> > (I, M, N);
+                fftshift_2D << < numBlocksNN, threadsPerBlockNN >> > (input_data, M, N);
                 gpuErrchk(cudaDeviceSynchronize());
         }
 
         if ((cufftExecC2C(plan,
-                          (cufftComplex *) I,
-                          (cufftComplex *) V,
-                          CUFFT_FORWARD)) != CUFFT_SUCCESS) {
+                          (cufftComplex *) input_data,
+                          (cufftComplex *) output_data,
+                          direction)) != CUFFT_SUCCESS) {
                 printf("CUFFT exec error\n");
                 goToError();
         }
         gpuErrchk(cudaDeviceSynchronize());
 
         if(shift) {
-                fftshift_2D << < numBlocksNN, threadsPerBlockNN >> > (V, M, N);
+                fftshift_2D << < numBlocksNN, threadsPerBlockNN >> > (output_data, M, N);
                 gpuErrchk(cudaDeviceSynchronize());
 
         }
@@ -1279,9 +1279,9 @@ __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, in
                         UVW[i].y *= -1.0;
                         Vo[i].y *= -1.0;
                 }
-                UVW[i].x *= 1.0f/freq_to_wavelength(freq);
-                UVW[i].y *= 1.0f/freq_to_wavelength(freq);
-                UVW[i].z *= 1.0f/freq_to_wavelength(freq);
+                UVW[i].x = metres_to_lambda(UVW[i].x, freq);
+                UVW[i].y = metres_to_lambda(UVW[i].y, freq);
+                UVW[i].z = metres_to_lambda(UVW[i].z, freq);
         }
 }
 
@@ -2641,7 +2641,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         ip->apply_beam(vars_gpu[0].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
 
                                         //FFT 2D
-                                        FFT2D(vars_gpu[0].device_V, vars_gpu[0].device_I_nu, vars_gpu[0].plan, M, N, false);
+                                        FFT2D(vars_gpu[0].device_V, vars_gpu[0].device_I_nu, vars_gpu[0].plan, M, N, CUFFT_FORWARD, false);
 
                                         // PHASE_ROTATE
                                         phase_rotate <<< numBlocksNN, threadsPerBlockNN >>>
@@ -2700,7 +2700,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                                        datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
 
                                         //FFT 2D
-                                        FFT2D(vars_gpu[i % num_gpus].device_V, vars_gpu[i % num_gpus].device_I_nu, vars_gpu[i % num_gpus].plan, M, N, false);
+                                        FFT2D(vars_gpu[i % num_gpus].device_V, vars_gpu[i % num_gpus].device_I_nu, vars_gpu[i % num_gpus].plan, M, N, CUFFT_FORWARD, false);
 
                                         //PHASE_ROTATE
                                         phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[i % num_gpus].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);

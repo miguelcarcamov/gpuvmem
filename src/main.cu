@@ -46,7 +46,7 @@ inline bool IsAppBuiltAs64()
   #endif
 }
 
-void newOrder(Optimizator *optimizator, Image *image){
+void optimizationOrder(Optimizator *optimizator, Image *image){
         optimizator->setImage(image);
         optimizator->setFlag(0);
         optimizator->optimize();
@@ -91,9 +91,7 @@ __host__ int main(int argc, char **argv) {
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
         sy->setIoHandler(ioms);
-        void (*foo)(Optimizator*, Image*);
-        foo = &newOrder;
-        sy->order = foo;
+        sy->setOrder(&optimizationOrder);
         sy->configure(argc, argv);
         cg->setObjectiveFunction(of);
         sy->setOptimizator(cg);

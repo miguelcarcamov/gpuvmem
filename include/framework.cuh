@@ -100,6 +100,13 @@ virtual void calcGi(float *p, float *xi) = 0;
 virtual void restartDGi() = 0;
 virtual void addToDphi(float *device_dphi) = 0;
 virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd) = 0;
+
+float get_fivalue(){
+  return this->fi_value;
+};
+void set_fivalue(float fi){
+        this->fi_value = fi;
+};
 void setPenalizationFactor(float p){
         this->penalization_factor = p;
 };
@@ -120,6 +127,7 @@ float getPenalizationFactor(){
         return this->penalization_factor;
 }
 protected:
+float fi_value;
 float *device_S;
 float *device_DS;
 float penalization_factor = 1;
@@ -128,7 +136,6 @@ int mod;
 int order;
 cufftComplex * Inu = NULL;
 int imageToAdd;
-float fi_value;
 };
 
 
@@ -251,9 +258,9 @@ float calcFunction(float *p)
         float value = 0.0;
 
         for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
-        {       
+        {
                 float iterationValue = (*it)->calcFi(p);
-                (*it)->fi_value = iterationValue;
+                (*it)->set_fivalue(iterationValue);
                 value += iterationValue;
         }
 

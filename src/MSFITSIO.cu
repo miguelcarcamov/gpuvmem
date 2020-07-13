@@ -39,6 +39,13 @@ __host__ __device__ float freq_to_wavelength(float freq)
         return lambda;
 }
 
+__host__ __device__ double metres_to_lambda(double uvw_metres, float freq)
+{
+        float lambda = freq_to_wavelength(freq);
+        float uvw_lambda = uvw_metres / lambda;
+        return uvw_lambda;
+}
+
 __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag)
 {
         status_canvas = 0;
@@ -152,13 +159,16 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         std::string maxmin_baseline_query = "select GMAX(B_LENGTH) AS MAX_BLENGTH, GMIN(B_LENGTH) AS MIN_BLENGTH \
         FROM (select sqrt(sumsqr(UVW[:2])) as B_LENGTH FROM "+dir+" GROUPBY ANTENNA1,ANTENNA2)";
         std::string freq_query = "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, GMEDIAN(CHAN_FREQ) as REF_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
+        std::string maxuv_wavelength_query = "select MAX(GMAX(mscal.uvwwvls()[0,0]),GMAX(mscal.uvwwvls()[0,1])) as MAXUV_WV FROM "+dir;
 
         casacore::Table antenna_tab(casacore::tableCommand(antenna_tab_query.c_str()));
         casacore::Table maxmin_baseline_tab(casacore::tableCommand(maxmin_baseline_query.c_str()));
         casacore::Table freq_tab(casacore::tableCommand(freq_query.c_str()));
+        casacore::Table maxuv_wavelength_tab(casacore::tableCommand(maxuv_wavelength_query.c_str()));
 
         casacore::ROScalarColumn<casacore::Double> max_blength_col(maxmin_baseline_tab,"MAX_BLENGTH");
         casacore::ROScalarColumn<casacore::Double> min_blength_col(maxmin_baseline_tab,"MIN_BLENGTH");
+        casacore::ROScalarColumn<casacore::Double> maxuv_wavelength_col(maxuv_wavelength_tab,"MAXUV_WV");
 
         casacore::ROScalarColumn<casacore::Double> min_freq_col(freq_tab,"MIN_FREQ");
         casacore::ROScalarColumn<casacore::Double> max_freq_col(freq_tab,"MAX_FREQ");
@@ -171,6 +181,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         data->max_freq = max_freq_col(0);
         data->max_blength = max_blength_col(0);
         data->min_blength = min_blength_col(0);
+        data->uvmax_wavelength = maxuv_wavelength_col(0);
 
         float max_wavelength = freq_to_wavelength(data->min_freq);
 

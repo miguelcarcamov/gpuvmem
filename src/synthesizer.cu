@@ -223,6 +223,7 @@ void MFS::configure(int argc, char **argv)
         std::vector<float> ms_max_freqs;
         std::vector<float> ms_max_blength;
         std::vector<float> ms_min_blength;
+        std::vector<float> ms_uvmax_wavelength;
         for(int d=0; d<nMeasurementSets; d++) {
                 if(apply_noise) {
                         iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, true, false, random_probability, gridding);
@@ -233,6 +234,7 @@ void MFS::configure(int argc, char **argv)
                 ms_max_freqs.push_back(datasets[d].data.max_freq);
                 ms_max_blength.push_back(datasets[d].data.max_blength);
                 ms_min_blength.push_back(datasets[d].data.min_blength);
+                ms_uvmax_wavelength.push_back(datasets[d].data.uvmax_wavelength);
                 printf("Dataset %d: %s - Antenna diameter: %.3f metres\n", d, datasets[d].name, datasets[d].antennas[0].antenna_diameter);
         }
 
@@ -243,6 +245,7 @@ void MFS::configure(int argc, char **argv)
         float max_blength = *max_element(ms_max_blength.begin(), ms_max_blength.end());
         float min_wlength = freq_to_wavelength(max_freq);
         float max_resolution = (min_wlength/(4*max_blength))/RPARCSEC;
+        double max_uvmax_wavelength = *max_element(ms_uvmax_wavelength.begin(), ms_uvmax_wavelength.end()) + 1E-5;
         printf("The maximum theoretical resolution of this/these dataset/s is ~%f arcsec\n", max_resolution);
 
         if(nu_0 < 0) {
@@ -250,6 +253,10 @@ void MFS::configure(int argc, char **argv)
                 nu_0 = median(ms_ref_freqs);
         }
         printf("Reference frequency: %e Hz\n", nu_0);
+        double deltau_theo = 2*max_uvmax_wavelength/(M-1);
+        double deltax_theo = 1/(M*deltau_theo)/RPARCSEC;
+        printf("The pixel size has to be less or equal to %lf arcsec\n", deltax_theo);
+        printf("Actual pixel size is %lf arcsec\n", DELTAX*3600);
 
 
 
