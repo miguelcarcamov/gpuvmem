@@ -5,7 +5,7 @@
 long M, N, numVisibilities;
 int iter=0;
 
-float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, beam_noise, beam_bmaj, *device_noise_image, *device_weight_image;
+float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, beam_noise, beam_bmaj, *device_noise_image, *device_weight_image, *device_distance_image;
 float beam_bmin, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
 float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
 float *host_I, sum_weights, *initial_values, *penalizators;
@@ -616,6 +616,8 @@ void MFS::setDevice()
         gpuErrchk(cudaMalloc((void**)&device_weight_image, sizeof(float)*M*N));
         gpuErrchk(cudaMemset(device_weight_image, 0, sizeof(float)*M*N));
 
+        //gpuErrchk(cudaMalloc((void**)&device_distance_image, sizeof(float)*M*N));
+
 
 
         for(int g=0; g<num_gpus; g++) {
@@ -752,14 +754,18 @@ void MFS::setDevice()
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         weight_image<<<numBlocksNN, threadsPerBlockNN>>>(device_weight_image, datasets[d].fields[f].atten_image, noise_jypix, N);
                         gpuErrchk(cudaDeviceSynchronize());
+
+                        //distance_image<<<numBlocksNN, threadsPerBlockNN>>>(device_distance_image, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, 4.5e-05, DELTAX, DELTAY, N);
+                        //gpuErrchk(cudaDeviceSynchronize());
                 }
         }
 
         noise_image<<<numBlocksNN, threadsPerBlockNN>>>(device_noise_image, device_weight_image, noise_jypix, N);
         gpuErrchk(cudaDeviceSynchronize());
-        if(print_images)
+        if(print_images){
                 iohandler->IoPrintImage(device_noise_image, mod_in, mempath, "noise.fits", "", 0, 0, 1.0, M, N);
-
+                //iohandler->IoPrintImage(device_distance_image, mod_in, mempath, "distance.fits", "", 0, 0, 1.0, M, N);
+        }
 
         float *host_noise_image = (float*)malloc(M*N*sizeof(float));
         gpuErrchk(cudaMemcpy2D(host_noise_image, sizeof(float), device_noise_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToHost));
@@ -771,8 +777,12 @@ void MFS::setDevice()
                 printf("fg_scale = %e\n", fg_scale);
                 printf("noise (Jy/pix) = %e\n", noise_jypix);
         }
+
+        //gpuErrchk(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
+
         free(host_noise_image);
         cudaFree(device_weight_image);
+        //cudaFree(device_distance_image);
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         cudaFree(datasets[d].fields[f].atten_image);

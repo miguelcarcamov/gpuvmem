@@ -42,8 +42,15 @@ __host__ __device__ float freq_to_wavelength(float freq)
 __host__ __device__ double metres_to_lambda(double uvw_metres, float freq)
 {
         float lambda = freq_to_wavelength(freq);
-        float uvw_lambda = uvw_metres / lambda;
+        double uvw_lambda = uvw_metres / lambda;
         return uvw_lambda;
+}
+
+__host__ __device__ float distance(float x, float y, float x0, float y0)
+{
+        float sumsqr = (x-x0)*(x-x0) + (y-y0)*(y-y0);
+        float distance = sqrtf(sumsqr);
+        return distance;
 }
 
 __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag)

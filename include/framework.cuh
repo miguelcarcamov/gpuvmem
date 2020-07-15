@@ -5,7 +5,7 @@
 #include <iostream>
 #include <map>
 #include <algorithm>
-#include <math.h>
+#include <ctgmath>
 #include <string>
 #include <functional>
 #include "cuda_runtime.h"

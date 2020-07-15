@@ -70,6 +70,7 @@ __host__ void calculateErrors(Image *image);
 
 __device__ float AiryDiskBeam(float distance, float lambda, float antenna_diameter, float pb_factor);
 __device__ float GaussianBeam(float distance, float lambda, float antenna_diameter, float pb_factor);
+__device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, int primary_beam);
 
 __global__ void deviceReduceKernel(float *g_idata, float *g_odata, unsigned int n);
 __global__ void clipWNoise(cufftComplex *fg_image, float *noise, float *I, long N, float noise_cut, float MINPIX);
@@ -78,7 +79,7 @@ __global__ void newP(float *p, float *xi, float xmin, float MINPIX, float eta, l
 __global__ void newPNoPositivity(cufftComplex *p, float *xi, float xmin, long N);
 __global__ void clip(cufftComplex *I, long N, float MINPIX);
 __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, int numVisibilities);
-__device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, int primary_beam);
+__global__ void distance_image(float *distance_image, float xobs, float yobs, float dist_arcsec, double DELTAX, double DELTAY, long N);
 __global__ void total_attenuation(float *total_atten, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, long N, int primary_beam);
 __global__ void mean_attenuation(float *total_atten, int channels, long N);
 __global__ void weight_image(float *weight_image, float *total_atten, float noise_jypix, long N);

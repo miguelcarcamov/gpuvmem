@@ -147,6 +147,7 @@ __host__ float median(std::vector<float> v)
         }
 }
 
+
 __host__ long NearestPowerOf2(long x)
 {
         --x;
@@ -883,6 +884,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         }
                                 }
 
+                                //apply_convolutionKernel(g_Vo, g_uvw, deltau, deltav, fields[f].nu[i]);
+                                //apply_convolutionKernel(g_weights, g_uvw, deltau, deltav, fields[f].nu[i]);
                                 fields[f].visibilities[i][s].uvw.resize(visCounter);
                                 fields[f].visibilities[i][s].Vo.resize(visCounter);
 
@@ -1323,7 +1326,7 @@ __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_c
         float x = (j - x0) * DELTAX * RPDEG_D;
         float y = (i - y0) * DELTAY * RPDEG_D;
 
-        float arc = sqrtf(x*x+y*y);
+        float arc = distance(x, y, 0.0, 0.0);
         float lambda = freq_to_wavelength(freq);
 
         atten = (*beam_maps[primary_beam])(arc, lambda, antenna_diameter, pb_factor);
@@ -1364,6 +1367,27 @@ __device__ cufftComplex WKernel(double w, float xobs, float yobs, double DELTAX,
 
 
 }
+
+__global__ void distance_image(float *distance_image, float xobs, float yobs, float dist_arcsec, double DELTAX, double DELTAY, long N)
+{
+        int j = threadIdx.x + blockDim.x * blockIdx.x;
+        int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        int x0 = xobs;
+        int y0 = yobs;
+        float x = (j - x0) * DELTAX * 3600.0;
+        float y = (i - y0) * DELTAY * 3600.0;
+
+        float dist = distance(x, y, 0.0, 0.0);
+        distance_image[N*i+j] = 1.0f;
+
+        if(dist < dist_arcsec)
+          distance_image[N*i+j] = 0.0f;
+
+
+
+}
+
 __global__ void total_attenuation(float *total_atten, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, long N, int primary_beam)
 {
         int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -1757,7 +1781,7 @@ __device__ float calculateL1norm(float *I, float noise, float noise_cut, int ind
 
         float l1 = 0.0f;
 
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 l1 = fabsf(c);
         }
 
@@ -1780,7 +1804,7 @@ __device__ float calculateS(float *I, float G, float eta, float noise, float noi
 
         float S = 0.0f;
 
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 S = c * logf((c/G) + (eta + 1.0));
         }
 
@@ -1803,7 +1827,7 @@ __device__ float calculateQP(float *I, float noise, float noise_cut, int index, 
         float qp = 0.0f;
 
         c = I[N*M*index+N*i+j];
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 if((i>0 && i<N-1) && (j>0 && j<N-1))
                 {
                         l = I[N*M*index+N*i+(j-1)];
@@ -1842,7 +1866,7 @@ __device__ float calculateTV(float *I, float noise, float noise_cut, int index, 
         float dxy[2];
 
         c = I[N*M*index+N*i+j];
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 if(i < N-1 && j < N-1) {
                         r = I[N*M*index+N*i+(j+1)];
                         d = I[N*M*index+N*(i+1)+j];
@@ -1878,7 +1902,7 @@ __device__ float calculateTSV(float *I, float noise, float noise_cut, int index,
         float tv = 0.0f;
 
         c = I[N*M*index+N*i+j];
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 if(i < N-1 && j < N-1) {
                         r = I[N*M*index+N*i+(j+1)];
                         d = I[N*M*index+N*(i+1)+j];
@@ -1913,7 +1937,7 @@ __device__ float calculateL(float *I, float noise, float noise_cut, int index, i
         float c, l, r, d, u;
 
         c = I[N*M*index+N*i+j];
-        if(noise <= noise_cut)
+        if(noise < noise_cut)
         {
                 if((i>0 && i<N-1) && (j>0 && j<N-1)) {
                         l = I[N*M*index+N*i+(j-1)];
@@ -2041,7 +2065,7 @@ __device__ float calculateDNormL1(float *I, float lambda, float noise, float noi
 
         float c = I[N*M*index+N*i+j];
         float sign = copysignf(1.0f, c);
-        if(noise <= noise_cut)
+        if(noise < noise_cut)
                 dL1 = sign;
 
 
@@ -2065,7 +2089,7 @@ __device__ float calculateDS(float *I, float G, float eta, float lambda, float n
         float dS = 0.0f;
 
         float c = I[N*M*index+N*i+j];
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 dS = logf((c / G) + (eta+1.0)) + 1.0/(1.0 + (((eta+1.0)*G) / c));
         }
 
@@ -2091,7 +2115,7 @@ __device__ float calculateDQ(float *I, float lambda, float noise, float noise_cu
 
         c = I[N*M*index+N*i+j];
 
-        if(noise <= noise_cut)
+        if(noise < noise_cut)
         {
                 if((i>0 && i<N-1) && (j>0 && j<N-1)) {
                         d = I[N*M*index+N*(i+1)+j];
@@ -2133,7 +2157,7 @@ __device__ float calculateDTV(float *I, float lambda, float noise, float noise_c
         float dtv = 0.0f;
 
         c = I[N*M*index+N*i+j];
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 if((i>0 && i<N-1) && (j>0 && j<N-1)) {
                         d = I[N*M*index+N*(i+1)+j];
                         u = I[N*M*index+N*(i-1)+j];
@@ -2194,7 +2218,7 @@ __device__ float calculateDTSV(float *I, float lambda, float noise, float noise_
         float dstv = 0.0f;
 
         c = I[N*M*index+N*i+j];
-        if(noise <= noise_cut) {
+        if(noise < noise_cut) {
                 if((i>0 && i<N-1) && (j>0 && j<N-1)) {
                         d = I[N*M*index+N*(i+1)+j];
                         u = I[N*M*index+N*(i-1)+j];
@@ -2234,7 +2258,7 @@ __device__ float calculateDL(float *I, float lambda, float noise, float noise_cu
 
         c = I[N*M*index+N*i+j];
 
-        if(noise <= noise_cut)
+        if(noise < noise_cut)
         {
                 if((i>1 && i<N-2) && (j>1 && j<N-2)) {
                         d = I[N*M*index+N*(i+1)+j];
@@ -2311,7 +2335,7 @@ __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr,
         atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
 
         float dchi2 = 0.0;
-        if(noise[N*i+j] <= noise_cut) {
+        if(noise[N*i+j] < noise_cut) {
                 for(int v=0; v<numVisibilities; v++) {
                         Ukv = x * u_shared[v];
                         Vkv = y * v_shared[v];
@@ -2347,7 +2371,7 @@ __global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW
         atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
 
         float dchi2 = 0.0;
-        if(noise[N*i+j] <= noise_cut) {
+        if(noise[N*i+j] < noise_cut) {
                 for(int v=0; v<numVisibilities; v++) {
                         Ukv = x * UVW[v].x;
                         Vkv = y * UVW[v].y;
@@ -2462,7 +2486,7 @@ __global__ void DChi2_total_alpha(float *noise, float *dchi2_total, float *dchi2
         dI_nu_0 = powf(nudiv, alpha);
         dalpha = I_nu_0 * dI_nu_0 * fg_scale * logf(nudiv);
 
-        if(noise[N*i+j] <= noise_cut) {
+        if(noise[N*i+j] < noise_cut) {
                 if(I_nu_0 > threshold) {
                         dchi2_total[N*M+N*i+j] += dchi2[N*i+j] * dalpha;
                 }
@@ -2487,7 +2511,7 @@ __global__ void DChi2_total_I_nu_0(float *noise, float *dchi2_total, float *dchi
         dI_nu_0 = powf(nudiv, alpha);
         //dalpha = I_nu_0 * dI_nu_0 * fg_scale * logf(nudiv);
 
-        if(noise[N*i+j] <= noise_cut)
+        if(noise[N*i+j] < noise_cut)
                 dchi2_total[N*i+j] += dchi2[N*i+j] * dI_nu_0;
 
 }
@@ -2515,7 +2539,7 @@ __global__ void DChi2_2I(float *noise, float *chain, float *I, float *dchi2, flo
         int j = threadIdx.x + blockDim.x * blockIdx.x;
         int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        if(noise[N*i+j] <= noise_cut && image)
+        if(noise[N*i+j] < noise_cut && image)
         {
                 if(I[N*i+j] > threshold) {
                         dchi2_total[N*i+j] += dchi2[N*i+j] * chain[N*M+N*i+j];
@@ -2523,7 +2547,7 @@ __global__ void DChi2_2I(float *noise, float *chain, float *I, float *dchi2, flo
                         dchi2_total[N*i+j] += 0.0f;
                 }
 
-        }else if(noise[N*i+j] <= noise_cut) {
+        }else if(noise[N*i+j] < noise_cut) {
                 dchi2_total[N*i+j] += dchi2[N*i+j] * chain[N*i+j];
         }
 }
@@ -2542,7 +2566,7 @@ __global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float 
         alpha = images[N*M+N*i+j];
         nudiv_pow_alpha = powf(nudiv, 2.0f*alpha);
 
-        if(noise[N*i+j] <= noise_cut) {
+        if(noise[N*i+j] < noise_cut) {
                 noise_I[N*i+j] += atten * atten * sum_weights * nudiv_pow_alpha;
         }else{
                 noise_I[N*i+j] = 0.0f;
@@ -2577,7 +2601,7 @@ __global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0,
         log_nu = logf(nudiv);
 
         sum_noise = 0.0f;
-        if(noise[N*i+j] <= noise_cut) {
+        if(noise[N*i+j] < noise_cut) {
                 for(int v=0; v<numVisibilities; v++) {
                         Ukv = x * UVW[v].x;
                         Vkv = y * UVW[v].y;

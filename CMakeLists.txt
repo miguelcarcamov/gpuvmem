@@ -31,6 +31,7 @@ if(Boost_FOUND)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/synthesizer.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalsquaredvariation.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalvariation.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/ckernels.cu
   )
 
 
