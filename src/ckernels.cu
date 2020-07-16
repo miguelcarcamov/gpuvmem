@@ -1,3 +1,5 @@
+#include "ckernels.cuh"
+
 template <class T>
 __host__ __device__ T EllipticalGaussian2D(T amp, T x, T y, T x0, T y0, T sigma_x, T sigma_y, T angle)
 {
@@ -47,29 +49,151 @@ __host__ __device__ T Gaussian1D(T amp, T x, T x0, T sigma, T w, T alpha)
 template <class T>
 __host__ __device__ T Sinc1D(T amp, T x, T x0, T sigma, T w)
 {
-  T s = amp*sinc((x-x0)/(w*sigma));
-  return s;
+        T s = amp*sinc((x-x0)/(w*sigma));
+        return s;
 }
 
 template <class T>
 __host__ __device__ T GaussianSinc1D(T amp, T x, T x0, T sigma, T w1, T w2, T alpha)
 {
-  return amp*Gaussian1D(1.0, x, x0, sigma, w1, alpha)*Sinc1D(1.0, x, x0, sigma, w2);
+        return amp*Gaussian1D(1.0, x, x0, sigma, w1, alpha)*Sinc1D(1.0, x, x0, sigma, w2);
 }
 
 
 template <class T>
 __host__ __device__ T Sinc2D(T amp, T x, T x0, T y, T y0, T sigma_x, T sigma_y, T w)
 {
-  T s_x = Sinc1D(1.0, x, x0, sigma_x, w);
-  T s_y = Sinc1D(1.0, y, y0, sigma_y, w);
-  return amp*s_x*s_y;
+        T s_x = Sinc1D(1.0, x, x0, sigma_x, w);
+        T s_y = Sinc1D(1.0, y, y0, sigma_y, w);
+        return amp*s_x*s_y;
 }
 
 template <class T>
 __host__ __device__ T GaussianSinc2D(T amp, T x, T y, T x0, T y0, T sigma_x, T sigma_y, T w1, T w2, T alpha)
 {
-  T G = Gaussian2D(1.0, x, y, x0, y0, sigma_x, sigma_y, w1, alpha);
-  T S = Sinc2D(1.0, x, x0, y, y0, sigma_x, sigma_y, w2);
-  return amp*G*S;
+        T G = Gaussian2D(1.0, x, y, x0, y0, sigma_x, sigma_y, w1, alpha);
+        T S = Sinc2D(1.0, x, x0, y, y0, sigma_x, sigma_y, w2);
+        return amp*G*S;
 }
+
+template <class Tdx, class T>
+CKernel<Tdx, T>::CKernel()
+{
+        this->M = 6;
+        this->N = 6;
+        this->w1 = 2.52;
+        this->w2 = 1.55;
+        this->alpha = 2;
+
+};
+
+template <class Tdx, class T>
+CKernel<Tdx, T>::CKernel(Tdx dx, Tdx dy, int M, int N)
+{
+        this->M = M;
+        this->N = N;
+        this->dx = dx;
+        this->dy = dy;
+        this->w1 = 2.52;
+        this->w2 = 1.55;
+        this->alpha = 2;
+        this->kernel.reserve(M*N);
+};
+
+template <class Tdx, class T>
+CKernel<Tdx, T>::CKernel(Tdx dx, Tdx dy, T w1, T w2, T alpha, int M, int N)
+{
+        this->M = M;
+        this->N = N;
+        this->dx = dx;
+        this->dy = dy;
+        this->w1 = w1;
+        this->w2 = w2;
+        this->alpha = alpha;
+        this->kernel.reserve(M*N);
+};
+
+template <class Tdx, class T>
+T CKernel<Tdx, T>::getdx()
+{
+        return this->dx;
+};
+
+template <class Tdx, class T>
+T CKernel<Tdx, T>::getdy()
+{
+        return this->dy;
+};
+
+template <class Tdx, class T>
+int2 CKernel<Tdx, T>::getMN()
+{
+        int2 val;
+        val.x = this->M;
+        val.y = this->N;
+        return val;
+};
+
+template <class Tdx, class T>
+T CKernel<Tdx, T>::getW1()
+{
+        return this->w1;
+};
+
+template <class Tdx, class T>
+T CKernel<Tdx, T>::getW2()
+{
+        return this->w2;
+}
+
+template <class Tdx, class T>
+T CKernel<Tdx, T>::getAlpha()
+{
+        return this->alpha;
+};
+
+template <class Tdx, class T>
+std::vector<T>  CKernel<Tdx, T>::getCPUKernel()
+{
+        return this->kernel;
+};
+
+template <class Tdx, class T>
+T* CKernel<Tdx, T>::getGPUKernel()
+{
+        T *gpu_kernel;
+        gpuErrchk(cudaMemcpy(gpu_kernel, this->kernel.data(), sizeof(T) * this->kernel.size(), cudaMemcpyHostToDevice));
+        return gpu_kernel;
+};
+
+template <class Tdx, class T>
+void CKernel<Tdx, T>::setdxdy(Tdx dx, Tdx dy)
+{
+        this->dx = dx;
+        this->dy = dy;
+};
+
+template <class Tdx, class T>
+void CKernel<Tdx, T>::setMN(int M, int N)
+{
+        this->M = M;
+        this->N = N;
+};
+
+template <class Tdx, class T>
+void CKernel<Tdx, T>::setW1(T w1)
+{
+        this->w1 = w1;
+};
+
+template <class Tdx, class T>
+void CKernel<Tdx, T>::setW2(T w2)
+{
+        this->w2 = w2;
+};
+
+template <class Tdx, class T>
+void CKernel<Tdx, T>::setAlpha(T alpha)
+{
+        this->alpha=alpha;
+};
