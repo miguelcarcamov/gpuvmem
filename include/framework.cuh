@@ -8,9 +8,9 @@
 #include <ctgmath>
 #include <string>
 #include <functional>
-#include "cuda_runtime.h"
+#include <cuda_runtime.h>
 #include "device_launch_parameters.h"
-#include "math_constants.h"
+#include <math_constants.h>
 #include <float.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -293,12 +293,12 @@ void restartDPhi()
         {
                 (*it)->restartDGi();
         }
-        gpuErrchk(cudaMemset(dphi, 0, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMemset(dphi, 0, sizeof(float)*M*N*image_count));
 }
 
 void copyDphiToXi(float *xi)
 {
-        gpuErrchk(cudaMemcpy(xi, dphi, sizeof(float)*M*N*image_count, cudaMemcpyDeviceToDevice));
+        checkCudaErrors(cudaMemcpy(xi, dphi, sizeof(float)*M*N*image_count, cudaMemcpyDeviceToDevice));
 }
 void setN(long N){
         this->N = N;
@@ -323,8 +323,8 @@ void configure(long N, long M, int I)
         setN(N);
         setM(M);
         setImageCount(I);
-        gpuErrchk(cudaMalloc((void**)&dphi, sizeof(float)*M*N*I));
-        gpuErrchk(cudaMemset(dphi, 0, sizeof(float)*M*N*I));
+        checkCudaErrors(cudaMalloc((void**)&dphi, sizeof(float)*M*N*I));
+        checkCudaErrors(cudaMemset(dphi, 0, sizeof(float)*M*N*I));
 }
 private:
 std::vector<Fi*> fis;

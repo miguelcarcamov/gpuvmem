@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
+#include "complexOps.cuh"
 #include <cuda.h>
-#include "math_constants.h"
+#include <helper_functions.h>
+#include <helper_cuda.h>
+#include <math_constants.h>
 #include <string>
 #include <tables/Tables/Table.h>
 #include <tables/Tables/TableRow.h>
@@ -24,7 +27,6 @@
 #include <fitsio.h>
 #include "rngs.cuh"
 #include "rvgs.cuh"
-#include "complexOps.cuh"
 #include <boost/math/special_functions/bessel.hpp>
 
 #define FLOAT_IMG   -32
@@ -41,16 +43,6 @@
 const float PI = CUDART_PI_F;
 const double PI_D = CUDART_PI;
 const float LIGHTSPEED = 2.99792458E8;
-
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-        if (code != cudaSuccess)
-        {
-                fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-                if (abort) exit(code);
-        }
-}
 
 enum {AIRYDISK, GAUSSIAN};
 

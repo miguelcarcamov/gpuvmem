@@ -162,7 +162,7 @@ template <class Tdx, class T>
 T* CKernel<Tdx, T>::getGPUKernel()
 {
         T *gpu_kernel;
-        gpuErrchk(cudaMemcpy(gpu_kernel, this->kernel.data(), sizeof(T) * this->kernel.size(), cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy(gpu_kernel, this->kernel.data(), sizeof(T) * this->kernel.size(), cudaMemcpyHostToDevice));
         return gpu_kernel;
 };
 

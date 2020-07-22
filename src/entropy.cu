@@ -22,7 +22,7 @@ void Entropy::calcGi(float *p, float *xi)
 
 void Entropy::restartDGi()
 {
-        gpuErrchk(cudaMemset(device_DS, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
 };
 
 void Entropy::addToDphi(float *device_dphi)
@@ -54,11 +54,11 @@ void Entropy::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
                 }
         }
 
-        gpuErrchk(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
-        gpuErrchk(cudaMemset(device_S, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_S, 0, sizeof(float)*M*N));
 
-        gpuErrchk(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
-        gpuErrchk(cudaMemset(device_DS, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
 
 };
 

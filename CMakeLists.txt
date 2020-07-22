@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.8...3.12 FATAL_ERROR)
 project(gpuvmem LANGUAGES CXX CUDA)
 find_package(Boost REQUIRED)
-
 if(Boost_FOUND)
   add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
-
+  # Search the compute capability of the first GPU and add CUDA specific FLAGS
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cuda_check.cmake)
+  
   target_sources(gpuvmem PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/src/brent.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/chi2.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/complexOps.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/copyrightwarranty.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/directioncosines.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/entropy.cu
@@ -49,14 +49,15 @@ if(Boost_FOUND)
     )
   endif()
 
-  message(NOTICE "We are currently using the latest casacore stable version v3.1.2")
-  message(NOTICE "If this version is not installed in your computer, please make sure to install it")
+  message(NOTICE "We are currently using the latest casacore stable version >=v3.2.1")
+  message(NOTICE "If one these versions are not installed in your computer, please make sure to install it")
   message(NOTICE "For more information please read the README.md file")
   set(CASACORE_DIR /usr/local/include/casacore)
   target_include_directories(gpuvmem PUBLIC
   ${CASACORE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${Boost_INCLUDE_DIRS}
+  ${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc
   )
 
   get_target_property(TEMP gpuvmem COMPILE_FLAGS)
@@ -70,8 +71,6 @@ if(Boost_FOUND)
 
   set(TEMP "${TEMP}${COMPFLAGS}" )
   set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
-  # Search the compute capability of the first GPU and add CUDA specific FLAGS
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cuda_check.cmake)
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
 
   target_link_libraries(gpuvmem cfitsio m casa_casa casa_tables casa_ms casa_measures cudart cuda cufft stdc++ gomp ${Boost_LIBRARIES})

@@ -49,7 +49,7 @@ void ImageProcessor::configure(int I)
         this->image_count = I;
         if(image_count > 1)
         {
-                gpuErrchk(cudaMalloc((void**)&chain, sizeof(float)*M*N*image_count));
-                gpuErrchk(cudaMemset(chain, 0, sizeof(float)*M*N*image_count));
+                checkCudaErrors(cudaMalloc((void**)&chain, sizeof(float)*M*N*image_count));
+                checkCudaErrors(cudaMemset(chain, 0, sizeof(float)*M*N*image_count));
         }
 };

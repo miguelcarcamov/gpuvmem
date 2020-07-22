@@ -32,8 +32,8 @@ void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
                 }
         }
 
-        gpuErrchk(cudaMalloc((void**)&result_dchi2, sizeof(float)*M*N*image_count));
-        gpuErrchk(cudaMemset(result_dchi2, 0, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMalloc((void**)&result_dchi2, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMemset(result_dchi2, 0, sizeof(float)*M*N*image_count));
 }
 
 float Chi2::calcFi(float *p)
@@ -50,7 +50,7 @@ void Chi2::calcGi(float *p, float *xi)
 
 void Chi2::restartDGi()
 {
-        gpuErrchk(cudaMemset(result_dchi2, 0, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMemset(result_dchi2, 0, sizeof(float)*M*N*image_count));
 };
 
 void Chi2::addToDphi(float *device_dphi)
@@ -58,8 +58,8 @@ void Chi2::addToDphi(float *device_dphi)
         if(image_count == 1)
                 linkAddToDPhi(device_dphi, result_dchi2, 0);
         if(image_count > 1) {
-                gpuErrchk(cudaMemset(device_dphi, 0, sizeof(float)*M*N*image_count));
-                gpuErrchk(cudaMemcpy(device_dphi, result_dchi2, sizeof(float)*N*M*image_count,cudaMemcpyDeviceToDevice));
+                checkCudaErrors(cudaMemset(device_dphi, 0, sizeof(float)*M*N*image_count));
+                checkCudaErrors(cudaMemcpy(device_dphi, result_dchi2, sizeof(float)*N*M*image_count,cudaMemcpyDeviceToDevice));
         }
 };
 

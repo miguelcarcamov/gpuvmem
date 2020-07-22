@@ -120,8 +120,7 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
         float real_n = Normal(0,1);
         float imag_n = Normal(0,1);
 
-        noise_vis.x = vis.x + real_n * (1/sqrt(weights));
-        noise_vis.y = vis.y + imag_n * (1/sqrt(weights));
+        noise_vis = make_cuComplex(vis.x + real_n * (1/sqrt(weights)), vis.y + imag_n * (1/sqrt(weights)));
 
         return noise_vis;
 }
@@ -342,8 +341,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
                                                         fields[f].visibilities[g+j][sto].uvw.push_back(MS_uvw);
 
-                                                        MS_vis.x = dataCol(sto,j).real();
-                                                        MS_vis.y = dataCol(sto,j).imag();
+                                                        MS_vis = make_cuComplex(dataCol(sto,j).real(), dataCol(sto,j).imag());
 
                                                         if(noise)
                                                                 fields[f].visibilities[g+j][sto].Vo.push_back(addNoiseToVis(MS_vis, weights[sto]));
@@ -361,9 +359,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 }
         }
 
-        cufftComplex cufft_zeroval;
-        cufft_zeroval.x = 0.0f;
-        cufft_zeroval.y = 0.0f;
+
         for(int f=0; f<data->nfields; f++) {
                 for(int i=0; i<data->total_frequencies; i++) {
                         for (int sto=0; sto<data->nstokes; sto++) {
@@ -372,7 +368,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                                  *
                                  * We will allocate memory for model visibilities using the size of the observed visibilities vector.
                                  */
-                                fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), cufft_zeroval);
+                                fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), complexZero<cufftComplex>());
                         }
                 }
         }
@@ -434,10 +430,10 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                 for(int f=0; f<data.nfields; f++) {
                         for(int i=0; i<data.total_frequencies; i++) {
                                 for(int s=0; s<data.nstokes; s++) {
-                                        gpuErrchk(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm,
+                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm,
                                                              sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
                                                              cudaMemcpyDeviceToHost));
-                                        gpuErrchk(cudaMemcpy(fields[f].visibilities[i][s].weight.data(),
+                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].weight.data(),
                                                              fields[f].device_visibilities[i][s].weight,
                                                              sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
                                                              cudaMemcpyDeviceToHost));
@@ -449,8 +445,8 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                         for(int i=0; i<data.total_frequencies; i++) {
                                 cudaSetDevice((i%num_gpus) + firstgpu);
                                 for(int s=0; s<data.nstokes; s++) {
-                                        gpuErrchk(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm, sizeof(cufftComplex)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
-                                        gpuErrchk(cudaMemcpy(fields[f].visibilities[i][s].weight.data(), fields[f].device_visibilities[i][s].weight, sizeof(float)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
+                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm, sizeof(cufftComplex)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
+                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].weight.data(), fields[f].device_visibilities[i][s].weight, sizeof(float)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
                                 }
                         }
                 }
@@ -491,7 +487,7 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
 
 
         for(int f=0; f < data.nfields; f++)
-std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
+                std::fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
 
 
         int g = 0;
@@ -537,8 +533,8 @@ std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f]
                                                         }else if(sim) {
                                                                 vis = fields[f].visibilities[g+j][sto].Vm[c];
                                                         }else{
-                                                                vis.x = fields[f].visibilities[g+j][sto].Vo[c].x - fields[f].visibilities[g+j][sto].Vm[c].x;
-                                                                vis.y = fields[f].visibilities[g+j][sto].Vo[c].y - fields[f].visibilities[g+j][sto].Vm[c].y;
+                                                                vis = make_cuComplex(fields[f].visibilities[g+j][sto].Vo[c].x - fields[f].visibilities[g+j][sto].Vm[c].x,
+                                                                                     fields[f].visibilities[g+j][sto].Vo[c].y - fields[f].visibilities[g+j][sto].Vm[c].y);
                                                         }
 
                                                         dataCol(sto,j) = casacore::Complex(vis.x, vis.y);
@@ -547,7 +543,7 @@ std:            fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f]
                                                 }
                                         }
                                 }
-                                data_col.put(k,dataCol);
+                                data_col.put(k, dataCol);
                                 weight_col.put(k, weights);
                         }
 
@@ -618,7 +614,7 @@ __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *ou
         cufftComplex *host_IFITS;
         host_IFITS = (cufftComplex*)malloc(M*N*sizeof(cufftComplex));
         float *image2D = (float*) malloc(M*N*sizeof(float));
-        gpuErrchk(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
 
 
         for(int i=0; i < M; i++) {
@@ -682,7 +678,7 @@ __host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, ch
 
         //unsigned int offset = M*N*index*sizeof(float);
         int offset = M*N*index;
-        gpuErrchk(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
 
         for(int i=0; i<M; i++) {
                 for(int j=0; j<N; j++) {
@@ -721,7 +717,7 @@ __host__ void float2toImage(float *I, fitsfile *canvas, char *out_image, char*me
 
         float *host_2Iout = (float*)malloc(M*N*sizeof(float)*2);
 
-        gpuErrchk(cudaMemcpy(host_2Iout, I, sizeof(float)*M*N*2, cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy(host_2Iout, I, sizeof(float)*M*N*2, cudaMemcpyDeviceToHost));
 
         float *host_alpha = (float*)malloc(M*N*sizeof(float));
         float *host_I_nu_0 = (float*)malloc(M*N*sizeof(float));
@@ -849,7 +845,7 @@ __host__ void float3toImage(float3 *I, fitsfile *canvas, char *out_image, char*m
 
         float3 *host_3Iout = (float3*)malloc(M*N*sizeof(float3));
 
-        gpuErrchk(cudaMemcpy2D(host_3Iout, sizeof(float3), I, sizeof(float3), sizeof(float3), M*N, cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy2D(host_3Iout, sizeof(float3), I, sizeof(float3), sizeof(float3), M*N, cudaMemcpyDeviceToHost));
 
         float *host_T = (float*)malloc(M*N*sizeof(float));
         float *host_tau = (float*)malloc(M*N*sizeof(float));

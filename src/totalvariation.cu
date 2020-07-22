@@ -22,7 +22,7 @@ void TVariation::calcGi(float *p, float *xi)
 
 void TVariation::restartDGi()
 {
-        gpuErrchk(cudaMemset(device_DS, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
 };
 
 void TVariation::addToDphi(float *device_dphi)
@@ -54,11 +54,11 @@ void TVariation::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
                 }
         }
 
-        gpuErrchk(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
-        gpuErrchk(cudaMemset(device_S, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_S, 0, sizeof(float)*M*N));
 
-        gpuErrchk(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
-        gpuErrchk(cudaMemset(device_DS, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
 };
 
 void TVariation::setSandDs(float *S, float *Ds)

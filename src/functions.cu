@@ -63,6 +63,8 @@ extern MSDataset *datasets;
 
 extern varsPerGPU *vars_gpu;
 
+extern Vars variables;
+
 typedef float (*FnPtr)(float, float, float, float);
 
 __device__ FnPtr beam_maps[2] = {
@@ -147,6 +149,10 @@ __host__ float median(std::vector<float> v)
         }
 }
 
+__host__ int iDivUp(int a, int b)
+{
+        return (a % b != 0) ? (a / b + 1) : (a / b);
+}
 
 __host__ long NearestPowerOf2(long x)
 {
@@ -160,7 +166,7 @@ __host__ long NearestPowerOf2(long x)
 }
 
 
-bool isPow2(unsigned int x)
+__host__ bool isPow2(unsigned int x)
 {
         return ((x&(x-1))==0);
 }
@@ -453,8 +459,8 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
         //get device capability, to avoid block/grid size exceed the upper bound
         cudaDeviceProp prop;
         int device;
-        gpuErrchk(cudaGetDevice(&device));
-        gpuErrchk(cudaGetDeviceProperties(&prop, device));
+        checkCudaErrors(cudaGetDevice(&device));
+        checkCudaErrors(cudaGetDeviceProperties(&prop, device));
 
 
         threads = (n < maxThreads*2) ? NearestPowerOf2((n + 1)/ 2) : maxThreads;
@@ -611,8 +617,8 @@ __host__ T deviceReduce(T *in, long N)
         //threads = maxThreads;
         //blocks = NearestPowerOf2(N)/threads;
 
-        gpuErrchk(cudaMalloc(&device_out, sizeof(T)*blocks));
-        gpuErrchk(cudaMemset(device_out, 0, sizeof(T)*blocks));
+        checkCudaErrors(cudaMalloc(&device_out, sizeof(T)*blocks));
+        checkCudaErrors(cudaMemset(device_out, 0, sizeof(T)*blocks));
 
         int smemSize = (threads <= 32) ? 2 * threads * sizeof(T) : threads * sizeof(T);
 
@@ -625,86 +631,86 @@ __host__ T deviceReduce(T *in, long N)
                 switch (threads) {
                 case 512:
                         deviceReduceKernel<T, 512, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 256:
                         deviceReduceKernel<T, 256, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 128:
                         deviceReduceKernel<T, 128, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 64:
                         deviceReduceKernel<T, 64, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 32:
                         deviceReduceKernel<T, 32, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 16:
                         deviceReduceKernel<T, 16, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 8:
                         deviceReduceKernel<T, 8, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 4:
                         deviceReduceKernel<T, 4, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 2:
                         deviceReduceKernel<T, 2, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 1:
                         deviceReduceKernel<T, 1, true><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 }
         }else{
                 switch (threads) {
                 case 512:
                         deviceReduceKernel<T, 512, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 256:
                         deviceReduceKernel<T, 256, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 128:
                         deviceReduceKernel<T, 128, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 64:
                         deviceReduceKernel<T, 64, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 32:
                         deviceReduceKernel<T, 32, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 16:
                         deviceReduceKernel<T, 16, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 8:
                         deviceReduceKernel<T, 8, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 4:
                         deviceReduceKernel<T, 4, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 2:
                         deviceReduceKernel<T, 2, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 case 1:
                         deviceReduceKernel<T, 1, false><<<dimGrid, dimBlock, smemSize>>>(in, device_out, N);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                         break;
                 }
         }
@@ -712,7 +718,7 @@ __host__ T deviceReduce(T *in, long N)
         T *h_odata = (T *) malloc(blocks*sizeof(T));
         T sum = 0;
 
-        gpuErrchk(cudaMemcpy(h_odata, device_out, blocks * sizeof(T),cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy(h_odata, device_out, blocks * sizeof(T),cudaMemcpyDeviceToHost));
         for (int i=0; i<blocks; i++)
         {
                 sum += h_odata[i];
@@ -724,8 +730,8 @@ __host__ T deviceReduce(T *in, long N)
 
 __global__ void fftshift_2D(cufftComplex *data, int N1, int N2)
 {
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
 
         if (i < N1 && j < N2) {
                 float a = 1-2*((i+j)&1);
@@ -735,9 +741,213 @@ __global__ void fftshift_2D(cufftComplex *data, int N1, int N2)
         }
 }
 
+/*
+   This padding assumes that your input data has already a size power of 2.
+    - new_image must be initialized with zeros
+ */
+template <class T>
+__global__ void paddingKernel(T *dest, T* src, int fft_M, int fft_N, int m, int n, int centerKernel_x, int centerKernel_y)
+{
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+
+        if(i < m && j < n) {
+                int ky = i - centerKernel_y;
+                int kx = j - centerKernel_x;
+
+                if (ky < 0)
+                {
+                        ky += fft_M;
+                }
+
+                if (kx < 0)
+                {
+                        kx += fft_N;
+                }
+
+                dest[fft_N * ky + kx] = src[n*i + j];
+        }
+}
+
+template <class T>
+__global__ void paddingData(T *dest, T* src, int fft_M, int fft_N, int M, int N, int m, int n, int centerKernel_x, int centerKernel_y)
+{
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int borderM = M + centerKernel_y;
+        const int borderN = N + centerKernel_x;
+
+        if(i < fft_M && j < fft_N) {
+                int dy, dx;
+
+                if (i < M)
+                        dy = i;
+
+
+                if (j < N)
+                        dx = j;
+
+
+                if (i >= M && i < borderM)
+                        dy = M - 1;
+
+
+                if (j >= N && j < borderN)
+                        dx = N - 1;
+
+
+                if (i >= borderM)
+                        dy = 0;
+
+
+                if (j >= borderN)
+                        dx = 0;
+
+
+                dest[fft_N*i+j] = src[N*dy+dx];
+
+        }
+}
+
+template <class T>
+__global__ void depaddingData(T *dest, T* src, int fft_M, int fft_N, int M, int N, int centerKernel_x, int centerKernel_y)
+{
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+
+        const int offset_x = (fft_M - M - centerKernel_x)/2;
+        const int offset_y = (fft_N - N - centerKernel_y)/2;
+        const int border_x = offset_x + centerKernel_x;
+        const int border_y = offset_y + centerKernel_y;
+        const int x = j + border_x;
+        const int y = i + border_y;
+
+        if(y < N && x < M) {
+                dest[N*i+j] = src[fft_N*y+x];
+
+        }
+}
+
+template <class TD, class T>
+__host__ TD *convolutionComplexRealFFT(TD *data, T *kernel, int M, int N, int m, int n, bool isDataOnFourier, bool isDataOnDevice, bool isKernelOnDevice)
+{
+
+        T *kernel_device;
+        TD *kernel_complex_device;
+        TD *data_device;
+        TD *padded_kernel_complex;
+        TD *padded_data_complex;
+        TD *data_spectrum_device;
+        TD *kernel_spectrum_device;
+        TD *result_host;
+
+        cufftHandle fftPlan;
+        int fftfwd, fftinv;
+        if(isDataOnFourier)
+        {
+                fftfwd = CUFFT_INVERSE;
+                fftinv = CUFFT_FORWARD;
+
+        }else{
+                fftfwd = CUFFT_FORWARD;
+                fftinv = CUFFT_INVERSE;
+        }
+
+
+        if(!isKernelOnDevice) {
+                checkCudaErrors(cudaMalloc((void**)&kernel_device, sizeof(T)*M*N));
+                checkCudaErrors(cudaMemcpy(kernel_device, kernel, sizeof(T)*M*N, cudaMemcpyHostToDevice));
+        }else{
+                kernel_device = kernel;
+        }
+
+        if(!isDataOnDevice) {
+                checkCudaErrors(cudaMalloc((void**)&data_device, sizeof(TD)*M*N));
+                checkCudaErrors(cudaMemcpy(data_device, data, sizeof(TD)*M*N, cudaMemcpyHostToDevice));
+        }else{
+                data_device = data;
+        }
+
+        const int ckernel_x = ceil(m/2);
+        const int ckernel_y = ceil(n/2);
+
+        const int padding_M = NearestPowerOf2(M + m - 1);
+        const int padding_N = NearestPowerOf2(N + n - 1);
+
+        // Copy the float kernel to a complex array
+        checkCudaErrors(cudaMalloc((void**)&kernel_complex_device, sizeof(TD)*M*N));
+        checkCudaErrors(cudaMemset(kernel_complex_device, 0, sizeof(TD)*M*N));
+        checkCudaErrors(cudaMemcpy(kernel_complex_device, kernel_device, sizeof(T)*M*N, cudaMemcpyDeviceToDevice));
+
+        // Allocate memory for padded arrays
+        // Kernel
+        checkCudaErrors(cudaMalloc((void**)&padded_kernel_complex, sizeof(TD)*padding_M*padding_N));
+        checkCudaErrors(cudaMemset(padded_kernel_complex, 0, sizeof(TD)*padding_M*padding_N));
+        // Data
+        checkCudaErrors(cudaMalloc((void**)&padded_data_complex, sizeof(TD)*padding_M*padding_N));
+        checkCudaErrors(cudaMemset(padded_data_complex, 0, sizeof(TD)*padding_M*padding_N));
+
+        // Calculate thread blocks to execute kernel
+        dim3 threads(variables.blockSizeX, variables.blockSizeY);
+
+        dim3 blocks_kernel(iDivUp(m, threads.x), iDivUp(n, threads.y));
+
+        dim3 blocks_data(iDivUp(padding_M, threads.x), iDivUp(padding_N, threads.y));
+
+        // Padding the kernel
+        paddingKernel<TD><<<blocks_kernel, threads>>>(padded_kernel_complex, kernel_complex_device, padding_M, padding_N, m, n, ckernel_x, ckernel_y);
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        // Padding the data
+        paddingData<TD><<<blocks_data, threads>>>(padded_data_complex, data_device, padding_M, padding_N, M, N, m, n, ckernel_x, ckernel_y);
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        // Allocating memory for FFT results
+        checkCudaErrors(cudaMalloc((void**)&data_spectrum_device, sizeof(TD)*padding_M*padding_N));
+        checkCudaErrors(cudaMalloc((void**)&kernel_spectrum_device, sizeof(TD)*padding_M*padding_N));
+
+        checkCudaErrors(cufftPlan2d(&fftPlan, padding_M, padding_N, CUFFT_R2C));
+
+        FFT2D(data_spectrum_device, padded_data_complex, fftPlan, padding_M, padding_N, fftfwd, false);
+
+        FFT2D(kernel_spectrum_device, padded_kernel_complex, fftPlan, padding_M, padding_N, fftfwd, false);
+
+        multArrayComplexComplex<TD><<<blocks_data, threads>>>(data_spectrum_device, kernel_spectrum_device, padding_M, padding_N);
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        FFT2D(padded_data_complex, data_spectrum_device, fftPlan, padding_M, padding_N, fftinv, false);
+
+        depaddingData<TD><<<numBlocksNN, threadsPerBlockNN>>>(data_device, padded_data_complex, padding_M, padding_N, M, N, ckernel_x, ckernel_y);
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        if(isDataOnDevice){
+          checkCudaErrors(cudaMemcpy(data, data_device, sizeof(TD)*M*N, cudaMemcpyDeviceToHost));
+        }else{
+          result_host = (TD*)malloc(M*N*sizeof(TD));
+          checkCudaErrors(cudaMemcpy(result_host, data_device, sizeof(TD)*M*N, cudaMemcpyDeviceToHost));
+        }
+
+        // Free GPU MEMORY
+        checkCudaErrors(cudaFree(kernel_device));
+        checkCudaErrors(cudaFree(kernel_complex_device));
+        checkCudaErrors(cudaFree(padded_kernel_complex));
+        checkCudaErrors(cudaFree(padded_data_complex));
+        checkCudaErrors(cudaFree(data_spectrum_device));
+        checkCudaErrors(cudaFree(kernel_spectrum_device));
+        checkCudaErrors(cudaFree(padded_data_complex));
+        checkCudaErrors(cudaFree(data_device));
+        checkCudaErrors(cufftDestroy(fftPlan));
+
+        if(isDataOnDevice){
+          return data;
+        }else{
+          return result_host;
+        }
+}
+
 __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *noise, float noise_cut, float xobs, float yobs, double DELTAX, double DELTAY, int M, int N, int numVisibilities)
 {
-        int v = threadIdx.x + blockDim.x * blockIdx.x;
+        const int v = threadIdx.x + blockDim.x * blockIdx.x;
 
         if (v < numVisibilities) {
                 int x0, y0;
@@ -765,14 +975,11 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
                                         cosk = cospif(2.0*(Ukv+Vkv+Wkv));
                                         sink = sinpif(2.0*(Ukv+Vkv+Wkv));
                     #endif
-                                        Vmodel.x +=  I_sky * cosk;
-                                        Vmodel.y += -I_sky * sink;
+                                        Vmodel = make_cuComplex(Vmodel.x + I_sky * cosk, Vmodel.y + I_sky * sink);
                                 }
                         }
                 }
-
-                Vm[v].x = Vmodel.x;
-                Vm[v].y = Vmodel.y;
+                Vm[v] = Vmodel;
         }
 }
 
@@ -782,9 +989,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         std::vector<cufftComplex> g_Vo(M*N);
         std::vector<double3> g_uvw(M*N);
         std::vector<float> S(M*N);
-        cufftComplex complex_zero;
-        complex_zero.x = 0.0f;
-        complex_zero.y = 0.0f;
+        cufftComplex complex_zero = complexZero<cufftComplex>();
 
         double3 double3_zero;
         double3_zero.x = 0.0;
@@ -889,8 +1094,6 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 fields[f].visibilities[i][s].uvw.resize(visCounter);
                                 fields[f].visibilities[i][s].Vo.resize(visCounter);
 
-                                cufftComplex zero;
-
                                 fields[f].visibilities[i][s].Vm.resize(visCounter);
                                 memset(&fields[f].visibilities[i][s].Vm[0], 0, fields[f].visibilities[i][s].Vm.size() * sizeof(cufftComplex));
 
@@ -960,7 +1163,7 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                                         *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
                                         UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = UVpow2 / datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV;
+                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
                                 }
                         }
                 }
@@ -996,9 +1199,7 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
         double deltau_meters = fabs(deltau) * (LIGHTSPEED/freq);
         double deltav_meters = fabs(deltav) * (LIGHTSPEED/freq);
 
-        cufftComplex complex_zero;
-        complex_zero.x = 0.0f;
-        complex_zero.y = 0.0f;
+        cufftComplex complex_zero = complexZero<cufftComplex>();
 
         std::fill_n(Vm_gridded.begin(), M*N, complex_zero);
 
@@ -1046,37 +1247,37 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
-                                                             sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        gpuErrchk(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
-                                                             sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
+                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
+                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].uvw,
-                                                             sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
-                                                             sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].weight,
-                                                             sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].uvw,
+                                                                   sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
+                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].weight,
+                                                                   sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
                                         // Copy original Vo visibilities to host
                                         fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
 
                                         // Copy gridded model visibilities to device
-                                        gpuErrchk(cudaMemcpy(vars_gpu[0].device_V, gridded_visibilities[0].data(), sizeof(cufftComplex) * M * N,
-                                                             cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(vars_gpu[0].device_V, gridded_visibilities[0].data(), sizeof(cufftComplex) * M * N,
+                                                                   cudaMemcpyHostToDevice));
 
                                         // Copy original (u,v) positions and weights to host and device
                                         fields[f].visibilities[i][s].uvw.assign(fields[f].backup_visibilities[i][s].uvw.begin(), fields[f].backup_visibilities[i][s].uvw.end());
                                         fields[f].visibilities[i][s].weight.assign(fields[f].backup_visibilities[i][s].weight.begin(), fields[f].backup_visibilities[i][s].weight.end());
 
-                                        gpuErrchk(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
-                                                             sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
-                                                             cudaMemcpyHostToDevice));
-                                        gpuErrchk(cudaMemcpy(fields[f].device_visibilities[i][s].Vo, fields[f].backup_visibilities[i][s].Vo.data(),
-                                                             sizeof(cufftComplex) * fields[f].backup_visibilities[i][s].Vo.size(),
-                                                             cudaMemcpyHostToDevice));
-                                        gpuErrchk(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
-                                                             sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
+                                                                   sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
+                                                                   cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].Vo, fields[f].backup_visibilities[i][s].Vo.data(),
+                                                                   sizeof(cufftComplex) * fields[f].backup_visibilities[i][s].Vo.size(),
+                                                                   cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
+                                                                   sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
 
                                         UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
@@ -1130,38 +1331,38 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
-                                                             sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        gpuErrchk(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
-                                                             sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
+                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
+                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].uvw,
-                                                             sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
-                                                             sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        gpuErrchk(cudaMalloc(&fields[f].device_visibilities[i][s].weight,
-                                                             sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].uvw,
+                                                                   sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
+                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].weight,
+                                                                   sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
                                         // Copy original Vo visibilities to host
                                         fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
 
                                         // Copy gridded model visibilities to device
-                                        gpuErrchk(cudaMemcpy(vars_gpu[i % num_gpus].device_V, gridded_visibilities[j].data(),
-                                                             sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(vars_gpu[i % num_gpus].device_V, gridded_visibilities[j].data(),
+                                                                   sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
 
                                         // Copy original (u,v) positions and weights to host and device
 
                                         fields[f].visibilities[i][s].uvw.assign(fields[f].backup_visibilities[i][s].uvw.begin(), fields[f].backup_visibilities[i][s].uvw.end());
                                         fields[f].visibilities[i][s].weight.assign(fields[f].backup_visibilities[i][s].weight.begin(), fields[f].backup_visibilities[i][s].weight.end());
 
-                                        gpuErrchk(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
-                                                             sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
-                                                             cudaMemcpyHostToDevice));
-                                        gpuErrchk(cudaMemcpy(fields[f].device_visibilities[i][s].Vo, fields[f].backup_visibilities[i][s].Vo.data(),
-                                                             sizeof(cufftComplex) * fields[f].backup_visibilities[i][s].Vo.size(),
-                                                             cudaMemcpyHostToDevice));
-                                        gpuErrchk(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
-                                                             sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
+                                                                   sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
+                                                                   cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].Vo, fields[f].backup_visibilities[i][s].Vo.data(),
+                                                                   sizeof(cufftComplex) * fields[f].backup_visibilities[i][s].Vo.size(),
+                                                                   cudaMemcpyHostToDevice));
+                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
+                                                                   sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
 
                                         UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
@@ -1196,10 +1397,8 @@ __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int nu
 
         for(int g=0; g<num_gpus; g++) {
                 cudaSetDevice((g%num_gpus) + firstgpu);
-                if ((cufftPlan2d(&vars_gpu[g].plan, N, M, CUFFT_C2C))!= CUFFT_SUCCESS) {
-                        printf("cufft plan error\n");
-                        exit(-1);
-                }
+                checkCudaErrors(cufftPlan2d(&vars_gpu[g].plan, N, M, CUFFT_C2C));
+
         }
 }
 
@@ -1208,21 +1407,14 @@ __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHa
 
         if(shift) {
                 fftshift_2D << < numBlocksNN, threadsPerBlockNN >> > (input_data, M, N);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
         }
 
-        if ((cufftExecC2C(plan,
-                          (cufftComplex *) input_data,
-                          (cufftComplex *) output_data,
-                          direction)) != CUFFT_SUCCESS) {
-                printf("CUFFT exec error\n");
-                goToError();
-        }
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cufftExecC2C(plan, (cufftComplex *) input_data, (cufftComplex *) output_data, direction));
 
         if(shift) {
                 fftshift_2D << < numBlocksNN, threadsPerBlockNN >> > (output_data, M, N);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
 
         }
 
@@ -1274,7 +1466,7 @@ __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHa
    }*/
 __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, int numVisibilities)
 {
-        int i = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
         if (i < numVisibilities) {
                 if(UVW[i].x < 0.0) {
@@ -1316,8 +1508,8 @@ __device__ float GaussianBeam(float distance, float lambda, float antenna_diamet
 __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, int primary_beam)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float atten_result, atten;
 
@@ -1342,8 +1534,8 @@ __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_c
 
 __device__ cufftComplex WKernel(double w, float xobs, float yobs, double DELTAX, double DELTAY)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         cufftComplex Wk;
         float cosk, sink;
@@ -1370,8 +1562,8 @@ __device__ cufftComplex WKernel(double w, float xobs, float yobs, double DELTAX,
 
 __global__ void distance_image(float *distance_image, float xobs, float yobs, float dist_arcsec, double DELTAX, double DELTAY, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         int x0 = xobs;
         int y0 = yobs;
@@ -1382,7 +1574,7 @@ __global__ void distance_image(float *distance_image, float xobs, float yobs, fl
         distance_image[N*i+j] = 1.0f;
 
         if(dist < dist_arcsec)
-          distance_image[N*i+j] = 0.0f;
+                distance_image[N*i+j] = 0.0f;
 
 
 
@@ -1390,8 +1582,8 @@ __global__ void distance_image(float *distance_image, float xobs, float yobs, fl
 
 __global__ void total_attenuation(float *total_atten, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, long N, int primary_beam)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float attenPerFreq = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
@@ -1400,8 +1592,8 @@ __global__ void total_attenuation(float *total_atten, float antenna_diameter, fl
 
 __global__ void mean_attenuation(float *total_atten, int channels, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         total_atten[N*i+j] /= channels;
 }
@@ -1409,8 +1601,8 @@ __global__ void mean_attenuation(float *total_atten, int channels, long N)
 
 __global__ void weight_image(float *weight_image, float *total_atten, float noise_jypix, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float atten = total_atten[N*i+j];
         weight_image[N*i+j] += (atten / noise_jypix) * (atten / noise_jypix);
@@ -1418,8 +1610,8 @@ __global__ void weight_image(float *weight_image, float *total_atten, float nois
 
 __global__ void noise_image(float *noise_image, float *weight_image, float noise_jypix, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float noiseval;
         noiseval = sqrtf(1.0/weight_image[N*i+j]);
@@ -1428,14 +1620,12 @@ __global__ void noise_image(float *noise_image, float *weight_image, float noise
 
 __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY, int primary_beam)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
-        image[N*i+j].x = image[N*i+j].x * atten * fg_scale;
-        //image[N*i+j].x = image[N*i+j].x * atten;
-        image[N*i+j].y = 0.0;
+        image[N*i+j] = make_cuComplex(image[N*i+j].x * atten * fg_scale, 0.0);
 }
 
 
@@ -1447,11 +1637,10 @@ __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_c
 __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, double yphs)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float u,v, phase, c, s;
-        cufftComplex cphase;
         double upix = xphs/(double)M;
         double vpix = yphs/(double)N;
 
@@ -1475,9 +1664,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
         s = sinpif(phase);
     #endif
 
-        cphase.x = c;
-        cphase.y = s;
-        data[N*i+j] = multComplexComplex(data[N*i+j], cphase);
+        data[N*i+j] = multComplexComplex<cufftComplex>(data[N*i+j], make_cuComplex(c, s));
 }
 
 
@@ -1486,7 +1673,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
  */
 __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
 {
-        int i = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.x + blockDim.x * blockIdx.x;
         int i1, i2, j1, j2;
         double du, dv;
         double2 uv;
@@ -1527,14 +1714,11 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                                 Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
                                 Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
 
-                                Vm[i].x = Zreal;
-                                Vm[i].y = Zimag;
+                                Vm[i] = make_cuComplex(Zreal, Zimag);
                         }else{
                                 weight[i] = 0.0f;
                         }
                 }else{
-                        //Vm[i].x = 0.0f;
-                        //Vm[i].y = 0.0f;
                         weight[i] = 0.0f;
                 }
 
@@ -1545,7 +1729,7 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
 
 __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
 {
-        int i = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.x + blockDim.x * blockIdx.x;
         double f_j, f_k;
         int j, k;
         double2 uv;
@@ -1583,10 +1767,9 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
 
 
 __global__ void residual(cufftComplex *Vr, cufftComplex *Vm, cufftComplex *Vo, long numVisibilities){
-        int i = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.x + blockDim.x * blockIdx.x;
         if (i < numVisibilities) {
-                Vr[i].x = Vm[i].x - Vo[i].x;
-                Vr[i].y = Vm[i].y - Vo[i].y;
+                Vr[i] = make_cuComplex(Vm[i].x - Vo[i].x, Vm[i].y - Vo[i].y);
         }
 }
 
@@ -1594,8 +1777,8 @@ __global__ void residual(cufftComplex *Vr, cufftComplex *Vm, cufftComplex *Vo, l
 
 __global__ void clipWNoise(cufftComplex *fg_image, float *noise, float *I, long N, float noise_cut, float MINPIX, float eta)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
 
         if(noise[N*i+j] > noise_cut) {
@@ -1608,14 +1791,13 @@ __global__ void clipWNoise(cufftComplex *fg_image, float *noise, float *I, long 
 
         }
 
-        fg_image[N*i+j].x = I[N*i+j];
-        fg_image[N*i+j].y = 0;
+        fg_image[N*i+j] = make_cuComplex(I[N*i+j], 0.0);
 }
 
 __global__ void clip2IWNoise(float *noise, float *I, long N, long M, float noise_cut, float MINPIX, float alpha_start, float eta, float threshold, int schedule)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(noise[N*i+j] > noise_cut) {
                 if(eta > 0.0) {
@@ -1635,8 +1817,8 @@ __global__ void clip2IWNoise(float *noise, float *I, long N, long M, float noise
 
 __global__ void getGandDGG(float *gg, float *dgg, float *xi, float *g, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         gg[N*i+j] = g[N*i+j] * g[N*i+j];
         dgg[N*i+j] = (xi[N*i+j] + g[N*i+j]) * xi[N*i+j];
@@ -1644,8 +1826,8 @@ __global__ void getGandDGG(float *gg, float *dgg, float *xi, float *g, long N)
 
 __global__ void getGGandDGG(float *gg, float *dgg, float* xi, float* g, long N, long M, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float gg_temp;
         float dgg_temp;
@@ -1660,8 +1842,8 @@ __global__ void getGGandDGG(float *gg, float *dgg, float* xi, float* g, long N, 
 
 __global__ void clip(cufftComplex *I, long N, float MINPIX)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(I[N*i+j].x < MINPIX && MINPIX >= 0.0) {
                 I[N*i+j].x = MINPIX;
@@ -1671,8 +1853,8 @@ __global__ void clip(cufftComplex *I, long N, float MINPIX)
 
 __global__ void clip(float *I, long N, float MINPIX)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(I[N*i+j] < MINPIX && MINPIX >= 0.0) {
                 I[N*i+j] = MINPIX;
@@ -1681,8 +1863,8 @@ __global__ void clip(float *I, long N, float MINPIX)
 
 __global__ void clip2I(float *I, long N, float MINPIX)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(I[N*i+j] < MINPIX && MINPIX >= 0.0) {
                 I[N*i+j] = MINPIX;
@@ -1691,8 +1873,8 @@ __global__ void clip2I(float *I, long N, float MINPIX)
 
 __global__ void newP(float *p, float *xi, float xmin, float MINPIX, float eta, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         xi[N*i+j] *= xmin;
         if(p[N*i+j] + xi[N*i+j] > -1.0*eta*MINPIX) {
@@ -1706,8 +1888,8 @@ __global__ void newP(float *p, float *xi, float xmin, float MINPIX, float eta, l
 
 __global__ void newP(float*p, float*xi, float xmin, long N, long M, float MINPIX, float eta, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         xi[N*M*image+N*i+j] *= xmin;
 
@@ -1721,8 +1903,8 @@ __global__ void newP(float*p, float*xi, float xmin, long N, long M, float MINPIX
 
 __global__ void newPNoPositivity(float *p, float *xi, float xmin, long N, long M, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         xi[N*M*image+N*i+j] *= xmin;
         p[N*M*image+N*i+j] += xi[N*M*image+N*i+j];
@@ -1730,8 +1912,8 @@ __global__ void newPNoPositivity(float *p, float *xi, float xmin, long N, long M
 
 __global__ void evaluateXt(float *xt, float *pcom, float *xicom, float x, float MINPIX, float eta, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(pcom[N*i+j] + x * xicom[N*i+j] > -1.0*eta*MINPIX) {
                 xt[N*i+j] = pcom[N*i+j] + x * xicom[N*i+j];
@@ -1743,8 +1925,8 @@ __global__ void evaluateXt(float *xt, float *pcom, float *xicom, float x, float 
 
 __global__ void evaluateXt(float*xt, float*pcom, float*xicom, float x, long N, long M, float MINPIX, float eta, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(pcom[N*M*image+N*i+j] + x * xicom[N*M*image+N*i+j] > -1.0*eta*MINPIX) {
                 xt[N*M*image+N*i+j] = pcom[N*M*image+N*i+j] + x * xicom[N*M*image+N*i+j];
@@ -1756,8 +1938,8 @@ __global__ void evaluateXt(float*xt, float*pcom, float*xicom, float x, long N, l
 
 __global__ void evaluateXtNoPositivity(float *xt, float *pcom, float *xicom, float x, long N, long M, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         xt[N*M*image+N*i+j] = pcom[N*M*image+N*i+j] + x * xicom[N*M*image+N*i+j];
 }
@@ -1765,7 +1947,7 @@ __global__ void evaluateXtNoPositivity(float *xt, float *pcom, float *xicom, flo
 
 __global__ void chi2Vector(float *chi2, cufftComplex *Vr, float *w, long numVisibilities)
 {
-        int i = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
         if (i < numVisibilities) {
                 chi2[i] =  w[i] * ((Vr[i].x * Vr[i].x) + (Vr[i].y * Vr[i].y));
@@ -1775,8 +1957,8 @@ __global__ void chi2Vector(float *chi2, cufftComplex *Vr, float *w, long numVisi
 
 __device__ float calculateL1norm(float *I, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
         float c = I[N*M*index+N*i+j];
 
         float l1 = 0.0f;
@@ -1790,16 +1972,16 @@ __device__ float calculateL1norm(float *I, float noise, float noise_cut, int ind
 
 __global__ void L1Vector(float *L1, float *noise, float *I, long N, long M, float noise_cut, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         L1[N*i+j] = calculateL1norm(I, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __device__ float calculateS(float *I, float G, float eta, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
         float c = I[N*M*index+N*i+j];
 
         float S = 0.0f;
@@ -1812,16 +1994,16 @@ __device__ float calculateS(float *I, float G, float eta, float noise, float noi
 }
 __global__ void SVector(float *S, float *noise, float *I, long N, long M, float noise_cut, float MINPIX, float eta, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         S[N*i+j] = calculateS(I, MINPIX, eta, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __device__ float calculateQP(float *I, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
         float c, l, r, d, u;
 
         float qp = 0.0f;
@@ -1849,8 +2031,8 @@ __device__ float calculateQP(float *I, float noise, float noise_cut, int index, 
 }
 __global__ void QPVector(float *Q, float *noise, float *I, long N, long M, float noise_cut, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         Q[N*i+j] = calculateQP(I, noise[N*i+j], noise_cut, index, M, N);
 }
@@ -1858,8 +2040,8 @@ __global__ void QPVector(float *Q, float *noise, float *I, long N, long M, float
 __device__ float calculateTV(float *I, float noise, float noise_cut, int index, int M, int N)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float c, r, d;
         float tv = 0.0f;
@@ -1885,8 +2067,8 @@ __device__ float calculateTV(float *I, float noise, float noise_cut, int index, 
 
 __global__ void TVVector(float *TV, float *noise, float *I, long N, long M, float noise_cut, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         TV[N*i+j] = calculateTV(I, noise[N*i+j], noise_cut, index, M, N);
 
@@ -1895,8 +2077,8 @@ __global__ void TVVector(float *TV, float *noise, float *I, long N, long M, floa
 __device__ float calculateTSV(float *I, float noise, float noise_cut, int index, int M, int N)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float c, r, d;
         float tv = 0.0f;
@@ -1920,8 +2102,8 @@ __device__ float calculateTSV(float *I, float noise, float noise_cut, int index,
 
 __global__ void TSVVector(float *STV, float *noise, float *I, long N, long M, float noise_cut, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         STV[N*i+j] = calculateTSV(I, noise[N*i+j], noise_cut, index, M, N);
 
@@ -1929,8 +2111,8 @@ __global__ void TSVVector(float *STV, float *noise, float *I, long N, long M, fl
 
 __device__ float calculateL(float *I, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float Dx, Dy;
         float L = 0.0f;
@@ -1958,16 +2140,16 @@ __device__ float calculateL(float *I, float noise, float noise_cut, int index, i
 
 __global__ void LVector(float *L, float *noise, float *I, long N, long M, float noise_cut, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         L[N*i+j] = calculateL(I, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __global__ void searchDirection(float *g, float *xi, float *h, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         g[N*i+j] = -xi[N*i+j];
         xi[N*i+j] = h[N*i+j] = g[N*i+j];
@@ -1975,40 +2157,40 @@ __global__ void searchDirection(float *g, float *xi, float *h, long N)
 
 __global__ void searchDirection_LBFGS(float *xi, long N, long M, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         xi[M*N*image+N*i+j] *= -1.0f;
 }
 
 __global__ void getDot_LBFGS_ff(float *aux_vector, float *vec_1, float *vec_2, int k, int h, int M, int N, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         aux_vector[N*i+j] = vec_1[M*N*image*k + M*N*image + (N*i+j)]*vec_2[M*N*image*h + M*N*image + (N*i+j)];
 }
 
 __global__ void updateQ (float *d_q, float alpha, float *d_y, int k, int M, int N, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         d_q[M*N*image+N*i+j] += alpha *d_y[M*N*image + M*N*k + (N*i+j)];
 }
 
 __global__ void getR (float *d_r, float *d_q, float scalar, int M, int N, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         d_r[M*N*image+N*i+j] = d_q[M*N*image+N*i+j] * scalar;
 }
 
 __global__ void calculateSandY (float *d_y, float *d_s, float *p, float *xi, float *p_old, float *xi_old, int iter, int M, int N, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         d_y[M*N*image*iter + M*N*image + (N*i+j)] = xi[M*N*image+N*i+j] - (-1.0f*xi_old[M*N*image+N*i+j]);
         d_s[M*N*image*iter + M*N*image + (N*i+j)] = p[M*N*image+N*i+j] - p_old[M*N*image+N*i+j];
@@ -2017,8 +2199,8 @@ __global__ void calculateSandY (float *d_y, float *d_s, float *p, float *xi, flo
 
 __global__ void searchDirection(float* g, float* xi, float* h, long N, long M, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         g[M*N*image+N*i+j] = -xi[M*N*image+N*i+j];
 
@@ -2027,8 +2209,8 @@ __global__ void searchDirection(float* g, float* xi, float* h, long N, long M, i
 
 __global__ void newXi(float *g, float *xi, float *h, float gam, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         g[N*i+j] = -xi[N*i+j];
         xi[N*i+j] = h[N*i+j] = g[N*i+j] + gam * h[N*i+j];
@@ -2036,8 +2218,8 @@ __global__ void newXi(float *g, float *xi, float *h, float gam, long N)
 
 __global__ void newXi(float* g, float* xi, float* h, float gam, long N, long M, int image)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         g[M*N*image+N*i+j] = -xi[M*N*image+N*i+j];
 
@@ -2046,8 +2228,8 @@ __global__ void newXi(float* g, float* xi, float* h, float gam, long N, long M, 
 
 __global__ void restartDPhi(float *dphi, float *dChi2, float *dH, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         dphi[N*i+j] = 0.0;
         dChi2[N*i+j] = 0.0;
@@ -2058,8 +2240,8 @@ __global__ void restartDPhi(float *dphi, float *dChi2, float *dH, long N)
 
 __device__ float calculateDNormL1(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float dL1 = 0.0f;
 
@@ -2075,16 +2257,16 @@ __device__ float calculateDNormL1(float *I, float lambda, float noise, float noi
 
 __global__ void DL1NormK(float *dL1, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         dL1[N*i+j]  = calculateDNormL1(I, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __device__ float calculateDS(float *I, float G, float eta, float lambda, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float dS = 0.0f;
 
@@ -2099,16 +2281,16 @@ __device__ float calculateDS(float *I, float G, float eta, float lambda, float n
 
 __global__ void DS(float *dS, float *I, float *noise, float noise_cut, float lambda, float MINPIX, float eta, long N, long M, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         dS[N*i+j]  = calculateDS(I, MINPIX, eta, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __device__ float calculateDQ(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float dQ = 0.0f;
         float c, d, u, r, l;
@@ -2136,8 +2318,8 @@ __device__ float calculateDQ(float *I, float lambda, float noise, float noise_cu
 
 __global__ void DQ(float *dQ, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
 
         dQ[N*i+j] = calculateDQ(I, lambda, noise[N*i+j], noise_cut, index, M, N);
@@ -2147,8 +2329,8 @@ __global__ void DQ(float *dQ, float *I, float *noise, float noise_cut, float lam
 __device__ float calculateDTV(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
         float c, d, u, r, l, dl_corner, ru_corner;
 
         float num0, num1, num2;
@@ -2200,8 +2382,8 @@ __device__ float calculateDTV(float *I, float lambda, float noise, float noise_c
 }
 __global__ void DTV(float *dTV, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
         float center, down, up, right, left, dl_corner, ru_corner;
 
 
@@ -2211,8 +2393,8 @@ __global__ void DTV(float *dTV, float *I, float *noise, float noise_cut, float l
 __device__ float calculateDTSV(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
         float c, d, u, r, l, dl_corner, ru_corner;
 
         float dstv = 0.0f;
@@ -2239,8 +2421,8 @@ __device__ float calculateDTSV(float *I, float lambda, float noise, float noise_
 
 __global__ void DTSV(float *dSTV, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
         float center, down, up, right, left, dl_corner, ru_corner;
 
 
@@ -2249,8 +2431,8 @@ __global__ void DTSV(float *dSTV, float *I, float *noise, float noise_cut, float
 
 __device__ float calculateDL(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float c, d, u, r, l, dl_corner, dr_corner, lu_corner, ru_corner, d2, u2, l2, r2;
 
@@ -2290,8 +2472,8 @@ __device__ float calculateDL(float *I, float lambda, float noise, float noise_cu
 
 __global__ void DL(float *dL, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         dL[N*i+j] = calculateDL(I, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
@@ -2300,8 +2482,8 @@ __global__ void DL(float *dL, float *I, float *noise, float noise_cut, float lam
 __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, int primary_beam)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         cg::thread_block cta = cg::this_thread_block();
 
@@ -2357,8 +2539,8 @@ __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr,
 __global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, int primary_beam)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         int x0 = phs_xobs;
         int y0 = phs_yobs;
@@ -2393,32 +2575,32 @@ __global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW
 
 __global__ void DPhi(float *dphi, float *dchi2, float *dH, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         dphi[N*i+j] = dchi2[N*i+j] + dH[N*i+j];
 }
 
 __global__ void AddToDPhi(float *dphi, float *dgi, long N, long M, int index)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         dphi[N*M*index+N*i+j] += dgi[N*i+j];
 }
 
 __global__ void substraction(float *x, cufftComplex *xc, float *gc, float lambda, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         x[N*i+j] = xc[N*i+j].x - lambda*gc[N*i+j];
 }
 
 __global__ void projection(float *px, float *x, float MINPIX, long N){
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
 
         if(INFINITY < x[N*i+j]) {
@@ -2435,24 +2617,24 @@ __global__ void projection(float *px, float *x, float MINPIX, long N){
 }
 
 __global__ void normVectorCalculation(float *normVector, float *gc, long N){
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         normVector[N*i+j] = gc[N*i+j] * gc[N*i+j];
 }
 
 __global__ void copyImage(cufftComplex *p, float *device_xt, long N)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         p[N*i+j].x = device_xt[N*i+j];
 }
 
 __global__ void calculateInu(cufftComplex *I_nu, float* I, float nu, float nu_0, float MINPIX, float eta, long N, long M)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float I_nu_0, alpha, nudiv_pow_alpha, nudiv;
 
@@ -2474,8 +2656,8 @@ __global__ void calculateInu(cufftComplex *I_nu, float* I, float nu, float nu_0,
 
 __global__ void DChi2_total_alpha(float *noise, float *dchi2_total, float *dchi2, float *I, float nu, float nu_0, float noise_cut, float fg_scale, float threshold, long N, long M)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float I_nu_0, alpha, dalpha, dI_nu_0;
         float nudiv = nu/nu_0;
@@ -2499,8 +2681,8 @@ __global__ void DChi2_total_alpha(float *noise, float *dchi2_total, float *dchi2
 __global__ void DChi2_total_I_nu_0(float *noise, float *dchi2_total, float *dchi2, float *I, float nu, float nu_0, float noise_cut, float fg_scale, float threshold, long N, long M)
 {
 
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float I_nu_0, alpha, dI_nu_0;
         float nudiv = nu/nu_0;
@@ -2518,8 +2700,8 @@ __global__ void DChi2_total_I_nu_0(float *noise, float *dchi2_total, float *dchi
 
 __global__ void chainRule2I(float *chain, float *noise, float *I, float nu, float nu_0, float noise_cut, float fg_scale, long N, long M)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float I_nu_0, alpha, dalpha, dI_nu_0;
         float nudiv = nu/nu_0;
@@ -2536,8 +2718,8 @@ __global__ void chainRule2I(float *chain, float *noise, float *I, float nu, floa
 
 __global__ void DChi2_2I(float *noise, float *chain, float *I, float *dchi2, float *dchi2_total, float threshold, float noise_cut, int image, long N, long M)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(noise[N*i+j] < noise_cut && image)
         {
@@ -2555,8 +2737,8 @@ __global__ void DChi2_2I(float *noise, float *chain, float *I, float *dchi2, flo
 
 __global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float noise_cut, float nu, float nu_0, float *w, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, double DELTAX, double DELTAY, float sum_weights, long N, long M, int primary_beam)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float alpha, nudiv, nudiv_pow_alpha, atten;
 
@@ -2579,8 +2761,8 @@ __global__ void I_nu_0_Noise(float *noise_I, float *images, float *noise, float 
 
 __global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0, float *w, double3 *UVW, cufftComplex *Vr, float *noise, float noise_cut, double DELTAX, double DELTAY, float xobs, float yobs, float antenna_diameter, float pb_factor, float pb_cutoff, float fg_scale, long numVisibilities, long N, long M, int primary_beam)
 {
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float I_nu, I_nu_0, alpha, nudiv, nudiv_pow_alpha, log_nu, Ukv, Vkv, cosk, sink, x, y, dchi2, sum_noise, atten;
         int x0, y0;
@@ -2624,8 +2806,8 @@ __global__ void alpha_Noise(float *noise_I, float *images, float nu, float nu_0,
 }
 
 __global__ void noise_reduction(float *noise_I, long N, long M){
-        int j = threadIdx.x + blockDim.x * blockIdx.x;
-        int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(noise_I[N*i+j] > 0.0f)
                 noise_I[N*i+j] = 1/sqrt(noise_I[N*i+j]);
@@ -2670,35 +2852,35 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         // PHASE_ROTATE
                                         phase_rotate <<< numBlocksNN, threadsPerBlockNN >>>
                                         (vars_gpu[0].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
-                                        gpuErrchk(cudaDeviceSynchronize());
+                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
 
-                                                        gpuErrchk(cudaMemset(vars_gpu[0].device_chi2, 0, sizeof(float) * max_number_vis));
+                                                        checkCudaErrors(cudaMemset(vars_gpu[0].device_chi2, 0, sizeof(float) * max_number_vis));
 
                                                         // BILINEAR INTERPOLATION
                                                         vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                                         (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                                         //DFT 2D
                                                         /*DFT2D <<<fields[f].visibilities[i][s].numBlocksUV,
                                                            fields[f].visibilities[i][s].threadsPerBlockUV>>>(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_I_nu, fields[f].device_visibilities[i][s].uvw, device_noise_image, noise_cut, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, M, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                           gpuErrchk(cudaDeviceSynchronize());*/
+                                                           checkCudaErrors(cudaDeviceSynchronize());*/
 
                                                         // RESIDUAL CALCULATION
                                                         residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                                         (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                                         ////chi 2 VECTOR
                                                         chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                                         (vars_gpu[0].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                                         //REDUCTIONS
                                                         //chi2
@@ -2728,27 +2910,27 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
                                         //PHASE_ROTATE
                                         phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[i % num_gpus].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
-                                        gpuErrchk(cudaDeviceSynchronize());
+                                        checkCudaErrors(cudaDeviceSynchronize());
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
 
-                                                        gpuErrchk(cudaMemset(vars_gpu[i % num_gpus].device_chi2, 0, sizeof(float)*max_number_vis));
+                                                        checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_chi2, 0, sizeof(float)*max_number_vis));
                                                         // BILINEAR INTERPOLATION
                                                         vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                                         (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                                         // RESIDUAL CALCULATION
                                                         residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                                         (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                                         ////chi2 VECTOR
                                                         chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>> (vars_gpu[i % num_gpus].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
 
                                                         result = deviceReduce<float>(vars_gpu[i % num_gpus].device_chi2,
@@ -2789,14 +2971,14 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s < datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                        gpuErrchk(cudaMemset(vars_gpu[0].device_dchi2, 0, sizeof(float) *
-                                                                             M*N));
+                                                        checkCudaErrors(cudaMemset(vars_gpu[0].device_dchi2, 0, sizeof(float) *
+                                                                                   M*N));
                                                         //size_t shared_memory;
                                                         //shared_memory = 3*fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(double) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(float) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(cufftComplex);
                                                         DChi2 <<< numBlocksNN, threadsPerBlockNN >>>
                                                         (device_noise_image, vars_gpu[0].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
                                                         //DChi2_SharedMemory<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[0].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
 
                                                         if (flag_opt % 2 == 0)
@@ -2805,7 +2987,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                         else
                                                                 DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
                                                                 (device_noise_image, result_dchi2, vars_gpu[0].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                                 }
                                         }
@@ -2824,13 +3006,13 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                         cudaGetDevice(&gpu_id);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                        gpuErrchk(cudaMemset(vars_gpu[i % num_gpus].device_dchi2, 0, sizeof(float) *
-                                                                             M*N));
+                                                        checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_dchi2, 0, sizeof(float) *
+                                                                                   M*N));
                                                         //size_t shared_memory;
                                                         //shared_memory = 3*fields[f].numVisibilitiesPerFreq[i]*sizeof(float) + fields[f].numVisibilitiesPerFreq[i]*sizeof(cufftComplex);
                                                         DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[i % num_gpus].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
                                                         //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[i%num_gpus].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
 
                                           #pragma omp critical
@@ -2841,7 +3023,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                                 else
                                                                         DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
                                                                         (device_noise_image, result_dchi2, vars_gpu[i % num_gpus].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                                gpuErrchk(cudaDeviceSynchronize());
+                                                                checkCudaErrors(cudaDeviceSynchronize());
                                                         }
                                                 }
                                         }
@@ -2859,7 +3041,7 @@ __host__ void linkAddToDPhi(float *dphi, float *dgi, int index)
 {
         cudaSetDevice(firstgpu);
         AddToDPhi<<<numBlocksNN, threadsPerBlockNN>>>(dphi, dgi, N, M, index);
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());
 };
 
 __host__ void defaultNewP(float*p, float*xi, float xmin, int image)
@@ -2885,31 +3067,31 @@ __host__ void particularEvaluateXt(float*xt, float*pcom, float*xicom, float x, i
 __host__ void linkClipWNoise2I(float *I)
 {
         clip2IWNoise<<<numBlocksNN, threadsPerBlockNN>>>(device_noise_image, I, N, M, noise_cut, initial_values[0], initial_values[1], eta, threshold, flag_opt);
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());
 };
 
 __host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, int primary_beam)
 {
         apply_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, fg_scale, freq, DELTAX, DELTAY, primary_beam);
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());
 };
 
 __host__ void linkCalculateInu2I(cufftComplex *image, float *I, float freq)
 {
         calculateInu<<<numBlocksNN, threadsPerBlockNN>>>(image, I, freq, nu_0, initial_values[0], eta, N, M);
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());
 };
 
 __host__ void linkClip(float *I)
 {
         clip<<<numBlocksNN, threadsPerBlockNN>>>(I, N, initial_values[0]);
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());
 };
 
 __host__ void linkChain2I(float *chain, float freq, float *I)
 {
         chainRule2I<<<numBlocksNN, threadsPerBlockNN>>>(chain, device_noise_image, I, freq, nu_0, noise_cut, fg_scale, N, M);
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());
 };
 
 __host__ float L1Norm(float *I, float * ds, float penalization_factor, int mod, int order, int index)
@@ -2920,7 +3102,7 @@ __host__ float L1Norm(float *I, float * ds, float penalization_factor, int mod, 
         if(iter > 0 && penalization_factor)
         {
                 L1Vector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
                 resultL1norm  = deviceReduce<float>(ds, M*N);
         }
 
@@ -2935,7 +3117,7 @@ __host__ void DL1Norm(float *I, float *dgi, float penalization_factor, int mod, 
         {
                 if(flag_opt%2 == index) {
                         DL1NormK<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, N, M, index);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
 };
@@ -2949,7 +3131,7 @@ __host__ float SEntropy(float *I, float * ds, float penalization_factor, int mod
         if(iter > 0 && penalization_factor)
         {
                 SVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, initial_values[index], eta, index);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N);
         }
         final_S = resultS;
@@ -2964,7 +3146,7 @@ __host__ void DEntropy(float *I, float *dgi, float penalization_factor, int mod,
         {
                 if(flag_opt%2 == index) {
                         DS<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, initial_values[index], eta, N, M, index);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
 };
@@ -2977,7 +3159,7 @@ __host__ float laplacian(float *I, float * ds, float penalization_factor, int mo
         if(iter > 0 && penalization_factor)
         {
                 LVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, imageIndex);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N);
         }
         return resultS;
@@ -2991,7 +3173,7 @@ __host__ void DLaplacian(float *I, float *dgi, float penalization_factor, float 
         {
                 if(flag_opt%2 == index) {
                         DL<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, N, M, index);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
 };
@@ -3004,7 +3186,7 @@ __host__ float quadraticP(float *I, float * ds, float penalization_factor, int m
         if(iter > 0 && penalization_factor)
         {
                 QPVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N);
         }
         final_S = resultS;
@@ -3019,7 +3201,7 @@ __host__ void DQuadraticP(float *I, float *dgi, float penalization_factor, int m
         {
                 if(flag_opt%2 == index) {
                         DQ<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, N, M, index);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
 };
@@ -3032,7 +3214,7 @@ __host__ float totalvariation(float *I, float * ds, float penalization_factor, i
         if(iter > 0 && penalization_factor)
         {
                 TVVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N);
         }
         final_S = resultS;
@@ -3047,7 +3229,7 @@ __host__ void DTVariation(float *I, float *dgi, float penalization_factor, int m
         {
                 if(flag_opt%2 == index) {
                         DTV<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, N, M, index);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
 };
@@ -3060,7 +3242,7 @@ __host__ float TotalSquaredVariation(float *I, float * ds, float penalization_fa
         if(iter > 0 && penalization_factor)
         {
                 TSVVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N);
         }
         final_S = resultS;
@@ -3075,7 +3257,7 @@ __host__ void DTSVariation(float *I, float *dgi, float penalization_factor, int 
         {
                 if(flag_opt%2 == index) {
                         DTSV<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, N, M, index);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
 };
@@ -3087,8 +3269,8 @@ __host__ void calculateErrors(Image *image){
 
         cudaSetDevice(firstgpu);
 
-        gpuErrchk(cudaMalloc((void**)&errors, sizeof(float)*M*N*image->getImageCount()));
-        gpuErrchk(cudaMemset(errors, 0, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMalloc((void**)&errors, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMemset(errors, 0, sizeof(float)*M*N*image->getImageCount()));
         float sum_weights;
         for(int d=0; d<nMeasurementSets; d++) {
                 if(num_gpus == 1) {
@@ -3100,10 +3282,10 @@ __host__ void calculateErrors(Image *image){
                                                         sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                                         I_nu_0_Noise <<< numBlocksNN, threadsPerBlockNN >>>
                                                         (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
                                                         alpha_Noise <<< numBlocksNN, threadsPerBlockNN >>>
                                                         (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
-                                                        gpuErrchk(cudaDeviceSynchronize());
+                                                        checkCudaErrors(cudaDeviceSynchronize());
                                                 }
                                         }
                                 }
@@ -3127,10 +3309,10 @@ __host__ void calculateErrors(Image *image){
                                                         {
                                                                 I_nu_0_Noise << < numBlocksNN, threadsPerBlockNN >> >
                                                                 (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
-                                                                gpuErrchk(cudaDeviceSynchronize());
+                                                                checkCudaErrors(cudaDeviceSynchronize());
                                                                 alpha_Noise << < numBlocksNN, threadsPerBlockNN >> >
                                                                 (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
-                                                                gpuErrchk(cudaDeviceSynchronize());
+                                                                checkCudaErrors(cudaDeviceSynchronize());
                                                         }
                                                 }
                                         }
@@ -3140,7 +3322,7 @@ __host__ void calculateErrors(Image *image){
         }
 
         noise_reduction<<<numBlocksNN, threadsPerBlockNN>>>(errors, N, M);
-        gpuErrchk(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());
 
         image->setErrorImage(errors);
 

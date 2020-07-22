@@ -52,8 +52,8 @@ __host__ float f1dim(float x)
         float *device_xt;
         float f;
 
-        gpuErrchk(cudaMalloc((void**)&device_xt, sizeof(float)*M*N*image_count));
-        gpuErrchk(cudaMemset(device_xt, 0, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMalloc((void**)&device_xt, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMemset(device_xt, 0, sizeof(float)*M*N*image_count));
 
         imageMap* auxPtr = I->getFunctionMapping();
         //xt = pcom+x*xicom;
@@ -61,16 +61,16 @@ __host__ float f1dim(float x)
                 for(int i=0; i<I->getImageCount(); i++)
                 {
                         (auxPtr[i].evaluateXt)(device_xt, device_pcom, device_xicom, x, i);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }else{
                 for(int i=0; i<I->getImageCount(); i++)
                 {
                         evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt, device_pcom, device_xicom, x, N, M, i);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
                 /*evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt, device_pcom, device_xicom, x, N, M, 0);
-                   gpuErrchk(cudaDeviceSynchronize());*/
+                   checkCudaErrors(cudaDeviceSynchronize());*/
         }
 
         //f = (*nrfunc)(device_xt);

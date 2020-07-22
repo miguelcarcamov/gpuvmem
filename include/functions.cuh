@@ -23,6 +23,8 @@ const float RZ = 1.2196698912665045;
 enum stokes {I_s, Q_s, U_s, V_s, RR, RL, LR, LL, XX, XY, YX, YY, RX, RY, LX, LY, XR, XL, YR, YL, PP, PQ, QP, QQ, RCircular, LCircular, Linear, Ptotal, Plinear, PFtotal, PFlinear, Pangle};
 
 __host__ void goToError();
+__host__ int iDivUp(int a, int b);
+__host__ bool isPow2(unsigned int x);
 __host__ long NearestPowerOf2(long x);
 __host__ float median(std::vector<float> v);
 __host__ void readInputDat(char *file);

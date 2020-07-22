@@ -59,18 +59,18 @@ extern int it_maximum;
 
 __host__ void ConjugateGradient::allocateMemoryGpu()
 {
-        gpuErrchk(cudaMalloc((void**)&device_g, sizeof(float)*M*N*image->getImageCount()));
-        gpuErrchk(cudaMemset(device_g, 0, sizeof(float)*M*N*image->getImageCount()));
-        gpuErrchk(cudaMalloc((void**)&device_h, sizeof(float)*M*N*image->getImageCount()));
-        gpuErrchk(cudaMemset(device_h, 0, sizeof(float)*M*N*image->getImageCount()));
-        gpuErrchk(cudaMalloc((void**)&xi, sizeof(float)*M*N*image->getImageCount()));
-        gpuErrchk(cudaMemset(xi, 0, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMalloc((void**)&device_g, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMemset(device_g, 0, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMalloc((void**)&device_h, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMemset(device_h, 0, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMalloc((void**)&xi, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMemset(xi, 0, sizeof(float)*M*N*image->getImageCount()));
 
-        gpuErrchk(cudaMalloc((void**)&device_gg_vector, sizeof(float)*M*N));
-        gpuErrchk(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_gg_vector, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
 
-        gpuErrchk(cudaMalloc((void**)&device_dgg_vector, sizeof(float)*M*N));
-        gpuErrchk(cudaMemset(device_dgg_vector, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_dgg_vector, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_dgg_vector, 0, sizeof(float)*M*N));
 };
 __host__ void ConjugateGradient::deallocateMemoryGpu()
 {
@@ -101,7 +101,7 @@ __host__ void ConjugateGradient::optimize()
         for(int i=0; i < image->getImageCount(); i++)
         {
                 searchDirection<<<numBlocksNN, threadsPerBlockNN>>>(device_g, xi, device_h, N, M, i); //Search direction
-                gpuErrchk(cudaDeviceSynchronize());
+                checkCudaErrors(cudaDeviceSynchronize());
         }
         ////////////////////////////////////////////////////////////////
         for(int i=1; i <= it_maximum; i++) {
@@ -126,12 +126,12 @@ __host__ void ConjugateGradient::optimize()
                 dgg = gg = 0.0;
                 ////gg = g*g
                 ////dgg = (xi+g)*xi
-                gpuErrchk(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
-                gpuErrchk(cudaMemset(device_dgg_vector, 0, sizeof(float)*M*N));
+                checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
+                checkCudaErrors(cudaMemset(device_dgg_vector, 0, sizeof(float)*M*N));
                 for(int i=0; i < image->getImageCount(); i++)
                 {
                         getGGandDGG<<<numBlocksNN, threadsPerBlockNN>>>(device_gg_vector, device_dgg_vector, xi, device_g, N, M, i);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
                 ////getSums (Reductions) of gg dgg
                 gg = deviceReduce<float>(device_gg_vector, M*N);
@@ -149,7 +149,7 @@ __host__ void ConjugateGradient::optimize()
                 for(int i=0; i < image->getImageCount(); i++)
                 {
                         newXi<<<numBlocksNN, threadsPerBlockNN>>>(device_g, xi, device_h, gam, N, M, i);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
                 end = omp_get_wtime();
                 double wall_time = end-start;

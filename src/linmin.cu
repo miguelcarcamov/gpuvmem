@@ -53,16 +53,16 @@ __host__ void linmin(float *p, float *xi, float *fret, float (*func)(float*)) //
 {
         float xx, xmin, fx, fb, fa, bx,ax;
 
-        gpuErrchk(cudaMalloc((void**)&device_pcom, sizeof(float)*M*N*image_count));
-        gpuErrchk(cudaMemset(device_pcom, 0, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMalloc((void**)&device_pcom, sizeof(float)*M*N*image_count));
+        checkCudaErrors(cudaMemset(device_pcom, 0, sizeof(float)*M*N*image_count));
 
-        gpuErrchk((cudaMalloc((void**)&device_xicom, sizeof(float)*M*N*image_count)));
-        gpuErrchk(cudaMemset(device_xicom, 0, sizeof(float)*M*N*image_count));
+        checkCudaErrors((cudaMalloc((void**)&device_xicom, sizeof(float)*M*N*image_count)));
+        checkCudaErrors(cudaMemset(device_xicom, 0, sizeof(float)*M*N*image_count));
         nrfunc = func;
         //device_pcom = p;
         //device_xicom = xi;
-        gpuErrchk(cudaMemcpy(device_pcom, p, sizeof(float)*M*N*image_count, cudaMemcpyDeviceToDevice));
-        gpuErrchk(cudaMemcpy(device_xicom, xi, sizeof(float)*M*N*image_count, cudaMemcpyDeviceToDevice));
+        checkCudaErrors(cudaMemcpy(device_pcom, p, sizeof(float)*M*N*image_count, cudaMemcpyDeviceToDevice));
+        checkCudaErrors(cudaMemcpy(device_xicom, xi, sizeof(float)*M*N*image_count, cudaMemcpyDeviceToDevice));
 
         ax = 0.0;
         xx = 1.0;
@@ -82,16 +82,16 @@ __host__ void linmin(float *p, float *xi, float *fret, float (*func)(float*)) //
                 for(int i=0; i<I->getImageCount(); i++)
                 {
                         (auxPtr[i].newP)(p, xi, xmin, i);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }else{
                 for(int i=0; i<I->getImageCount(); i++)
                 {
                         newPNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(p, xi, xmin, N, M, i);
-                        gpuErrchk(cudaDeviceSynchronize());
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
                 /*evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt, device_pcom, device_xicom, x, N, M, 0);
-                   gpuErrchk(cudaDeviceSynchronize());*/
+                   checkCudaErrors(cudaDeviceSynchronize());*/
         }
 
         cudaFree(device_xicom);

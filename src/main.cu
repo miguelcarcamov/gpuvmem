@@ -62,7 +62,7 @@ __host__ int main(int argc, char **argv) {
         ////CHECK FOR AVAILABLE GPUs
         cudaGetDeviceCount(&num_gpus);
 
-        printf("gpuvmem Copyright (C) 2016-2017  Miguel Carcamo, Pablo Roman, Simon Casassus, Victor Moral, Fernando Rannou, Nicolás Muñoz - miguel.carcamo@protonmail.com\n");
+        printf("gpuvmem Copyright (C) 2016-2020  Miguel Carcamo, Pablo Roman, Simon Casassus, Victor Moral, Fernando Rannou, Nicolás Muñoz - miguel.carcamo@protonmail.com\n");
         printf("This program comes with ABSOLUTELY NO WARRANTY; for details use option -w\n");
         printf("This is free software, and you are welcome to redistribute it under certain conditions; use option -c for details.\n\n\n");
 
