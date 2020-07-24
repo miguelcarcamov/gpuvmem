@@ -38,8 +38,9 @@ void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
 
 float Chi2::calcFi(float *p)
 {
-        float result = 0;
-        result = penalization_factor * chi2(p, ip);
+        float result = 0.0;
+        this->set_fivalue(chi2(p, ip));
+        result = (penalization_factor)*( this->get_fivalue() );
         return result;
 };
 
