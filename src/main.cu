@@ -116,6 +116,15 @@ __host__ int main(int argc, char **argv) {
         //otherwise the first image image will be calculated with positivity and all the others without positivity,
         //to modify this, use these sentences, where i corresponds to the index of the image ( particularly, means positivity)
         sy->run();
+        std::vector<float> fi_values = of->get_fi_values();
+        for(int it = 0; it < fi_values.size() ; it++)
+        {
+                std::cout << fi_values[it] << std::endl;
+        }
+        e->setPenalizationFactor(0.00001);
+        l->setPenalizationFactor(0.00005);
+        std::cout << "Trying to run another iteration" << std::endl;
+        sy->run();
         sy->unSetDevice(); // This routine performs memory cleanup and release
 
         return 0;

@@ -1026,7 +1026,6 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
                                         uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
                                         uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
-
                                         //Apply hermitian symmetry (it will be applied afterwards)
                                         if (uvw.x < 0.0) {
                                                 uvw.x *= -1.0;
@@ -1036,7 +1035,6 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                         j = round(uvw.x / fabs(deltau) + N / 2);
                                         k = round(uvw.y / fabs(deltav) + M / 2);
-
                                         if (k < M && j < N) {
                                 #pragma omp critical
                                                 {

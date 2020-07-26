@@ -11,7 +11,8 @@ TotalSquaredVariationP::TotalSquaredVariationP(){
 float TotalSquaredVariationP::calcFi(float *p)
 {
         float result = 0.0;
-        result = (penalization_factor)*(TotalSquaredVariation(p, device_S, penalization_factor, mod, order, imageIndex) );
+        this->set_fivalue(TotalSquaredVariation(p, device_S, penalization_factor, mod, order, imageIndex));
+        result = (penalization_factor)*( this->get_fivalue() );
         return result;
 }
 void TotalSquaredVariationP::calcGi(float *p, float *xi)

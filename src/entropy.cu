@@ -11,7 +11,8 @@ Entropy::Entropy(){
 float Entropy::calcFi(float *p)
 {
         float result = 0.0;
-        result = (penalization_factor)*( SEntropy(p, device_S, penalization_factor, mod, order, imageIndex) );
+        this->set_fivalue(SEntropy(p, device_S, penalization_factor, mod, order, imageIndex));
+        result = (penalization_factor)*( this->get_fivalue() );
         return result;
 }
 void Entropy::calcGi(float *p, float *xi)

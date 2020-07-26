@@ -249,19 +249,22 @@ public:
 ObjectiveFunction(){
 };
 void addFi(Fi *fi){
-        if(fi->getPenalizationFactor())
+        if(fi->getPenalizationFactor()){
                 fis.push_back(fi);
+                fi_values.push_back(0.0f);
+        }
 };
 //virtual void print() = 0;
 float calcFunction(float *p)
 {
         float value = 0.0;
-
+        int fi_value_count = 0;
         for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
         {
                 float iterationValue = (*it)->calcFi(p);
-                (*it)->set_fivalue(iterationValue);
+                fi_values[fi_value_count] = (*it)->get_fivalue();
                 value += iterationValue;
+                fi_value_count++;
         }
 
         return value;
@@ -326,8 +329,10 @@ void configure(long N, long M, int I)
         checkCudaErrors(cudaMalloc((void**)&dphi, sizeof(float)*M*N*I));
         checkCudaErrors(cudaMemset(dphi, 0, sizeof(float)*M*N*I));
 }
+std::vector<float> get_fi_values(){ return this->fi_values; }
 private:
 std::vector<Fi*> fis;
+std::vector<float> fi_values;
 Io *io = NULL;
 float *dphi;
 int phiStatus = 1;
@@ -421,6 +426,7 @@ Optimizator *optimizator;
 Io *iohandler = NULL;
 Visibilities *visibilities;
 Error *error = NULL;
+int griddingMode = 0;
 void (*Order)(Optimizator *o, Image *I) = NULL;
 int imagesChanged = 0;
 void (*IoOrderIterations)(float *I, Io *io) = NULL;
