@@ -1291,11 +1291,6 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
                                         cudaDeviceSynchronize();
-                                        // Freeing backup arrays
-
-                                        fields[f].backup_visibilities[i][s].uvw.clear();
-                                        fields[f].backup_visibilities[i][s].weight.clear();
-                                        fields[f].backup_visibilities[i][s].Vo.clear();
                                 }
 
                         }
@@ -1376,12 +1371,6 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
                                         cudaDeviceSynchronize();
-
-                                        // Freeing backup arrays
-
-                                        fields[f].backup_visibilities[i][s].uvw.clear();
-                                        fields[f].backup_visibilities[i][s].weight.clear();
-                                        fields[f].backup_visibilities[i][s].Vo.clear();
                                 }
                         }
                 }

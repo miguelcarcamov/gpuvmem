@@ -121,10 +121,11 @@ __host__ int main(int argc, char **argv) {
         {
                 std::cout << fi_values[it] << std::endl;
         }
-        e->setPenalizationFactor(0.00001);
-        l->setPenalizationFactor(0.00005);
-        std::cout << "Trying to run another iteration" << std::endl;
-        sy->run();
+
+        //e->setPenalizationFactor(0.00001);
+        //l->setPenalizationFactor(0.00005);
+        //std::cout << "Trying to run another iteration" << std::endl;
+        //sy->run();
         sy->unSetDevice(); // This routine performs memory cleanup and release
 
         return 0;

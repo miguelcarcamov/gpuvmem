@@ -8,7 +8,7 @@ int iter=0;
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, beam_noise, beam_bmaj, *device_noise_image, *device_weight_image, *device_distance_image;
 float beam_bmin, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
 float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
-float *host_I, sum_weights, *initial_values, *penalizators;
+float *host_I, sum_weights, *penalizators;
 
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
@@ -24,6 +24,7 @@ double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
 
 fitsfile *mod_in;
 
+std::vector<float> initial_values;
 std::vector<MSDataset> datasets;
 
 varsPerGPU *vars_gpu;
@@ -137,18 +138,13 @@ void MFS::configure(int argc, char **argv)
                 exit(-1);
         }
 
-        if(image_count == 1)
-                initial_values = (float*)malloc(sizeof(float)*image_count+1);
-        else
-                initial_values = (float*)malloc(sizeof(float)*image_count);
-
         for(int i=0; i< image_count; i++)
-                initial_values[i] = atof(string_values[i].c_str());
+                initial_values.push_back(atof(string_values[i].c_str()));
 
         string_values.clear();
         if(image_count == 1)
         {
-                initial_values[1] = 0.0f;
+                initial_values.push_back(0.0f);
                 image_count++;
                 imagesChanged = 1;
         }
@@ -424,32 +420,32 @@ void MFS::setDevice()
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].uvw,
-                                                                     sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vo,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].weight,
-                                                                     sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vm,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vr,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].visibilities[i][s].uvw.data(),
-                                                                     sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                                                                     cudaMemcpyHostToDevice));
+                                                                           sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                                                                           cudaMemcpyHostToDevice));
 
                                                 checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].weight,
-                                                                     datasets[d].fields[f].visibilities[i][s].weight.data(),
-                                                                     sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                                                                     cudaMemcpyHostToDevice));
+                                                                           datasets[d].fields[f].visibilities[i][s].weight.data(),
+                                                                           sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                                                                           cudaMemcpyHostToDevice));
 
                                                 checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].visibilities[i][s].Vo.data(),
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                                                                     cudaMemcpyHostToDevice));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                                                                           cudaMemcpyHostToDevice));
 
                                                 checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                         }
                                 }
 
@@ -464,21 +460,21 @@ void MFS::setDevice()
                                         cudaSetDevice((i % num_gpus) + firstgpu);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].uvw,
-                                                                     sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vo,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].weight,
-                                                                     sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vm,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vr,
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].uvw,datasets[d].fields[f].visibilities[i][s].uvw.data(),
-                                                                     sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
+                                                                           sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
                                                 checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].weight,datasets[d].fields[f].visibilities[i][s].weight.data(),
-                                                                     sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
+                                                                           sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
                                                 checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].Vo,datasets[d].fields[f].visibilities[i][s].Vo.data(),
-                                                                     sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
                                                 checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0, sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                                 checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                         }
@@ -971,6 +967,12 @@ void MFS::unSetDevice()
                                                 datasets[d].fields[f].visibilities[i][s].weight.clear();
                                                 datasets[d].fields[f].visibilities[i][s].Vo.clear();
                                                 datasets[d].fields[f].visibilities[i][s].Vm.clear();
+                                                
+                                                if(gridding) {
+                                                        datasets[d].fields[f].backup_visibilities[i][s].uvw.clear();
+                                                        datasets[d].fields[f].backup_visibilities[i][s].weight.clear();
+                                                        datasets[d].fields[f].backup_visibilities[i][s].Vo.clear();
+                                                }
                                         }
                                 }
                         }
