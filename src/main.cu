@@ -120,10 +120,10 @@ __host__ int main(int argc, char **argv) {
         //to modify this, use these sentences, where i corresponds to the index of the image ( particularly, means positivity)
         sy->run();
         std::vector<float> fi_values = of->get_fi_values();
-        for(int it = 0; it < fi_values.size() ; it++)
-        {
-                std::cout << fi_values[it] << std::endl;
-        }
+        //for(int it = 0; it < fi_values.size() ; it++)
+        //{
+        //        std::cout << fi_values[it] << std::endl;
+        //}
 
         //e->setPenalizationFactor(0.00001);
         //l->setPenalizationFactor(0.00005);
