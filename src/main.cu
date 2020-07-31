@@ -89,6 +89,7 @@ __host__ int main(int argc, char **argv) {
 
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
+        //CKernel * sc = new EllipticalGaussian2D(x, ..., z);
         CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(EllipticalGaussian2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
