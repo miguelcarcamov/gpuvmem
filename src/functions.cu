@@ -1067,7 +1067,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         #pragma omp parallel for schedule(static, 1)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = 0; j < N; j++) {
-                                                double ckernel_result = 1.0;
+                                                float ckernel_result = 1.0;
                                                 if(NULL != ckernel){
                                                         ckernel_result = ckernel->run(deltau, deltav);
                                                 }
