@@ -5,7 +5,7 @@ if(Boost_FOUND)
   add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
   # Search the compute capability of the first GPU and add CUDA specific FLAGS
   include(${CMAKE_CURRENT_SOURCE_DIR}/cuda_check.cmake)
-  
+
   target_sources(gpuvmem PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/src/brent.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/chi2.cu
@@ -31,7 +31,7 @@ if(Boost_FOUND)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/synthesizer.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalsquaredvariation.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalvariation.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/ckernels.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/ellipticGaussian2D.cu
   )
 
 

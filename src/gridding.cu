@@ -22,7 +22,7 @@ void Gridding::applyCriteria(Visibilities *v)
         complexValZero.y = 0.0f;
         for(int d=0; d< v->getNDatasets(); d++) {
                 omp_set_num_threads(threads);
-                do_gridding(v->getMSDataset()[d].fields,&v->getMSDataset()[d].data, deltau, deltav, M, N, robust_param);
+                do_gridding(v->getMSDataset()[d].fields,&v->getMSDataset()[d].data, deltau, deltav, M, N, robust_param, NULL);
                 omp_set_num_threads(num_gpus);
         }
 };

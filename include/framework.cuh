@@ -378,6 +378,129 @@ virtual void applyCriteria(Visibilities *v) = 0;
 virtual void configure(void *params) = 0;
 };
 
+class CKernel
+{
+public:
+CKernel()
+{
+        this->M = 6;
+        this->N = 6;
+        this->w1 = 2.52;
+        this->w2 = 1.55;
+        this->alpha = 2;
+
+};
+
+
+CKernel(float dx, float dy, int M, int N)
+{
+        this->M = M;
+        this->N = N;
+        this->dx = dx;
+        this->dy = dy;
+        this->w1 = 2.52;
+        this->w2 = 1.55;
+        this->alpha = 2;
+        this->setM_times_N();
+};
+
+
+CKernel::CKernel(float dx, float dy, float w1, float w2, float alpha, int M, int N)
+{
+        this->M = M;
+        this->N = N;
+        this->dx = dx;
+        this->dy = dy;
+        this->w1 = w1;
+        this->w2 = w2;
+        this->alpha = alpha;
+        this->setM_times_N();
+};
+float getdx(){return this->dx;};
+float getdy(){return this->dy;};
+int2 getMN(){int2 val; val.x = this->M; val.y = this->N; return val;};
+float getW1(){return this->w1;};
+float getW2(){return this->w2;};
+float getAlpha(){return this->alpha;};
+void setdxdy(float dx, float dy){this->dx = dx; this->dx = dx;};
+void setMN(int M, int N){this->M = M; this->N = N;};
+void setW1(float w1){this->w1 = w1;};
+void setW2(float w2){this->w2 = w2;};
+void setAlpha(float alpha){this->alpha = alpha;};
+float run(float deltau, float deltav){return 1.0f;};
+private:
+void setM_times_N(){this->M_times_N = this->M * this->N;};
+__host__ __device__ float ellipticalGaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float angle)
+{
+        float x_i = x-x0;
+        float y_i = y-y0;
+        float cos_angle, sin_angle;
+        sincos(angle, &sin_angle, &cos_angle);
+        float sin_angle_2 = sin(2.0*angle);
+        float a = (cos_angle*cos_angle)/(2.0*sigma_x*sigma_x) + (sin_angle*sin_angle)/(2.0*sigma_y*sigma_y);
+        float b = sin_angle_2/(2.0*sigma_x*sigma_x) - sin_angle_2/(2.0*sigma_y*sigma_y);
+        float c = (sin_angle*sin_angle)/(2.0*sigma_x*sigma_x) + (cos_angle*cos_angle)/(2.0*sigma_y*sigma_y);
+        float G = amp*exp(-a*x_i*x_i - b*x_i*y_i - c*y_i*y_i);
+
+        return G;
+};
+__host__ __device__ float gaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
+{
+        float x_i = x-x0;
+        float y_i = y-y0;
+
+        float num_x = pow(x_i, alpha);
+        float num_y = pow(y_i, alpha);
+
+        float den_x = 2.0*pow(w*sigma_x,alpha);
+        float den_y = 2.0*pow(w*sigma_y,alpha);
+
+        float val_x = num_x/den_x;
+        float val_y = num_y/den_y;
+        float G = amp*exp(-val_x-val_y);
+
+        return G;
+};
+__host__ __device__ float gaussian1D(float amp, float x, float x0, float sigma, float w, float alpha)
+{
+        float x_i = x-x0;
+        float val = abs(x_i)/(w*sigma);
+        float val_alpha = pow(val, alpha);
+        float G = amp*exp(-val_alpha);
+
+        return G;
+};
+__host__ __device__ float sinc1D(float amp, float x, float x0, float sigma, float w)
+{
+        float s = 1.0f/*amp*sinc((x-x0)/(w*sigma))*/;
+        return s;
+};
+__host__ __device__ float gaussianSinc1D(float amp, float x, float x0, float sigma, float w1, float w2, float alpha)
+{
+        return amp*gaussian1D(1.0, x, x0, sigma, w1, alpha)*sinc1D(1.0, x, x0, sigma, w2);
+};
+__host__ __device__ float sinc2D(float amp, float x, float x0, float y, float y0, float sigma_x, float sigma_y, float w)
+{
+        float s_x = sinc1D(1.0, x, x0, sigma_x, w);
+        float s_y = sinc1D(1.0, y, y0, sigma_y, w);
+        return amp*s_x*s_y;
+};
+__host__ __device__ float gaussianSinc2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w1, float w2, float alpha)
+{
+        float G = gaussian2D(1.0, x, y, x0, y0, sigma_x, sigma_y, w1, alpha);
+        float S = sinc2D(1.0, x, x0, y, y0, sigma_x, sigma_y, w2);
+        return amp*G*S;
+};
+int M;
+int N;
+float w1;
+float w2;
+float alpha;
+float dx;
+float dy;
+float M_times_N;
+};
+
 //Implementation of Factory
 class Synthesizer
 {
@@ -419,10 +542,15 @@ void setIoOrderError(void (*func)(float *I, Io *io)){
 void setIoOrderIterations(void (*func)(float *I, Io *io)){
         this->IoOrderIterations = func;
 };
+
+__host__ void setGriddingKernel(CKernel *ckernel){
+        this->ckernel = ckernel;
+}
 protected:
 cufftComplex *device_I;
 Image *image;
 Optimizator *optimizator;
+CKernel *ckernel;
 Io *iohandler = NULL;
 Visibilities *visibilities;
 Error *error = NULL;
@@ -529,6 +657,40 @@ Optimizator* CreateOptimizator(int OptimizatorId)
         {
                 // not found
                 throw std::runtime_error("Unknown Optimizator ID");
+        }
+        // Invoke the creation function
+        return (i->second)();
+};
+
+private:
+CallbackMap callbacks_;
+};
+
+class CKernelFactory
+{
+public:
+typedef CKernel* (*CreateCKernelCallback)();
+private:
+typedef std::map<int, CreateCKernelCallback> CallbackMap;
+public:
+// Returns true if registration was succesfull
+bool RegisterCKernel(int CKernelId, CreateCKernelCallback CreateFn)
+{
+        return callbacks_.insert(CallbackMap::value_type(CKernelId, CreateFn)).second;
+};
+
+bool UnregisterCKernel(int CKernelId)
+{
+        return callbacks_.erase(CKernelId) == 1;
+};
+
+CKernel* CreateCKernel(int CKernelId)
+{
+        CallbackMap::const_iterator i = callbacks_.find(CKernelId);
+        if (i == callbacks_.end())
+        {
+                // not found
+                throw std::runtime_error("Unknown CKernel ID");
         }
         // Invoke the creation function
         return (i->second)();

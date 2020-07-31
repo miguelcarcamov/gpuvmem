@@ -983,7 +983,7 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
         }
 }
 
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust)
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel)
 {
         std::vector<float> g_weights(M*N);
         std::vector<cufftComplex> g_Vo(M*N);
@@ -1067,8 +1067,12 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         #pragma omp parallel for schedule(static, 1)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = 0; j < N; j++) {
-                                                double deltau_meters = fabs(deltau) * freq_to_wavelength(fields[f].nu[i]);
-                                                double deltav_meters = fabs(deltav) * freq_to_wavelength(fields[f].nu[i]);
+                                                double ckernel_result = 1.0;
+                                                if(NULL != ckernel){
+                                                        ckernel_result = ckernel->run(deltau, deltav);
+                                                }
+                                                double deltau_meters = fabs(deltau) * freq_to_wavelength(fields[f].nu[i]) * ckernel_result;
+                                                double deltav_meters = fabs(deltav) * freq_to_wavelength(fields[f].nu[i]) * ckernel_result;
 
                                                 double u_meters = (j - (N / 2)) * deltau_meters;
                                                 double v_meters = (k - (M / 2)) * deltav_meters;

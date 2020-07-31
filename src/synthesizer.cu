@@ -387,7 +387,7 @@ void MFS::configure(int argc, char **argv)
                 printf("Doing gridding\n");
                 omp_set_num_threads(gridding);
                 for(int d=0; d<nMeasurementSets; d++)
-                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param);
+                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel);
 
                 omp_set_num_threads(num_gpus);
         }
@@ -967,7 +967,7 @@ void MFS::unSetDevice()
                                                 datasets[d].fields[f].visibilities[i][s].weight.clear();
                                                 datasets[d].fields[f].visibilities[i][s].Vo.clear();
                                                 datasets[d].fields[f].visibilities[i][s].Vm.clear();
-                                                
+
                                                 if(gridding) {
                                                         datasets[d].fields[f].backup_visibilities[i][s].uvw.clear();
                                                         datasets[d].fields[f].backup_visibilities[i][s].weight.clear();
