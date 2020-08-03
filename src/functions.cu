@@ -1144,7 +1144,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         }
                                 }
 
-                                fitsOutputCufftComplex(g_Vo.data(), mod_in, "fft.fits", "./", 0, 1.0, M, N, 0, false);
+                                // The following line is to create an image with the resulting (u,v) grid
+                                //fitsOutputCufftComplex(g_Vo.data(), mod_in, "fft.fits", "./", 0, 1.0, M, N, 0, false);
                                 fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s] = fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
                                 if (fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
