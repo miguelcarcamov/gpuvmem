@@ -85,12 +85,12 @@ __host__ int main(int argc, char **argv) {
         enum {DefaultObjectiveFunction}; // ObjectiveFunction
         enum {MS}; // Io
         enum {SecondDerivative}; // Error calculation
-        enum {EllipticalGaussian2D, Gaussian2D, Gaussian1D, Sinc1D, GaussianSinc1D, Sinc2D, GaussianSinc2D}; // CKernels for gridding
+        enum {Pillbox2D, EllipticalGaussian2D, Gaussian2D, Gaussian1D, Sinc1D, GaussianSinc1D, Sinc2D, GaussianSinc2D}; // CKernels for gridding
 
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
         //CKernel * sc = new EllipticalGaussian2D(x, ..., z);
-        CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(EllipticalGaussian2D);
+        CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(GaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
         sy->setIoHandler(ioms);

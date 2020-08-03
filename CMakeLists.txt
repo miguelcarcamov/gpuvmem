@@ -31,7 +31,8 @@ if(Boost_FOUND)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/synthesizer.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalsquaredvariation.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalvariation.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/ellipticGaussian2D.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/ellipticalGaussian2D.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/gaussianSinc2D.cu
   )
 
 

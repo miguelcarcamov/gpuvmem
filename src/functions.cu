@@ -920,11 +920,11 @@ __host__ TD *convolutionComplexRealFFT(TD *data, T *kernel, int M, int N, int m,
         depaddingData<TD><<<numBlocksNN, threadsPerBlockNN>>>(data_device, padded_data_complex, padding_M, padding_N, M, N, ckernel_x, ckernel_y);
         checkCudaErrors(cudaDeviceSynchronize());
 
-        if(isDataOnDevice){
-          checkCudaErrors(cudaMemcpy(data, data_device, sizeof(TD)*M*N, cudaMemcpyDeviceToHost));
+        if(isDataOnDevice) {
+                checkCudaErrors(cudaMemcpy(data, data_device, sizeof(TD)*M*N, cudaMemcpyDeviceToHost));
         }else{
-          result_host = (TD*)malloc(M*N*sizeof(TD));
-          checkCudaErrors(cudaMemcpy(result_host, data_device, sizeof(TD)*M*N, cudaMemcpyDeviceToHost));
+                result_host = (TD*)malloc(M*N*sizeof(TD));
+                checkCudaErrors(cudaMemcpy(result_host, data_device, sizeof(TD)*M*N, cudaMemcpyDeviceToHost));
         }
 
         // Free GPU MEMORY
@@ -938,10 +938,10 @@ __host__ TD *convolutionComplexRealFFT(TD *data, T *kernel, int M, int N, int m,
         checkCudaErrors(cudaFree(data_device));
         checkCudaErrors(cufftDestroy(fftPlan));
 
-        if(isDataOnDevice){
-          return data;
+        if(isDataOnDevice) {
+                return data;
         }else{
-          return result_host;
+                return result_host;
         }
 }
 
@@ -986,9 +986,9 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
 __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel)
 {
         std::vector<float> g_weights(M*N);
+        std::vector<float> g_weights_aux(M*N);
         std::vector<cufftComplex> g_Vo(M*N);
         std::vector<double3> g_uvw(M*N);
-        std::vector<float> S(M*N);
         cufftComplex complex_zero = complexZero<cufftComplex>();
 
         double3 double3_zero;
@@ -999,13 +999,20 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         int local_max = 0;
         int max = 0;
         float pow2_factor, S2, w_avg;
+        float ckernel_result = 1.0;
+
+        printf("Get kernel size\n");
+        int m_ckernel = ckernel->getM();
+        printf("Using an antialiasing kernel of size: (%d, ?)\n", m_ckernel);
+        int n_ckernel = ckernel->getN();
+        printf("Using an antialiasing kernel of size: (%d, %d)\n", m_ckernel, n_ckernel);
         for(int f=0; f < data->nfields; f++) {
                 for(int i=0; i < data->total_frequencies; i++) {
                         for(int s=0; s< data->nstokes; s++) {
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                        #pragma omp parallel for schedule(static, 1)
+                        #pragma omp parallel for schedule(static, 1) private(ckernel_result)
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++) {
 
                                         int j, k;
@@ -1033,17 +1040,33 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                 Vo.y *= -1.0;
                                         }
 
+
                                         j = round(uvw.x / fabs(deltau) + N / 2);
                                         k = round(uvw.y / fabs(deltav) + M / 2);
-                                        if (k < M && j < N) {
-                                #pragma omp critical
-                                                {
-                                                        g_Vo[N * k + j].x += w * Vo.x;
-                                                        g_Vo[N * k + j].y += w * Vo.y;
-                                                        g_weights[N * k + j] += w;
-                                                        S[N * k + j] = 1;
+                                        int shifted_j, shifted_k;
+                                        int center_ckernel_x = n_ckernel/2;
+                                        int center_ckernel_y = m_ckernel/2;
+                                        int pix_ckernel_x, pix_ckernel_y;
+                                        for(int m=0; m<m_ckernel; m++) {
+                                                for(int n=0; n<n_ckernel; n++) {
+                                                        pix_ckernel_x = n-center_ckernel_x;
+                                                        pix_ckernel_y = m-center_ckernel_y;
+                                                        shifted_j = j+(pix_ckernel_x);
+                                                        shifted_k = k+(pix_ckernel_y);
+                                                        printf("Going to pixel k:%d, j:%d\n", shifted_k, shifted_j);
+                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j>=0 && shifted_j < N) {
+                                                      #pragma omp critical
+                                                                {
+                                                                        ckernel_result = ckernel->run(1.0f, pix_ckernel_x*deltau, pix_ckernel_y*deltav, 0.0f, 0.0f, deltau, deltav);
+                                                                        g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
+                                                                        g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
+                                                                        g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
+                                                                        g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                }
+                                                        }
                                                 }
                                         }
+
                                 }
 
                                 int visCounter = 0;
@@ -1067,12 +1090,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         #pragma omp parallel for schedule(static, 1)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = 0; j < N; j++) {
-                                                float ckernel_result = 1.0;
-                                                if(NULL != ckernel){
-                                                        ckernel_result = ckernel->run(deltau, deltav);
-                                                }
-                                                double deltau_meters = fabs(deltau) * freq_to_wavelength(fields[f].nu[i]) * ckernel_result;
-                                                double deltav_meters = fabs(deltav) * freq_to_wavelength(fields[f].nu[i]) * ckernel_result;
+
+                                                double deltau_meters = fabs(deltau) * freq_to_wavelength(fields[f].nu[i]);
+                                                double deltav_meters = fabs(deltav) * freq_to_wavelength(fields[f].nu[i]);
 
                                                 double u_meters = (j - (N / 2)) * deltau_meters;
                                                 double v_meters = (k - (M / 2)) * deltav_meters;
@@ -1084,7 +1104,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                 if (weight > 0.0f) {
                                                         g_Vo[N * k + j].x /= weight;
                                                         g_Vo[N * k + j].y /= weight;
-                                                        g_weights[N * k + j] /= (1 + weight * S2);
+                                                        g_weights[N * k + j] /= (1.0f + weight * S2);
                                                 } else {
                                                         g_weights[N * k + j] = 0.0f;
                                                 }
@@ -1125,8 +1145,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         fields[f].numVisibilitiesPerFreqPerStoke[i][s] = 0;
                                 }
 
+                                std::fill_n(g_weights_aux.begin(), M*N, 0.0f);
                                 std::fill_n(g_weights.begin(), M*N, 0.0f);
-                                std::fill_n(g_uvw.begin(), M*N,double3_zero);
+                                std::fill_n(g_uvw.begin(), M*N, double3_zero);
                                 std::fill_n(g_Vo.begin(), M*N, complex_zero);
 
                         }

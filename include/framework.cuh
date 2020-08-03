@@ -102,7 +102,7 @@ virtual void addToDphi(float *device_dphi) = 0;
 virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd) = 0;
 
 float get_fivalue(){
-  return this->fi_value;
+        return this->fi_value;
 };
 void set_fivalue(float fi){
         this->fi_value = fi;
@@ -231,10 +231,10 @@ virtual void IoreadMS(char const *MS_name, std::vector<MSAntenna>& antennas, std
 virtual void IocopyMS(char const *infile, char const *outfile) = 0;
 virtual void IowriteMS(char const *outfile, char const *out_col, std::vector<Field>& fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag) = 0;
 virtual void IocloseCanvas(fitsfile *canvas) = 0;
-virtual void IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)= 0;
+virtual void IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N) = 0;
 virtual void IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char const *name_image, char *units, int iteration, int index, float fg_scale, long M, long N) = 0;
 virtual void IoPrintOptImageIteration(float *I, char *name_image, char *units, int index) = 0;
-virtual void IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option)=0;
+virtual void IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option) = 0;
 void setPrintImagesPath(char * pip){
         this->printImagesPath = pip;
 };
@@ -249,7 +249,7 @@ public:
 ObjectiveFunction(){
 };
 void addFi(Fi *fi){
-        if(fi->getPenalizationFactor()){
+        if(fi->getPenalizationFactor()) {
                 fis.push_back(fi);
                 fi_values.push_back(0.0f);
         }
@@ -329,7 +329,9 @@ void configure(long N, long M, int I)
         checkCudaErrors(cudaMalloc((void**)&dphi, sizeof(float)*M*N*I));
         checkCudaErrors(cudaMemset(dphi, 0, sizeof(float)*M*N*I));
 }
-std::vector<float> get_fi_values(){ return this->fi_values; }
+std::vector<float> get_fi_values(){
+        return this->fi_values;
+}
 private:
 std::vector<Fi*> fis;
 std::vector<float> fi_values;
@@ -381,18 +383,34 @@ virtual void configure(void *params) = 0;
 class CKernel
 {
 public:
-CKernel()
+__host__ __device__ virtual float run(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y) = 0;
+
+CKernel::CKernel()
 {
         this->M = 6;
         this->N = 6;
         this->w1 = 2.52;
         this->w2 = 1.55;
         this->alpha = 2;
+        this->angle = 0.0;
+        this->setM_times_N();
+        printf("Caigo 1\n");
 
 };
 
+CKernel::CKernel(int M, int N)
+{
+        this->M = M;
+        this->N = N;
+        this->w1 = 2.52;
+        this->w2 = 1.55;
+        this->alpha = 2;
+        this->angle = 0.0;
+        this->setM_times_N();
+        printf("Caigo 2\n");
+};
 
-CKernel(float dx, float dy, int M, int N)
+CKernel::CKernel(float dx, float dy, int M, int N)
 {
         this->M = M;
         this->N = N;
@@ -401,11 +419,25 @@ CKernel(float dx, float dy, int M, int N)
         this->w1 = 2.52;
         this->w2 = 1.55;
         this->alpha = 2;
+        this->angle = 0.0;
         this->setM_times_N();
 };
 
 
-CKernel::CKernel(float dx, float dy, float w1, float w2, float alpha, int M, int N)
+CKernel::CKernel(float dx, float dy, float w1, float w2, float angle, int M, int N)
+{
+        this->M = M;
+        this->N = N;
+        this->dx = dx;
+        this->dy = dy;
+        this->w1 = w1;
+        this->w2 = w2;
+        this->alpha = 2.0;
+        this->angle = angle;
+        this->setM_times_N();
+};
+
+CKernel::CKernel(float dx, float dy, float w1, float w2, float alpha, float angle, int M, int N)
 {
         this->M = M;
         this->N = N;
@@ -414,22 +446,72 @@ CKernel::CKernel(float dx, float dy, float w1, float w2, float alpha, int M, int
         this->w1 = w1;
         this->w2 = w2;
         this->alpha = alpha;
+        this->angle = angle;
         this->setM_times_N();
 };
-float getdx(){return this->dx;};
-float getdy(){return this->dy;};
-int2 getMN(){int2 val; val.x = this->M; val.y = this->N; return val;};
-float getW1(){return this->w1;};
-float getW2(){return this->w2;};
-float getAlpha(){return this->alpha;};
-void setdxdy(float dx, float dy){this->dx = dx; this->dx = dx;};
-void setMN(int M, int N){this->M = M; this->N = N;};
-void setW1(float w1){this->w1 = w1;};
-void setW2(float w2){this->w2 = w2;};
-void setAlpha(float alpha){this->alpha = alpha;};
-float run(float deltau, float deltav){return 1.0f;};
+float getdx(){
+        return this->dx;
+};
+float getdy(){
+        return this->dy;
+};
+int getM(){
+        return this->M;
+};
+int getN(){
+        return this->N;
+};
+float getW1(){
+        return this->w1;
+};
+float getW2(){
+        return this->w2;
+};
+float getAlpha(){
+        return this->alpha;
+};
+float getAngle(){
+        return this->angle;
+};
+void setdxdy(float dx, float dy){
+        this->dx = dx; this->dx = dx;
+};
+void setMN(int M, int N){
+        this->M = M; this->N = N;
+};
+void setW1(float w1){
+        this->w1 = w1;
+};
+void setW2(float w2){
+        this->w2 = w2;
+};
+void setAlpha(float alpha){
+        this->alpha = alpha;
+};
+void setAngle(float angle){
+        this->angle = angle;
+};
+//float run(float deltau, float deltav){
+//        return 1.0f;
+//};
+
 private:
-void setM_times_N(){this->M_times_N = this->M * this->N;};
+
+int M;
+int N;
+float w1;
+float w2;
+float alpha;
+float angle;
+float dx;
+float dy;
+int M_times_N;
+
+void setM_times_N(){
+        this->M_times_N = this->M * this->N;
+};
+
+protected:
 __host__ __device__ float ellipticalGaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float angle)
 {
         float x_i = x-x0;
@@ -470,9 +552,17 @@ __host__ __device__ float gaussian1D(float amp, float x, float x0, float sigma, 
 
         return G;
 };
+
+__host__ __device__ float sincf(float x)
+{
+        if(x==0.0f)
+                return 1.0f;
+        else
+                return sinf(PI*x)/(PI*x);
+}
 __host__ __device__ float sinc1D(float amp, float x, float x0, float sigma, float w)
 {
-        float s = 1.0f/*amp*sinc((x-x0)/(w*sigma))*/;
+        float s = amp*sincf((x-x0)/(w*sigma));
         return s;
 };
 __host__ __device__ float gaussianSinc1D(float amp, float x, float x0, float sigma, float w1, float w2, float alpha)
@@ -491,17 +581,23 @@ __host__ __device__ float gaussianSinc2D(float amp, float x, float y, float x0, 
         float S = sinc2D(1.0, x, x0, y, y0, sigma_x, sigma_y, w2);
         return amp*G*S;
 };
-int M;
-int N;
-float w1;
-float w2;
-float alpha;
-float dx;
-float dy;
-float M_times_N;
+
+__host__ __device__ float pillBox1D(float amp, float x, float limit)
+{
+        if(abs(x) < limit)
+                return amp;
+        else
+                return 0.0f;
 };
 
-//Implementation of Factory
+__host__ __device__ float pillBox2D(float amp, float x, float y, float limit_x, float limit_y)
+{
+        return pillBox1D(amp, x, limit_x)*pillBox1D(amp, y, limit_y);
+};
+
+};
+
+//Implementation of Factories
 class Synthesizer
 {
 public:
