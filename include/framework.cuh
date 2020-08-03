@@ -394,8 +394,6 @@ CKernel::CKernel()
         this->alpha = 2;
         this->angle = 0.0;
         this->setM_times_N();
-        printf("Caigo 1\n");
-
 };
 
 CKernel::CKernel(int M, int N)
@@ -407,7 +405,6 @@ CKernel::CKernel(int M, int N)
         this->alpha = 2;
         this->angle = 0.0;
         this->setM_times_N();
-        printf("Caigo 2\n");
 };
 
 CKernel::CKernel(float dx, float dy, int M, int N)

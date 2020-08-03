@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.8...3.12 FATAL_ERROR)
 project(gpuvmem LANGUAGES CXX CUDA)
 find_package(Boost REQUIRED)
+option(MEMORY_DEBUG "This sets the GDB debug for CUDA code")
 if(Boost_FOUND)
   add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
   # Search the compute capability of the first GPU and add CUDA specific FLAGS
@@ -68,11 +69,19 @@ if(Boost_FOUND)
     set(TEMP "${TEMP} ") # A space to cleanly separate from existing content
   endif()
 
-  set(COMPFLAGS "-D_FORCE_INLINES -w -O3")
-
-  set(TEMP "${TEMP}${COMPFLAGS}" )
-  set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
+  if(MEMORY_DEBUG)
+    message(NOTICE "Memory DEBUG is ON")
+    set(COMPFLAGS "-g -G -D_FORCE_INLINES -w")
+    set(TEMP "${TEMP}${COMPFLAGS}" )
+    set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
+  else()
+    message(NOTICE "Memory DEBUG is OFF")
+    set(COMPFLAGS "-D_FORCE_INLINES -w -O3")
+    set(TEMP "${TEMP}${COMPFLAGS}" )
+    set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
+  endif()
 
   target_link_libraries(gpuvmem cfitsio m casa_casa casa_tables casa_ms casa_measures cudart cuda cufft stdc++ gomp ${Boost_LIBRARIES})
   # Tests - Tests all the testing datasets
