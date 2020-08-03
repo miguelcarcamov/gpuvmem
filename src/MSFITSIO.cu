@@ -566,7 +566,7 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
 
 }
 
-__host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option)
+__host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option, bool isInGPU)
 {
         fitsfile *fpointer;
         int status = 0;
@@ -611,10 +611,15 @@ __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *ou
         fits_update_key(fpointer, TINT, "NITER", &iteration, "Number of iteration in gpuvmem software", &status);
 
 
+
         cufftComplex *host_IFITS;
         host_IFITS = (cufftComplex*)malloc(M*N*sizeof(cufftComplex));
         float *image2D = (float*) malloc(M*N*sizeof(float));
-        checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
+        if(isInGPU){
+          checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
+        }else{
+          memcpy(host_IFITS, I, M*N*sizeof(cufftComplex));
+        }
 
 
         for(int i=0; i < M; i++) {

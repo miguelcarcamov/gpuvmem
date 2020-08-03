@@ -61,9 +61,9 @@ void IoMS::IoPrintOptImageIteration(float *I, char *name_image, char *units, int
         free(full_name);
 }
 
-void IoMS::IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option)
+void IoMS::IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option, bool isInGPU)
 {
-        fitsOutputCufftComplex(I, canvas, out_image, mempath, iteration, fg_scale, M, N, option);
+        fitsOutputCufftComplex(I, canvas, out_image, mempath, iteration, fg_scale, M, N, option, isInGPU);
 }
 
 void IoMS::IocloseCanvas(fitsfile *canvas)

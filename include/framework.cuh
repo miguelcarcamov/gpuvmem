@@ -234,7 +234,7 @@ virtual void IocloseCanvas(fitsfile *canvas) = 0;
 virtual void IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N) = 0;
 virtual void IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char const *name_image, char *units, int iteration, int index, float fg_scale, long M, long N) = 0;
 virtual void IoPrintOptImageIteration(float *I, char *name_image, char *units, int index) = 0;
-virtual void IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option) = 0;
+virtual void IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option, bool isInGPU) = 0;
 void setPrintImagesPath(char * pip){
         this->printImagesPath = pip;
 };
@@ -493,7 +493,13 @@ void setAngle(float angle){
 //};
 
 private:
+int M_times_N;
 
+void setM_times_N(){
+        this->M_times_N = this->M * this->N;
+};
+
+protected:
 int M;
 int N;
 float w1;
@@ -502,13 +508,7 @@ float alpha;
 float angle;
 float dx;
 float dy;
-int M_times_N;
 
-void setM_times_N(){
-        this->M_times_N = this->M * this->N;
-};
-
-protected:
 __host__ __device__ float ellipticalGaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float angle)
 {
         float x_i = x-x0;
@@ -581,7 +581,7 @@ __host__ __device__ float gaussianSinc2D(float amp, float x, float y, float x0, 
 
 __host__ __device__ float pillBox1D(float amp, float x, float limit)
 {
-        if(abs(x) < limit)
+        if(fabs(x) <= limit)
                 return amp;
         else
                 return 0.0f;

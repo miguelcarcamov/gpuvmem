@@ -33,6 +33,11 @@
 
 #include "frprmn.cuh"
 #include "directioncosines.cuh"
+#include "pillBox2D.cuh"
+#include "ellipticalGaussian2D.cuh"
+#include "gaussianSinc2D.cuh"
+#include "gaussian2D.cuh"
+#include "sinc2D.cuh"
 #include <time.h>
 
 int num_gpus;
@@ -85,20 +90,22 @@ __host__ int main(int argc, char **argv) {
         enum {DefaultObjectiveFunction}; // ObjectiveFunction
         enum {MS}; // Io
         enum {SecondDerivative}; // Error calculation
-        enum {Pillbox2D, EllipticalGaussian2D, Gaussian2D, Gaussian1D, Sinc1D, GaussianSinc1D, Sinc2D, GaussianSinc2D}; // CKernels for gridding
+        enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D}; // CKernels for gridding
 
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
-        //CKernel * sc = new EllipticalGaussian2D(x, ..., z);
-        CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(GaussianSinc2D);
+        // Choose your antialiasing kernel!
+        CKernel * sc = new PillBox2D(1,1);
+        //CKernel * sc = new EllipticalGaussian2D(6,6);
+        //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
         sy->setIoHandler(ioms);
         sy->setOrder(&optimizationOrder);
+        sy->setGriddingKernel(sc);
         sy->configure(argc, argv);
         cg->setObjectiveFunction(of);
         sy->setOptimizator(cg);
-        sy->setGriddingKernel(sc);
 
         //Filter *g = Singleton<FilterFactory>::Instance().CreateFilter(Gridding);
         //sy->applyFilter(g); // delete this line for no gridding

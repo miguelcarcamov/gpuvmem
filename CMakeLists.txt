@@ -34,6 +34,9 @@ if(Boost_FOUND)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalvariation.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/ellipticalGaussian2D.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/gaussianSinc2D.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/pillBox2D.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/gaussian2D.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/sinc2D.cu
   )
 
 
