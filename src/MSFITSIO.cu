@@ -625,9 +625,9 @@ __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *ou
         for(int i=0; i < M; i++) {
                 for(int j=0; j < N; j++) {
                         /*Absolute*/
-                        image2D[N*i+j] = sqrt(host_IFITS[N*i+j].x * host_IFITS[N*i+j].x + host_IFITS[N*i+j].y * host_IFITS[N*i+j].y)* fg_scale;
+                        //image2D[N*i+j] = sqrt(host_IFITS[N*i+j].x * host_IFITS[N*i+j].x + host_IFITS[N*i+j].y * host_IFITS[N*i+j].y)* fg_scale;
                         /*Real part*/
-                        //image2D[N*i+j] = host_IFITS[N*i+j].y;
+                        image2D[N*i+j] = host_IFITS[N*i+j].x;
                         /*Imaginary part*/
                         //image2D[N*i+j] = host_IFITS[N*i+j].y;
                 }
@@ -649,7 +649,7 @@ __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *ou
         free(name);
 }
 
-__host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)
+__host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
 {
         fitsfile *fpointer;
         int status = 0;
@@ -683,7 +683,13 @@ __host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, ch
 
         //unsigned int offset = M*N*index*sizeof(float);
         int offset = M*N*index;
-        checkCudaErrors(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
+
+        if(isInGPU){
+          checkCudaErrors(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
+        }else{
+          memcpy(host_IFITS, &I[offset], M*N*sizeof(float));
+        }
+
 
         for(int i=0; i<M; i++) {
                 for(int j=0; j<N; j++) {

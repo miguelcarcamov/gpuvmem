@@ -1000,20 +1000,17 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         int max = 0;
         float pow2_factor, S2, w_avg;
         float ckernel_result = 1.0;
-
-        int m_ckernel = ckernel->getM();
-        int n_ckernel = ckernel->getN();
-        printf("Using an antialiasing kernel of size: (%d, %d)\n", m_ckernel, n_ckernel);
         for(int f=0; f < data->nfields; f++) {
                 for(int i=0; i < data->total_frequencies; i++) {
                         for(int s=0; s< data->nstokes; s++) {
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                        #pragma omp parallel for schedule(static, 1) private(ckernel_result)
+                                #pragma omp parallel for schedule(static, 1) private(ckernel_result)
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++) {
 
                                         int j, k;
+                                        float grid_pos_x, grid_pos_y;
                                         double3 uvw;
                                         float w;
                                         cufftComplex Vo;
@@ -1039,22 +1036,22 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         }
 
 
-                                        j = round(uvw.x / fabs(deltau) + N / 2);
-                                        k = round(uvw.y / fabs(deltav) + M / 2);
+                                        grid_pos_x = uvw.x / fabs(deltau);
+                                        grid_pos_y = uvw.y / fabs(deltav);
+                                        j = round(grid_pos_x + N / 2);
+                                        k = round(grid_pos_y + M / 2);
                                         int shifted_j, shifted_k;
-                                        float center_ckernel_x = n_ckernel/2.0f;
-                                        float center_ckernel_y = m_ckernel/2.0f;
-                                        float pix_ckernel_x, pix_ckernel_y;
-                                        for(int m=0; m<m_ckernel; m++) {
-                                                for(int n=0; n<n_ckernel; n++) {
-                                                        pix_ckernel_x = n-center_ckernel_x;
-                                                        pix_ckernel_y = m-center_ckernel_y;
-                                                        shifted_j = j+(pix_ckernel_x);
-                                                        shifted_k = k+(pix_ckernel_y);
-                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j>=0 && shifted_j < N) {
-                                                      #pragma omp critical
+                                        int kernel_i, kernel_j;
+                                        for(int m=-ckernel->getSupportY(); m<=ckernel->getSupportY(); m++) {
+                                                for(int n=-ckernel->getSupportX(); n<=ckernel->getSupportX(); n++) {
+                                                        shifted_j = j + n;
+                                                        shifted_k = k + m;
+                                                        kernel_j = n + ckernel->getSupportX();
+                                                        kernel_i = m + ckernel->getSupportY();
+                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N) {
+                                                        #pragma omp critical
                                                                 {
-                                                                        ckernel_result = ckernel->run(1.0f, pix_ckernel_x*fabs(deltau), pix_ckernel_y*fabs(deltav), 0.0f, 0.0f, fabs(deltau), fabs(deltav));
+                                                                        ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
                                                                         g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
                                                                         g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
                                                                         g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
@@ -1066,6 +1063,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                 }
 
+                                fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_beforedividing.fits", "./", 0, 1.0, M, N, 0, false);
+                                OFITS(g_weights.data(), mod_in, "./", "weights_grid_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
+                                OFITS(g_weights_aux.data(), mod_in, "./", "weights_grid_aux_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
                                 // Normalize visibilities and weights
                                 #pragma omp parallel for schedule(static, 1)
                                 for (int k = 0; k < M; k++) {
@@ -1078,24 +1078,31 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                                 g_uvw[N * k + j].x = u_meters;
                                                 g_uvw[N * k + j].y = v_meters;
-                                                float weight = g_weights[N * k + j];
-                                                float aux_weight = g_weights_aux[N * k + j];
-                                                if(weight > 0.0f && aux_weight > 0.0f) {
-                                                        g_Vo[N * k + j].x /= weight;
-                                                        g_Vo[N * k + j].y /= weight;
-                                                        g_weights[N * k + j] = weight * weight / aux_weight;
+                                                float ws = g_weights[N * k + j];
+                                                float aux_ws = g_weights_aux[N * k + j];
+                                                float weight;
+                                                if(aux_ws != 0.0f && ws != 0.0f) {
+                                                        weight = ws * ws / aux_ws;
+                                                        g_Vo[N * k + j].x /= ws;
+                                                        g_Vo[N * k + j].y /= ws;
+                                                        g_weights[N * k + j] = weight;
                                                 }else{
                                                         g_weights[N * k + j] = 0.0f;
                                                 }
                                         }
                                 }
 
+                                // The following lines are to create images with the resulting (u,v) grid and weights
+                                fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
+                                OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
 
                                 int visCounter = 0;
                                 float gridWeightSum = 0.0f;
 
+                                // We already know that on quadrants < N/2 there are only zeros
+                                // Therefore, we start j from N/2
                                 for (int k = 0; k < M; k++) {
-                                        for (int j = 0; j < N; j++) {
+                                        for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         gridWeightSum += weight;
@@ -1111,7 +1118,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                 #pragma omp parallel for schedule(static, 1)
                                 for (int k = 0; k < M; k++) {
-                                        for (int j = 0; j < N; j++) {
+                                        for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         g_weights[N * k + j] /= (1.0f + weight * S2);
@@ -1131,7 +1138,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                 int l = 0;
                                 for (int k = 0; k < M; k++) {
-                                        for (int j = 0; j < N; j++) {
+                                        for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
@@ -1144,8 +1151,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         }
                                 }
 
-                                // The following line is to create an image with the resulting (u,v) grid
-                                //fitsOutputCufftComplex(g_Vo.data(), mod_in, "fft.fits", "./", 0, 1.0, M, N, 0, false);
+
                                 fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s] = fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
                                 if (fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
@@ -1243,17 +1249,14 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
         }
 }
 
-__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N, int gridding)
+__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N)
 {
 
         long UVpow2;
 
         residualsToHost(fields, data, num_gpus, firstgpu);
 
-
-        int nthreads = gridding;
-
-        std::vector<std::vector<cufftComplex> > gridded_visibilities(nthreads, std::vector<cufftComplex> (M*N));
+        std::vector<std::vector<cufftComplex> > gridded_visibilities(num_gpus, std::vector<cufftComplex> (M*N));
 
         if(num_gpus == 1) {
                 cudaSetDevice(selected);

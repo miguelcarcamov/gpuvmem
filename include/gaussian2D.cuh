@@ -6,10 +6,12 @@
 
 class Gaussian2D : public CKernel {
 public:
-__host__ __device__ float run(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y);
+__host__ __device__ void constructKernel(float amp, float x0, float y0, float sigma_x, float sigma_y);
 Gaussian2D() : CKernel(){
 };
 Gaussian2D(int M, int N) : CKernel(M, N){
+};
+Gaussian2D(int M, int N, float w1) : CKernel(M, N, w1){
 };
 };
 

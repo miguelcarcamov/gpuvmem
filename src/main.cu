@@ -38,6 +38,8 @@
 #include "gaussianSinc2D.cuh"
 #include "gaussian2D.cuh"
 #include "sinc2D.cuh"
+#include "pswf_02D.cuh"
+#include "pswf_12D.cuh"
 #include <time.h>
 
 int num_gpus;
@@ -90,13 +92,15 @@ __host__ int main(int argc, char **argv) {
         enum {DefaultObjectiveFunction}; // ObjectiveFunction
         enum {MS}; // Io
         enum {SecondDerivative}; // Error calculation
-        enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D}; // CKernels for gridding
+        enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D, pswf_02D, pswf_12D}; // CKernels for gridding
 
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
         // Choose your antialiasing kernel!
         CKernel * sc = new PillBox2D(1,1);
-        //CKernel * sc = new EllipticalGaussian2D(6,6);
+        //CKernel * sc = new GaussianSinc2D(7, 7);
+        //CKernel * sc = new PSWF_12D(3,3);
+        //sc->setW1(2.50f);
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class

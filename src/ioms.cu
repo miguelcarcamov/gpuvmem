@@ -26,12 +26,12 @@ void IoMS::IowriteMS(char const *outfile, char const *out_col, std::vector<Field
         writeMS(outfile, out_col, fields, data, random_probability, sim, noise, W_projection, verbose_flag);
 };
 
-void IoMS::IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)
+void IoMS::IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
 {
-        OFITS(I, canvas, path, name_image, units, iteration, index, fg_scale, M, N);
+        OFITS(I, canvas, path, name_image, units, iteration, index, fg_scale, M, N, isInGPU);
 }
 
-void IoMS::IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char const *name_image, char *units, int iteration, int index, float fg_scale, long M, long N)
+void IoMS::IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char const *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
 {
         size_t needed;
         char *full_name;
@@ -40,11 +40,11 @@ void IoMS::IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char co
         full_name = (char*)malloc(needed*sizeof(char));
         snprintf(full_name, needed*sizeof(char), "%s_%d.fits", name_image, iteration);
 
-        OFITS(I, canvas, path, full_name, units, iteration, index, fg_scale, M, N);
+        OFITS(I, canvas, path, full_name, units, iteration, index, fg_scale, M, N, isInGPU);
         free(full_name);
 }
 
-void IoMS::IoPrintOptImageIteration(float *I, char *name_image, char *units, int index)
+void IoMS::IoPrintOptImageIteration(float *I, char *name_image, char *units, int index, bool isInGPU)
 {
         size_t needed;
         char *full_name;
@@ -55,9 +55,9 @@ void IoMS::IoPrintOptImageIteration(float *I, char *name_image, char *units, int
 
         std::string unit_str(units);
         if(unit_str == "JY/PIXEL")
-                OFITS(I, mod_in, mempath, full_name, units, iter, index, fg_scale, M, N);
+                OFITS(I, mod_in, mempath, full_name, units, iter, index, fg_scale, M, N, isInGPU);
         else
-                OFITS(I, mod_in, mempath, full_name, units, iter, index, 1.0, M, N);
+                OFITS(I, mod_in, mempath, full_name, units, iter, index, 1.0, M, N, isInGPU);
         free(full_name);
 }
 

@@ -382,7 +382,9 @@ void MFS::configure(int argc, char **argv)
         double deltay = RPDEG_D*DELTAY; //radians
         deltau = 1.0 / (M * deltax);
         deltav = 1.0 / (N * deltay);
-
+        printf("Constructing Antialiasing Kernel\n");
+        ckernel->constructKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
+        printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getM(), ckernel->getN(), ckernel->getSupportX(), ckernel->getSupportY());
         if(gridding) {
                 printf("Doing gridding\n");
                 omp_set_num_threads(gridding);
@@ -729,7 +731,7 @@ void MFS::setDevice()
                                 }
                                 if(print_images) {
                                         std::string atten_name =  "dataset_" + std::to_string(d) + "_atten";
-                                        iohandler->IoPrintImageIteration(datasets[d].fields[f].atten_image, mod_in, mempath, atten_name.c_str(), "", f, 0, 1.0, M, N);
+                                        iohandler->IoPrintImageIteration(datasets[d].fields[f].atten_image, mod_in, mempath, atten_name.c_str(), "", f, 0, 1.0, M, N, true);
                                 }
                         }
                 }
@@ -756,7 +758,7 @@ void MFS::setDevice()
         noise_image<<<numBlocksNN, threadsPerBlockNN>>>(device_noise_image, device_weight_image, noise_jypix, N);
         checkCudaErrors(cudaDeviceSynchronize());
         if(print_images) {
-                iohandler->IoPrintImage(device_noise_image, mod_in, mempath, "noise.fits", "", 0, 0, 1.0, M, N);
+                iohandler->IoPrintImage(device_noise_image, mod_in, mempath, "noise.fits", "", 0, 0, 1.0, M, N, true);
                 //iohandler->IoPrintImage(device_distance_image, mod_in, mempath, "distance.fits", "", 0, 0, 1.0, M, N);
         }
 
@@ -857,8 +859,8 @@ void MFS::run()
         //Pass residuals to host
         printf("Saving final image to disk\n");
         if(IoOrderEnd == NULL) {
-                iohandler->IoPrintImage(image->getImage(), mod_in, "", out_image, "JY/PIXEL", iter, 0, fg_scale, M, N);
-                iohandler->IoPrintImage(image->getImage(), mod_in, "", "alpha.fits", "", iter, 1, 1.0, M, N);
+                iohandler->IoPrintImage(image->getImage(), mod_in, "", out_image, "JY/PIXEL", iter, 0, fg_scale, M, N, true);
+                iohandler->IoPrintImage(image->getImage(), mod_in, "", "alpha.fits", "", iter, 1, 1.0, M, N, true);
         }else{
                 (IoOrderEnd)(image->getImage(), iohandler);
         }
@@ -874,8 +876,8 @@ void MFS::run()
                 printf("Calculating Error Images\n");
                 this->error->calculateErrorImage(this->image, this->visibilities);
                 if(IoOrderError == NULL) {
-                        iohandler->IoPrintImage(image->getErrorImage(), mod_in, "", "error_Inu_0.fits", "JY/PIXEL", iter, 0, 1.0, M, N);
-                        iohandler->IoPrintImage(image->getErrorImage(), mod_in, "", "error_alpha.fits", "", iter, 1, 1.0, M, N);
+                        iohandler->IoPrintImage(image->getErrorImage(), mod_in, "", "error_Inu_0.fits", "JY/PIXEL", iter, 0, 1.0, M, N, true);
+                        iohandler->IoPrintImage(image->getErrorImage(), mod_in, "", "error_alpha.fits", "", iter, 1, 1.0, M, N, true);
                 }else{
                         (IoOrderError)(image->getErrorImage(), iohandler);
                 }
@@ -895,11 +897,9 @@ void MFS::run()
                 deltav = 1.0 / (N * deltay);
 
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
-                omp_set_num_threads(gridding);
-                for(int d=0; d<nMeasurementSets; d++)
-                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N, gridding);
-
                 omp_set_num_threads(num_gpus);
+                for(int d=0; d<nMeasurementSets; d++)
+                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N);
 
                 for(int d=0; d<nMeasurementSets; d++)
                         residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
