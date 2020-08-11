@@ -1063,9 +1063,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                 }
 
-                                fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_beforedividing.fits", "./", 0, 1.0, M, N, 0, false);
-                                OFITS(g_weights.data(), mod_in, "./", "weights_grid_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
-                                OFITS(g_weights_aux.data(), mod_in, "./", "weights_grid_aux_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
+                                //fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_beforedividing.fits", "./", 0, 1.0, M, N, 0, false);
+                                //OFITS(g_weights.data(), mod_in, "./", "weights_grid_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
+                                //OFITS(g_weights_aux.data(), mod_in, "./", "weights_grid_aux_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
                                 // Normalize visibilities and weights
                                 #pragma omp parallel for schedule(static, 1)
                                 for (int k = 0; k < M; k++) {
@@ -1093,8 +1093,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 }
 
                                 // The following lines are to create images with the resulting (u,v) grid and weights
-                                fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
-                                OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
+                                //fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
+                                //OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
 
                                 int visCounter = 0;
                                 float gridWeightSum = 0.0f;
@@ -1167,7 +1167,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                         }
 
-                        local_max = *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].data(),fields[f].numVisibilitiesPerFreqPerStoke[i].data()+data->nstokes);
+                        local_max = *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].begin(), fields[f].numVisibilitiesPerFreqPerStoke[i].end());
                         if(local_max > max) {
                                 max = local_max;
                         }
@@ -1234,8 +1234,9 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
 __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<cufftComplex> Vm_gridded_sp, std::vector<double3> uvw_gridded_sp, double deltau, double deltav, float freq, long M, long N, int numvis)
 {
 
-        double deltau_meters = fabs(deltau) * (LIGHTSPEED/freq);
-        double deltav_meters = fabs(deltav) * (LIGHTSPEED/freq);
+        float lambda = freq_to_wavelength(freq);
+        double deltau_meters = fabs(deltau) * lambda;
+        double deltav_meters = fabs(deltav) * lambda;
 
         cufftComplex complex_zero = complexZero<cufftComplex>();
 
@@ -1316,7 +1317,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
 
                                         UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        fields[f].device_visibilities[i][s].numBlocksUV = UVpow2 / fields[f].device_visibilities[i][s].threadsPerBlockUV;
+                                        fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, fields[f].device_visibilities[i][s].threadsPerBlockUV);
 
                                         hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
@@ -1396,7 +1397,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
 
                                         UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        fields[f].device_visibilities[i][s].numBlocksUV = UVpow2 / fields[f].device_visibilities[i][s].threadsPerBlockUV;
+                                        fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, fields[f].device_visibilities[i][s].threadsPerBlockUV);
 
                                         hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>

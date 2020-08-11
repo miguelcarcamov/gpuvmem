@@ -455,9 +455,10 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
         for(int f=0; f<data.nfields; f++) {
                 for(int i=0; i<data.total_frequencies; i++) {
                         for(int s=0; s<data.nstokes; s++) {
-                                for (int j = 0; j < fields[f].visibilities[i][s].Vm.size(); j++) {
-                                        if (fields[f].visibilities[i][s].uvw[j].x < 0)
+                                for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
+                                        if (fields[f].visibilities[i][s].uvw[j].x < 0){
                                                 fields[f].visibilities[i][s].Vm[j].y *= -1;
+                                        }
                                 }
                         }
                 }

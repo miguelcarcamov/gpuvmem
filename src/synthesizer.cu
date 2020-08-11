@@ -245,10 +245,10 @@ void MFS::configure(int argc, char **argv)
                 nu_0 = median(ms_ref_freqs);
         }
         printf("Reference frequency: %e Hz\n", nu_0);
-        double deltau_theo = 2*max_uvmax_wavelength/(M-1);
-        double deltax_theo = 1/(M*deltau_theo)/RPARCSEC;
+        double deltau_theo = 2.0*max_uvmax_wavelength/(M-1);
+        double deltax_theo = 1.0/(M*deltau_theo)/RPARCSEC;
         printf("The pixel size has to be less or equal to %lf arcsec\n", deltax_theo);
-        printf("Actual pixel size is %lf arcsec\n", DELTAX*3600);
+        printf("Actual pixel size is %lf arcsec\n", DELTAX*3600.0);
 
 
 
@@ -884,6 +884,7 @@ void MFS::run()
 
         }
 
+        printf("Transferring residuals to host memory\n");
         if(!gridding)
         {
                 //Saving residuals to disk

@@ -99,7 +99,7 @@ __host__ int main(int argc, char **argv) {
         // Choose your antialiasing kernel!
         CKernel * sc = new PillBox2D(1,1);
         //CKernel * sc = new GaussianSinc2D(7, 7);
-        //CKernel * sc = new PSWF_12D(3,3);
+        //CKernel * sc = new PSWF_12D(7,7);
         //sc->setW1(2.50f);
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
