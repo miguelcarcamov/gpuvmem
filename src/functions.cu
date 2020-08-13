@@ -1322,13 +1322,13 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        cudaDeviceSynchronize();
+                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                         // Interpolation / Degridding
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                        cudaDeviceSynchronize();
+                                        checkCudaErrors(cudaDeviceSynchronize());
                                 }
 
                         }
@@ -1346,7 +1346,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                 cudaGetDevice(&gpu_id);
                                 for(int s=0; s<data.nstokes; s++) {
                                         // Put gridded visibilities in a M*N grid
-                                        griddedTogrid(gridded_visibilities[j], fields[f].visibilities[i][s].Vm,
+                                        griddedTogrid(gridded_visibilities[i%num_gpus], fields[f].visibilities[i][s].Vm,
                                                       fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i], M, N,
                                                       fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
@@ -1378,7 +1378,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
 
                                         // Copy gridded model visibilities to device
-                                        checkCudaErrors(cudaMemcpy(vars_gpu[i % num_gpus].device_V, gridded_visibilities[j].data(),
+                                        checkCudaErrors(cudaMemcpy(vars_gpu[i % num_gpus].device_V, gridded_visibilities[i%num_gpus].data(),
                                                                    sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
 
                                         // Copy original (u,v) positions and weights to host and device
@@ -1402,13 +1402,13 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        cudaDeviceSynchronize();
+                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                         // Interpolation / Degridding
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                        cudaDeviceSynchronize();
+                                        checkCudaErrors(cudaDeviceSynchronize());
                                 }
                         }
                 }
