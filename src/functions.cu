@@ -1184,8 +1184,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding)
 {
         //Declaring block size and number of blocks for visibilities
-        float variance;
-        float sum_weights = 0.0;
+        double variance;
+        double sum_weights = 0.0;
         long UVpow2;
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
