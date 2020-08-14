@@ -1010,7 +1010,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++) {
 
                                         int j, k;
-                                        float grid_pos_x, grid_pos_y;
+                                        double grid_pos_x, grid_pos_y;
                                         double3 uvw;
                                         float w;
                                         cufftComplex Vo;
