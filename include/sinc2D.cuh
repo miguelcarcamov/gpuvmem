@@ -9,9 +9,9 @@ public:
 __host__ __device__ void constructKernel(float amp, float x0, float y0, float sigma_x, float sigma_y);
 Sinc2D() : CKernel(){
 };
-Sinc2D(int M, int N) : CKernel(M, N){
+Sinc2D(int m, int n) : CKernel(m, n){
 };
-Sinc2D(int M, int N, float w1) : CKernel(M, N, w1){
+Sinc2D(int m, int n, float w1) : CKernel(m, n, w1){
 };
 };
 

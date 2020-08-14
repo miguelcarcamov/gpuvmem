@@ -384,7 +384,7 @@ void MFS::configure(int argc, char **argv)
         deltav = 1.0 / (N * deltay);
         printf("Constructing Antialiasing Kernel\n");
         ckernel->constructKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
-        printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getM(), ckernel->getN(), ckernel->getSupportX(), ckernel->getSupportY());
+        printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
         if(gridding) {
                 printf("Doing gridding\n");
                 omp_set_num_threads(gridding);

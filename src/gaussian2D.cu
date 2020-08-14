@@ -4,11 +4,11 @@ __host__ __device__ void Gaussian2D::constructKernel(float amp, float x0, float 
 {
 
         float x, y;
-        for(int i=0; i<this->M; i++) {
-                for(int j=0; j<this->N; j++) {
+        for(int i=0; i<this->m; i++) {
+                for(int j=0; j<this->n; j++) {
                         y = (i-this->support_y)*sigma_y;
                         x = (j-this->support_x)*sigma_x;
-                        this->kernel[this->N*i+j] = gaussian2D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w1, this->alpha);
+                        this->kernel[this->n*i+j] = gaussian2D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w1, this->alpha);
                 }
         }
 };

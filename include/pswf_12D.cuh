@@ -9,7 +9,9 @@ public:
 __host__ __device__ void constructKernel(float amp, float x0, float y0, float sigma_x, float sigma_y);
 PSWF_12D() : CKernel(){
 };
-PSWF_12D(int M, int N) : CKernel(M, N){
+PSWF_12D(int m, int n) : CKernel(m, n){
+};
+PSWF_12D(int m, int n, float w1) : CKernel(m, n, w1){
 };
 };
 

@@ -386,112 +386,88 @@ public:
 __host__ __device__ virtual void constructKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
 CKernel::CKernel()
 {
-        this->M = 7;
-        this->N = 7;
+        this->m = 7;
+        this->n = 7;
         this->w1 = 2.52;
         this->w2 = 1.55;
         this->alpha = 2;
         this->angle = 0.0;
-        this->setM_times_N();
+        this->setm_times_n();
         this->setSupports();
         this->setKernelMemory();
 };
 
-CKernel::CKernel(int M, int N)
+CKernel::CKernel(int m, int n)
 {
-        this->M = M;
-        this->N = N;
+        this->m = m;
+        this->n = n;
         this->w1 = 2.52;
         this->w2 = 1.55;
         this->alpha = 2;
         this->angle = 0.0;
-        this->setM_times_N();
+        this->setm_times_n();
         this->setSupports();
         this->setKernelMemory();
 };
 
 
-CKernel::CKernel(int M, int N, float w1)
+CKernel::CKernel(int m, int n, float w1)
 {
-        this->M = M;
-        this->N = N;
+        this->n = m;
+        this->n = n;
         this->w1 = w1;
         this->alpha = 2;
         this->angle = 0.0;
-        this->setM_times_N();
+        this->setm_times_n();
         this->setSupports();
         this->setKernelMemory();
 };
 
-CKernel::CKernel(int M, int N, float w1, float w2)
+CKernel::CKernel(int m, int n, float w1, float w2)
 {
-        this->M = M;
-        this->N = N;
+        this->m = m;
+        this->n = n;
         this->w1 = w1;
         this->w2 = w2;
         this->alpha = 2;
         this->angle = 0.0;
-        this->setM_times_N();
-        this->setSupports();
-        this->setKernelMemory();
-};
-
-CKernel::CKernel(float dx, float dy, int M, int N)
-{
-        this->M = M;
-        this->N = N;
-        this->dx = dx;
-        this->dy = dy;
-        this->w1 = 2.52;
-        this->w2 = 1.55;
-        this->alpha = 2;
-        this->angle = 0.0;
-        this->setM_times_N();
+        this->setm_times_n();
         this->setSupports();
         this->setKernelMemory();
 };
 
 
-CKernel::CKernel(float dx, float dy, float w1, float w2, float angle, int M, int N)
+
+CKernel::CKernel(float w1, float w2, float angle, int m, int n)
 {
-        this->M = M;
-        this->N = N;
-        this->dx = dx;
-        this->dy = dy;
+        this->m = m;
+        this->n = n;
         this->w1 = w1;
         this->w2 = w2;
         this->alpha = 2.0;
         this->angle = angle;
-        this->setM_times_N();
+        this->setm_times_n();
         this->setSupports();
         this->setKernelMemory();
 };
 
-CKernel::CKernel(float dx, float dy, float w1, float w2, float alpha, float angle, int M, int N)
+CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
 {
-        this->M = M;
-        this->N = N;
-        this->dx = dx;
-        this->dy = dy;
+        this->m = m;
+        this->n = n;
         this->w1 = w1;
         this->w2 = w2;
         this->alpha = alpha;
         this->angle = angle;
-        this->setM_times_N();
+        this->setm_times_n();
         this->setSupports();
         this->setKernelMemory();
 };
-float getdx(){
-        return this->dx;
+int getm(){
+        return this->m;
 };
-float getdy(){
-        return this->dy;
-};
-int getM(){
-        return this->M;
-};
-int getN(){
-        return this->N;
+int getn(){
+        return this->n;
 };
 int getSupportX(){
         return this->support_x;
@@ -513,16 +489,17 @@ float getAngle(){
 };
 float getKernelValue(int i, int j)
 {
-        return this->kernel[N * i + j];
+        return this->kernel[this->n * i + j];
 };
-void setdxdy(float dx, float dy){
-        this->dx = dx; this->dx = dx;
+void setmn(int m, int n){
+        this->m = m; this->n = n;
+        this->setm_times_n();
+        this->setSupports();
+        this->setKernelMemory();
 };
 void setMN(int M, int N){
         this->M = M; this->N = N;
         this->setM_times_N();
-        this->setSupports();
-        this->setKernelMemory();
 };
 void setW1(float w1){
         this->w1 = w1;
@@ -538,33 +515,38 @@ void setAngle(float angle){
 };
 
 private:
+int m_times_n;
 int M_times_N;
+
+void setm_times_n(){
+        this->m_times_n = this->m * this->n;
+};
 
 void setM_times_N(){
         this->M_times_N = this->M * this->N;
 };
 
 void setSupports(){
-        this->support_x = floor(this->M/2.0f);
-        this->support_y = floor(this->N/2.0f);
+        this->support_x = floor(this->m/2.0f);
+        this->support_y = floor(this->m/2.0f);
 };
 
 void setKernelMemory(){
-        this->kernel.resize(this->M_times_N);
+        this->kernel.resize(this->m_times_n);
 };
 
 
 protected:
-int M;
-int N;
+int m; //size of the kernel
+int n; //size of the kernel
+int M; //size of the gridding correction function
+int N; //size of the gridding correction function
 int support_x;
 int support_y;
 float w1;
 float w2;
 float alpha;
 float angle;
-float dx;
-float dy;
 std::vector<float> kernel;
 
 __host__ __device__ float ellipticalGaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float angle)
