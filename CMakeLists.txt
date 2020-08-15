@@ -39,6 +39,7 @@ if(Boost_FOUND)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/sinc2D.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/pswf_02D.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/pswf_12D.cu
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/fixedpoint.cu
   )
 
 

@@ -40,6 +40,7 @@
 #include "sinc2D.cuh"
 #include "pswf_02D.cuh"
 #include "pswf_12D.cuh"
+#include "fixedpoint.cuh"
 #include <time.h>
 
 int num_gpus;
