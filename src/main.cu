@@ -66,6 +66,12 @@ void optimizationOrder(Optimizator *optimizator, Image *image){
         optimizator->optimize();*/
 }
 
+std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer){
+      synthesizer->clearRun();
+      synthesizer->run();
+      return synthesizer->getOptimizator()->getObjectiveFuntion()->get_fi_values();
+}
+
 __host__ int main(int argc, char **argv) {
         ////CHECK FOR AVAILABLE GPUs
         cudaGetDeviceCount(&num_gpus);

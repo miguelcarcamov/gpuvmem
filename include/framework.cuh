@@ -755,6 +755,7 @@ __host__ virtual void unSetDevice() = 0;
 __host__ virtual std::vector<std::string> countAndSeparateStrings(char *input) = 0;
 __host__ virtual void configure(int argc, char **argv) = 0;
 __host__ virtual void applyFilter(Filter *filter) = 0;
+__host__ virtual void clearRun() = 0;
 __host__ void setOptimizator(Optimizator *min){
         this->optimizator = min;
 };
@@ -784,6 +785,10 @@ void setIoOrderError(void (*func)(float *I, Io *io)){
 };
 void setIoOrderIterations(void (*func)(float *I, Io *io)){
         this->IoOrderIterations = func;
+};
+
+Optimizator* getOptimizator(){
+        return this->optimizator;
 };
 
 __host__ void setGriddingKernel(CKernel *ckernel){
