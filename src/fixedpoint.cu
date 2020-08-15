@@ -7,7 +7,7 @@ __host__ T tolFunction(std::vector<T> x1, std::vector<T> x0)
                 tolVector.push_back(abs(x1[i]-x0[i])/abs(x0[i]));
         }
 
-        T max = *max_element(tolVector.begin(), tolVectorv1.end());
+        T max = *max_element(tolVector.begin(), tolVector.end());
 
         return max;
 }
@@ -21,6 +21,8 @@ __host__ std::vector<T> fixedPointOpt(std::vector<T> guess, void (*optf)(void *)
         int it = 0;
 
         while(it < iterations && tolFunction<T>(x1, x0) < tol) {
+                if(it > 1)
+                        x0 = x1;
                 x1 = optf(x0);
                 it++;
         }
