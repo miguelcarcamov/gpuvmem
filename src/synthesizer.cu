@@ -785,6 +785,42 @@ void MFS::setDevice()
         }
 };
 
+void MFS::clearRun()
+{
+        for(int d=0; d<nMeasurementSets; d++) {
+                for(int f=0; f<datasets[d].data.nfields; f++) {
+                        if(num_gpus == 1) {
+                                cudaSetDevice(selected);
+                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
+                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0,
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,
+                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        }
+                                }
+
+                        }else{
+                                cudaSetDevice(firstgpu);
+                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
+                                        cudaSetDevice((i % num_gpus) + firstgpu);
+                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0, sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        }
+                                }
+                        }
+                }
+        }
+        for(int g=0; g<num_gpus; g++) {
+                cudaSetDevice((g%num_gpus) + firstgpu);
+                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_V, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_I_nu, sizeof(cufftComplex)*M*N));
+        }
+
+        checkCudaErrors(cudaMemcpy(device_Image, host_I, sizeof(float)*N*M*image_count, cudaMemcpyHostToDevice));
+
+}
 void MFS::run()
 {
         printf("\n\nStarting Optimizator\n");

@@ -10,6 +10,7 @@
 class MFS : public Synthesizer
 {
 public:
+void clearRun();
 void run();
 void setOutPut(char * FileName){
 };
