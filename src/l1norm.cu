@@ -39,7 +39,7 @@ void L1norm::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
 
         if(imageIndex > image_count -1 || imageToAdd > image_count -1)
         {
-                printf("There is no image for the provided index (Laplacian)\n");
+                printf("There is no image for the provided index (L1 Norm)\n");
                 exit(-1);
         }
 
@@ -47,7 +47,7 @@ void L1norm::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
         {
                 if(penalizatorIndex > (nPenalizators - 1) || penalizatorIndex < 0)
                 {
-                        printf("invalid index for penalizator (laplacian)\n");
+                        printf("invalid index for penalizator (L1 Norm)\n");
                         exit(-1);
                 }else{
                         this->penalization_factor = penalizators[penalizatorIndex];

@@ -1508,22 +1508,21 @@ __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, in
 
 __device__ float AiryDiskBeam(float distance, float lambda, float antenna_diameter, float pb_factor)
 {
-        float atten;
-        float r = pb_factor * lambda / antenna_diameter;
-        float bessel_arg = PI*distance/(r/RZ);
-        float bessel_func = j1f(bessel_arg);
-        if(distance == 0.0f) {
-                atten = 1.0f;
-        }else{
-                atten = 4.0f * (bessel_func/bessel_arg) * (bessel_func/bessel_arg);
+        float atten = 1.0f;
+        if(distance != 0.0){
+          float r = pb_factor * lambda / antenna_diameter;
+          float bessel_arg = PI*distance/(r/RZ);
+          float bessel_func = j1f(bessel_arg);
+          atten = 4.0f * (bessel_func/bessel_arg) * (bessel_func/bessel_arg);
         }
+
         return atten;
 }
 
 __device__ float GaussianBeam(float distance, float lambda, float antenna_diameter, float pb_factor)
 {
         float fwhm = pb_factor * lambda / antenna_diameter;
-        float c = 4.0*logf(2.0);
+        float c = 4.0f*logf(2.0f);
         float r = distance/fwhm;
         float atten = expf(-c*r*r);
         return atten;

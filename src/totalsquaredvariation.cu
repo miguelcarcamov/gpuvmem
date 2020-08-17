@@ -40,7 +40,7 @@ void TotalSquaredVariationP::configure(int penalizatorIndex, int imageIndex, int
 
         if(imageIndex > image_count -1 || imageToAdd > image_count -1)
         {
-                printf("There is no image for the provided index (SquaredTotalVariationP)\n");
+                printf("There is no image for the provided index (TotalSquaredVariation)\n");
                 exit(-1);
         }
 
@@ -48,7 +48,7 @@ void TotalSquaredVariationP::configure(int penalizatorIndex, int imageIndex, int
         {
                 if(penalizatorIndex > (nPenalizators - 1) || penalizatorIndex < 0)
                 {
-                        printf("invalid index for penalizator (SquaredTotalVariationP)\n");
+                        printf("invalid index for penalizator (TotalSquaredVariation)\n");
                         exit(-1);
                 }else{
                         this->penalization_factor = penalizators[penalizatorIndex];

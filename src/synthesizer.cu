@@ -812,10 +812,12 @@ void MFS::clearRun()
                         }
                 }
         }
+
         for(int g=0; g<num_gpus; g++) {
                 cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_V, sizeof(cufftComplex)*M*N));
-                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_I_nu, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N));
+
         }
 
         checkCudaErrors(cudaMemcpy(device_Image, host_I, sizeof(float)*N*M*image_count, cudaMemcpyHostToDevice));
@@ -892,7 +894,11 @@ void MFS::run()
                 fprintf(outfile, "Wall time: %lf", wall_time);
                 fclose(outfile);
         }
-        //Pass residuals to host
+
+};
+
+void MFS::writeImages()
+{
         printf("Saving final image to disk\n");
         if(IoOrderEnd == NULL) {
                 iohandler->IoPrintImage(image->getImage(), mod_in, "", out_image, "JY/PIXEL", iter, 0, fg_scale, M, N, true);
@@ -919,7 +925,10 @@ void MFS::run()
                 }
 
         }
+};
 
+void MFS::writeResiduals()
+{
         printf("Transferring residuals to host memory\n");
         if(!gridding)
         {
@@ -955,8 +964,6 @@ void MFS::run()
         }
 
         printf("Residuals and model saved.\n");
-
-
 };
 
 void MFS::unSetDevice()

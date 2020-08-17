@@ -10,7 +10,9 @@
 class MFS : public Synthesizer
 {
 public:
+void writeImages();
 void clearRun();
+void writeResiduals();
 void run();
 void setOutPut(char * FileName){
 };

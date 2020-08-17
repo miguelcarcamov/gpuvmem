@@ -13,6 +13,29 @@ __host__ __device__ void Sinc2D::constructKernel(float amp, float x0, float y0, 
 
 };
 
+__host__ __device__ float Sinc2D::GCF_fn(float amp, float nu, float w)
+{
+        if(fabs(nu) < w)
+                return amp*1.0f;
+        else
+                return 0.0f;
+};
+
+__device__ float Sinc2D::constructGCF(float amp, float x0, float y0, float sigma_x, float sigma_y, float w, int M, int N)
+{
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+
+        float x = (j - x0) * sigma_x;
+        float y = (i - y0) * sigma_y;
+
+        float radius = distance(x, 0, y, 0);
+        float val = GCF_fn(amp, radius, w);
+
+        return val;
+
+};
+
 namespace {
 CKernel* CreateCKernel()
 {

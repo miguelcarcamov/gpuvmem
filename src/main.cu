@@ -40,6 +40,7 @@
 #include "sinc2D.cuh"
 #include "pswf_02D.cuh"
 #include "pswf_12D.cuh"
+#include "fixedpoint.cuh"
 #include <time.h>
 
 int num_gpus;
@@ -53,17 +54,52 @@ inline bool IsAppBuiltAs64()
   #endif
 }
 
+/*
+ This is a function that runs gpuvmem and calculates new regularization values according to the Belge et al. 2002 paper.
+*/
+std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer)
+{
+
+        int cter = 0;
+        std::vector<Fi*> fis = synthesizer->getOptimizator()->getObjectiveFuntion()->getFi();
+        for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
+        {
+                if(cter)
+                        (*it)->setPenalizationFactor(args[cter]);
+                cter++;
+        }
+
+        synthesizer->clearRun();
+        synthesizer->run();
+        std::vector<float> fi_values = synthesizer->getOptimizator()->getObjectiveFuntion()->get_fi_values();
+        std::vector<float> lambdas(fi_values.size(), 0.0f);
+
+        for(int i=0; i < fi_values.size(); i++)
+        {
+                if(i>0)
+                {
+                        lambdas[i] = fi_values[0]/fi_values[i] * (logf(fi_values[i])/logf(fi_values[0]));
+                        if(lambdas[i] < 0.0f)
+                                lambdas[i] = 0.0f;
+                }else
+                        lambdas[i] = 1.0f;
+        }
+
+        return lambdas;
+}
+
 void optimizationOrder(Optimizator *optimizator, Image *image){
         optimizator->setImage(image);
         optimizator->setFlag(0);
         optimizator->optimize();
         /*optimizator->setFlag(1);
-        optimizator->optimize();
-        optimizator->setFlag(2);
-        optimizator->optimize();
-        optimizator->setFlag(3);
-        optimizator->optimize();*/
+           optimizator->optimize();
+           optimizator->setFlag(2);
+           optimizator->optimize();
+           optimizator->setFlag(3);
+           optimizator->optimize();*/
 }
+
 
 __host__ int main(int argc, char **argv) {
         ////CHECK FOR AVAILABLE GPUs
@@ -97,9 +133,9 @@ __host__ int main(int argc, char **argv) {
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
         // Choose your antialiasing kernel!
-        CKernel * sc = new PillBox2D(1,1);
+        //CKernel * sc = new PillBox2D(1,1);
         //CKernel * sc = new GaussianSinc2D(7, 7);
-        //CKernel * sc = new PSWF_12D(7,7);
+        CKernel * sc = new PSWF_12D(7,7);
         //sc->setW1(2.50f);
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
@@ -130,17 +166,23 @@ __host__ int main(int argc, char **argv) {
         //if the nopositivity flag is on  all images will run with no posivity,
         //otherwise the first image image will be calculated with positivity and all the others without positivity,
         //to modify this, use these sentences, where i corresponds to the index of the image ( particularly, means positivity)
-        sy->run();
-        std::vector<float> fi_values = of->get_fi_values();
-        //for(int it = 0; it < fi_values.size() ; it++)
-        //{
-        //        std::cout << fi_values[it] << std::endl;
-        //}
 
+        /*std::vector<float> lambdas = {1.0, 1e-5, 1e-5};
+        std::vector<Fi*> fis = of->getFi();
+        int i = 0;
+        for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
+        {
+                (*it)->setPenalizationFactor(lambdas[i]);
+                i++;
+        }
+
+        std::vector<float> final_lambdas = fixedPointOpt(lambdas, &runGpuvmem, 1e-5, 40, sy);*/
+        sy->run();
         //e->setPenalizationFactor(0.00001);
         //l->setPenalizationFactor(0.00005);
         //std::cout << "Trying to run another iteration" << std::endl;
-        //sy->run();
+        sy->writeImages();
+        sy->writeResiduals();
         sy->unSetDevice(); // This routine performs memory cleanup and release
 
         return 0;

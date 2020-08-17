@@ -213,11 +213,11 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
                 switch(str2int((data->telescope_name).c_str())) {
                 case str2int("ALMA"):
-                        antennas[a].pb_factor = 1.13;
+                        antennas[a].pb_factor = 1.13f;
                         antennas[a].primary_beam = AIRYDISK;
                         break;
                 case str2int("EVLA"):
-                        antennas[a].pb_factor = 1.25;
+                        antennas[a].pb_factor = 1.25f;
                         antennas[a].primary_beam = GAUSSIAN;
                         break;
                 default:

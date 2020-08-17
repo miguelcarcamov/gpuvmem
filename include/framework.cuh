@@ -303,6 +303,10 @@ void copyDphiToXi(float *xi)
 {
         checkCudaErrors(cudaMemcpy(xi, dphi, sizeof(float)*M*N*image_count, cudaMemcpyDeviceToDevice));
 }
+
+std::vector<Fi*> getFi(){
+        return this->fis;
+};
 void setN(long N){
         this->N = N;
 }
@@ -666,6 +670,24 @@ __host__ __device__ float pswf_01D(float amp, float x, float x0, float sigma, fl
                 return 0.0f;
 };
 
+__host__ __device__ float pswf_01D_GPU(float amp, float x, float x0, float sigma, float w, int m)
+{
+        float radius = distance(x, 0.0f, x0, 0.0f);
+        if(radius < w*sigma)
+        {
+                float alpha = m/2.0f;
+                float nu =  2.0f*radius/(m*sigma);
+                float pi_alpha = PI * alpha;
+                float num_1 = nu * nu;
+                float sqrtnum = sqrtf(1.0f-num_1);
+                float num = j0f(pi_alpha * sqrtnum);
+                float den = j0f(pi_alpha);
+                float val = amp*(num/den);
+                return val;
+        }else
+                return 0.0f;
+};
+
 __host__ __device__ float pswf_02D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, int m, int n)
 {
         return amp*pswf_01D(1.0f, x, x0, sigma_x, w, m)*pswf_01D(1.0f, y, y0, sigma_y, w, n);
@@ -673,14 +695,14 @@ __host__ __device__ float pswf_02D(float amp, float x, float y, float x0, float 
 
 __host__ __device__ float pswf_11D_func(float nu)
 {
-        float size_vec_p, size_vec_q, nu_end;
+        float nu_end;
         float dnusq, top, bottom;
         int idx;
 
-        const std::vector<std::vector<float> > mat_p{{8.203343e-2, -3.644705e-1, 6.278660e-1, -5.335581e-1, 2.312756e-1},
+        const float mat_p[2][5] = {{8.203343e-2, -3.644705e-1, 6.278660e-1, -5.335581e-1, 2.312756e-1},
                 {4.028559e-3, -3.697768e-2, 1.021332e-1, -1.201436e-1, 6.412774e-2}};
 
-        const std::vector<std::vector<float> > mat_q{{1.0000000e0, 8.212018e-1, 2.078043e-1},
+        const float mat_q[2][3] = {{1.0000000e0, 8.212018e-1, 2.078043e-1},
                 {1.0000000e0, 9.599102e-1, 2.918724e-1}};
 
         float n_nu = fabsf(nu);
@@ -688,8 +710,6 @@ __host__ __device__ float pswf_11D_func(float nu)
         if(n_nu > 1.0f)
                 res = 0.0f;
         else{
-                size_vec_p = mat_p[0].size();
-                size_vec_q = mat_q[0].size();
                 nu_end = 0.0f;
                 idx = 0;
                 if(n_nu >= 0.0f && n_nu < 0.75) {
@@ -704,11 +724,11 @@ __host__ __device__ float pswf_11D_func(float nu)
                 top = mat_p[idx][0];
                 bottom = mat_q[idx][0];
 
-                for(int i=1; i<size_vec_p; i++) {
+                for(int i=1; i<5; i++) {
                         top += mat_p[idx][i] * powf(dnusq, i);
                 }
 
-                for(int i=1; i<size_vec_q; i++) {
+                for(int i=1; i<3; i++) {
                         bottom += mat_q[idx][i] * powf(dnusq, i);
                 }
 
@@ -755,6 +775,9 @@ __host__ virtual void unSetDevice() = 0;
 __host__ virtual std::vector<std::string> countAndSeparateStrings(char *input) = 0;
 __host__ virtual void configure(int argc, char **argv) = 0;
 __host__ virtual void applyFilter(Filter *filter) = 0;
+__host__ virtual void writeImages() = 0;
+__host__ virtual void clearRun() = 0;
+__host__ virtual void writeResiduals() = 0;
 __host__ void setOptimizator(Optimizator *min){
         this->optimizator = min;
 };
@@ -784,6 +807,10 @@ void setIoOrderError(void (*func)(float *I, Io *io)){
 };
 void setIoOrderIterations(void (*func)(float *I, Io *io)){
         this->IoOrderIterations = func;
+};
+
+Optimizator* getOptimizator(){
+        return this->optimizator;
 };
 
 __host__ void setGriddingKernel(CKernel *ckernel){
