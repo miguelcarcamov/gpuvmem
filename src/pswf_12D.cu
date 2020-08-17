@@ -8,7 +8,7 @@ __host__ __device__ void PSWF_12D::constructKernel(float amp, float x0, float y0
                 for(int j=0; j<this->n; j++) {
                         y = (i-this->support_y)*sigma_y;
                         x = (j-this->support_x)*sigma_x;
-                        val = pswf_12D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w1, this->M, this->N);
+                        val = pswf_12D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w1, this->m, this->n);
                         this->kernel[this->n * i + j] = val;
                 }
         }
