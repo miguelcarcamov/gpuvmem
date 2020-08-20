@@ -13,7 +13,7 @@ float *host_I, sum_weights, *penalizators;
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
 
-int threadsVectorReduceNN, blocksVectorReduceNN, nopositivity = 0, verbose_flag = 0, clip_flag = 0, apply_noise = 0, print_images = 0, save_model_input = 0;
+int nopositivity = 0, verbose_flag = 0, clip_flag = 0, apply_noise = 0, print_images = 0, save_model_input = 0;
 int gridding, it_maximum, status_mod_in;
 int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, print_errors, nMeasurementSets=0, max_number_vis;
 char *output, *mempath, *out_image, *msinput, *msoutput, *inputdat, *modinput;
@@ -157,42 +157,9 @@ void MFS::configure(int argc, char **argv)
         if(print_images)
                 if(stat(mempath, &st) == -1) mkdir(mempath,0700);
 
-        cudaDeviceProp dprop[num_gpus];
-
-        if(verbose_flag) {
-                printf("Number of host CPUs:\t%d\n", omp_get_num_procs());
-                printf("Number of CUDA devices:\t%d\n", num_gpus);
-
-                for(int i = 0; i < num_gpus; i++) {
-                        cudaGetDeviceProperties(&dprop[i], i);
-                        printf("> GPU%d = \"%15s\" %s capable of Peer-to-Peer (P2P)\n", i, dprop[i].name, (IsGPUCapableP2P(&dprop[i]) ? "IS " : "NOT"));
-                }
-                printf("---------------------------\n");
-        }
-
-        cudaGetDeviceProperties(&dprop[0], 0);
-        if(variables.blockSizeX*variables.blockSizeY > dprop[0].maxThreadsPerBlock || variables.blockSizeV > dprop[0].maxThreadsPerBlock) {
-                printf("Block size X: %d\n", variables.blockSizeX);
-                printf("Block size Y: %d\n", variables.blockSizeY);
-                printf("Block size X*Y: %d\n", variables.blockSizeX*variables.blockSizeY);
-                printf("Block size V: %d\n", variables.blockSizeV);
-                printf("ERROR. The maximum threads per block cannot be greater than %d\n", dprop[0].maxThreadsPerBlock);
-                exit(-1);
-        }
-
-        if(variables.blockSizeX > dprop[0].maxThreadsDim[0] || variables.blockSizeY > dprop[0].maxThreadsDim[1] || variables.blockSizeV > dprop[0].maxThreadsDim[0]) {
-                printf("Block size X: %d\n", variables.blockSizeX);
-                printf("Block size Y: %d\n", variables.blockSizeY);
-                printf("Block size V: %d\n", variables.blockSizeV);
-                printf("ERROR. The size of the blocksize cannot exceed X: %d Y: %d Z: %d\n", dprop[0].maxThreadsDim[0], dprop[0].maxThreadsDim[1], dprop[0].maxThreadsDim[2]);
-                exit(-1);
-        }
-
-        if(selected > num_gpus || selected < 0) {
-                printf("ERROR. THE SELECTED GPU DOESN'T EXIST\n");
-                exit(-1);
-        }
-
+        /*
+           Read input.dat file and FITS header
+         */
         readInputDat(inputdat);
         canvasVariables canvas_vars = iohandler->IoreadCanvas(modinput, mod_in, b_noise_aux, status_mod_in, verbose_flag);
 
@@ -207,6 +174,63 @@ void MFS::configure(int argc, char **argv)
         beam_bmaj = canvas_vars.beam_bmaj;
         beam_bmin = canvas_vars.beam_bmin;
         beam_noise = canvas_vars.beam_noise;
+
+        cudaDeviceProp dprop[num_gpus];
+
+        if(verbose_flag) {
+                printf("Number of host CPUs:\t%d\n", omp_get_num_procs());
+                printf("Number of CUDA devices:\t%d\n", num_gpus);
+
+                for(int i = 0; i < num_gpus; i++) {
+                        checkCudaErrors(cudaGetDeviceProperties(&dprop[i], i));
+                        printf("> GPU%d = \"%15s\" %s capable of Peer-to-Peer (P2P)\n", i, dprop[i].name, (IsGPUCapableP2P(&dprop[i]) ? "IS " : "NOT"));
+                }
+                printf("---------------------------\n");
+        }
+
+        //Declaring block size and number of blocks for Image
+        if(variables.blockSizeX == -1 && variables.blockSizeY == -1) {
+                int maxGridSizeX, maxGridSizeY;
+                int numblocksX, numblocksY;
+                int threadsX, threadsY;
+                maxGridSizeX = iDivUp(M, sqrt(256));
+                maxGridSizeY = iDivUp(N, sqrt(256));
+                getNumBlocksAndThreads(M, maxGridSizeX, sqrt(256), numblocksX, threadsX, false);
+                getNumBlocksAndThreads(N, maxGridSizeY, sqrt(256), numblocksY, threadsY, false);
+                numBlocksNN.x = numblocksX;
+                numBlocksNN.y = numblocksY;
+                threadsPerBlockNN.x = threadsX;
+                threadsPerBlockNN.y = threadsY;
+                printf("Your 2D grid is [%d,%d] blocks and each has [%d,%d] threads\n", numBlocksNN.x, numBlocksNN.y, threadsPerBlockNN.x, threadsPerBlockNN.y);
+        }else{
+                if(variables.blockSizeX*variables.blockSizeY > dprop[0].maxThreadsPerBlock || variables.blockSizeV > dprop[0].maxThreadsPerBlock) {
+                        printf("Block size X: %d\n", variables.blockSizeX);
+                        printf("Block size Y: %d\n", variables.blockSizeY);
+                        printf("Block size X*Y: %d\n", variables.blockSizeX*variables.blockSizeY);
+                        printf("Block size V: %d\n", variables.blockSizeV);
+                        printf("ERROR. The maximum threads per block cannot be greater than %d\n", dprop[0].maxThreadsPerBlock);
+                        exit(-1);
+                }
+
+                if(variables.blockSizeX > dprop[0].maxThreadsDim[0] || variables.blockSizeY > dprop[0].maxThreadsDim[1]) {
+                        printf("Block size X: %d\n", variables.blockSizeX);
+                        printf("Block size Y: %d\n", variables.blockSizeY);
+                        printf("Block size V: %d\n", variables.blockSizeV);
+                        printf("ERROR. The size of the blocksize cannot exceed X: %d Y: %d Z: %d\n", dprop[0].maxThreadsDim[0], dprop[0].maxThreadsDim[1], dprop[0].maxThreadsDim[2]);
+                        exit(-1);
+                }
+                threadsPerBlockNN.x = variables.blockSizeX;
+                threadsPerBlockNN.y = variables.blockSizeY;
+
+                numBlocksNN.x = iDivUp(M, threadsPerBlockNN.x);
+                numBlocksNN.y = iDivUp(N, threadsPerBlockNN.y);
+        }
+
+
+        if(selected > num_gpus-1 || selected < 0) {
+                printf("ERROR. The selected GPU ID does not exist\n");
+                exit(-1);
+        }
 
         if(verbose_flag)
                 printf("Reading data from MSs\n");
@@ -236,9 +260,10 @@ void MFS::configure(int argc, char **argv)
         float max_freq = *max_element(ms_max_freqs.begin(), ms_max_freqs.end());
         float max_blength = *max_element(ms_max_blength.begin(), ms_max_blength.end());
         float min_wlength = freq_to_wavelength(max_freq);
-        float max_resolution = (min_wlength/(4*max_blength))/RPARCSEC;
+        float resolution_arcsec = (min_wlength/max_blength)/RPARCSEC;
         double max_uvmax_wavelength = *max_element(ms_uvmax_wavelength.begin(), ms_uvmax_wavelength.end()) + 1E-5;
-        printf("The maximum theoretical resolution of this/these dataset/s is ~%f arcsec\n", max_resolution);
+        printf("The maximum theoretical resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec);
+        printf("The oversampled (by a factor of 7) resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec/7.0f);
 
         if(nu_0 < 0) {
                 printf("Reference frequency not provided. It will be calculated as the median of all the arrays of frequencies.\n");
@@ -257,7 +282,7 @@ void MFS::configure(int argc, char **argv)
                         printf("Dataset %d: %s\n", i, datasets[i].name);
                         printf("\tNumber of fields = %d\n", datasets[i].data.nfields);
                         printf("\tNumber of frequencies = %d\n", datasets[i].data.total_frequencies);
-                        printf("\tNumber of Stokes = %d\n", datasets[i].data.nstokes);
+                        printf("\tNumber of correlations = %d\n", datasets[i].data.nstokes);
                 }
         }
 
@@ -382,8 +407,8 @@ void MFS::configure(int argc, char **argv)
         double deltay = RPDEG_D*DELTAY; //radians
         deltau = 1.0 / (M * deltax);
         deltav = 1.0 / (N * deltay);
-        printf("Constructing Antialiasing Kernel\n");
-        ckernel->constructKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
+        printf("Building Antialiasing Kernel\n");
+        ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
         printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
         if(gridding) {
                 printf("Doing gridding\n");
@@ -507,13 +532,6 @@ void MFS::setDevice()
                 checkCudaErrors(cudaMalloc(&vars_gpu[g].device_chi2, sizeof(float)*max_number_vis));
                 checkCudaErrors(cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float)*max_number_vis));
         }
-
-        //Declaring block size and number of blocks for Image
-        threadsPerBlockNN.x = variables.blockSizeX;
-        threadsPerBlockNN.y = variables.blockSizeY;
-
-        numBlocksNN.x = iDivUp(M, threadsPerBlockNN.x);
-        numBlocksNN.y = iDivUp(N, threadsPerBlockNN.y);
 
         noise_jypix = beam_noise / (PI * beam_bmaj * beam_bmin / (4 * log(2) ));
 
@@ -963,7 +981,7 @@ void MFS::writeResiduals()
 
         }
 
-        printf("Residuals and model saved.\n");
+        printf("Residuals and model visibilities saved.\n");
 };
 
 void MFS::unSetDevice()

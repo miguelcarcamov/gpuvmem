@@ -28,6 +28,9 @@
 #include "rngs.cuh"
 #include "rvgs.cuh"
 #include <boost/math/special_functions/bessel.hpp>
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/sum_kahan.hpp>
 
 #define FLOAT_IMG   -32
 #define DOUBLE_IMG  -64

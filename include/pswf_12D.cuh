@@ -6,8 +6,8 @@
 
 class PSWF_12D : public CKernel {
 public:
-__host__ __device__ void constructKernel(float amp, float x0, float y0, float sigma_x, float sigma_y);
-__device__ float constructGCF(float amp, float x0, float y0, float sigma_x, float sigma_y, float w, int M, int N);
+__host__ __device__ void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y);
+__device__ float buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w);
 PSWF_12D() : CKernel(){
 };
 PSWF_12D(int m, int n) : CKernel(m, n){

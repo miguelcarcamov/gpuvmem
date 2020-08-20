@@ -1,6 +1,6 @@
 #include "gaussian2D.cuh"
 
-__host__ __device__ void Gaussian2D::constructKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
+__host__ __device__ void Gaussian2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
 {
 
         float x, y;
@@ -12,6 +12,11 @@ __host__ __device__ void Gaussian2D::constructKernel(float amp, float x0, float 
                 }
         }
 };
+
+__device__ float Gaussian2D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
+{
+        return gaussian2D(amp, PI*x, PI*y, PI*x0, PI*y0, sigma_x, sigma_y, 2.0f*w, this->alpha);
+}
 
 
 namespace {

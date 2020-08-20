@@ -35,7 +35,7 @@
 namespace cg = cooperative_groups;
 
 extern long M, N;
-extern int iterations, iterthreadsVectorNN, blocksVectorNN, nopositivity, image_count, \
+extern int iterations, iter, nopositivity, image_count, \
            status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, save_model_input, apply_noise, print_images, gridding;
 
 extern cufftHandle plan1GPU;
@@ -107,6 +107,26 @@ struct SharedMemory<double>
                 return (double *)__smem_d;
         }
 };
+
+template <class T> __device__ __forceinline__ T warpReduceSum(unsigned int mask, T mySum)
+{
+        for (int offset = warpSize/2; offset > 0; offset /= 2)
+        {
+                mySum += __shfl_down_sync(mask, mySum, offset);
+        }
+        return mySum;
+};
+
+#if __CUDA_ARCH__ >= 800
+// Specialize warpReduceFunc for int inputs to use __reduce_add_sync intrinsic
+// when on SM 8.0 or higher
+template<> __device__ __forceinline__ int warpReduceSum<int>(unsigned int mask, int mySum)
+{
+        mySum = __reduce_add_sync(mask, mySum);
+        return mySum;
+};
+#endif
+
 
 __host__ void goToError()
 {
@@ -422,14 +442,8 @@ __host__ Vars getOptions(int argc, char **argv) {
                 }
         }
 
-        if(variables.blockSizeX == -1 && variables.blockSizeY == -1 && variables.blockSizeV == -1 ||
-           strcmp(strip(variables.input, " "),"") == 0 && strcmp(strip(variables.output, " "),"") == 0 && strcmp(strip(variables.output_image, " "),"") == 0 && strcmp(strip(variables.inputdat, " "),"") == 0 ||
+        if(strcmp(strip(variables.input, " "),"") == 0 && strcmp(strip(variables.output, " "),"") == 0 && strcmp(strip(variables.output_image, " "),"") == 0 && strcmp(strip(variables.inputdat, " "),"") == 0 ||
            strcmp(strip(variables.modin, " "),"") == 0 && strcmp(strip(variables.path, " "),"") == 0) {
-                print_help();
-                exit(EXIT_FAILURE);
-        }
-
-        if(!isPow2(variables.blockSizeX) && !isPow2(variables.blockSizeY) && !isPow2(variables.blockSizeV)) {
                 print_help();
                 exit(EXIT_FAILURE);
         }
@@ -453,7 +467,7 @@ __host__ Vars getOptions(int argc, char **argv) {
 #define MIN(x,y) ((x < y) ? x : y)
 #endif
 
-__host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &blocks, int &threads)
+__host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &blocks, int &threads, bool reduction)
 {
 
         //get device capability, to avoid block/grid size exceed the upper bound
@@ -461,10 +475,17 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
         int device;
         checkCudaErrors(cudaGetDevice(&device));
         checkCudaErrors(cudaGetDeviceProperties(&prop, device));
-
-
-        threads = (n < maxThreads*2) ? NearestPowerOf2((n + 1)/ 2) : maxThreads;
-        blocks = (n + (threads * 2 - 1)) / (threads * 2);
+        if(reduction) {
+                threads = (n < maxThreads*2) ? NearestPowerOf2((n + 1)/ 2) : maxThreads;
+                blocks = (n + (threads * 2 - 1)) / (threads * 2);
+        }else{
+                threads = (n < maxThreads) ? NearestPowerOf2(n) : maxThreads;
+                blocks = (n + threads - 1) / threads;
+        }
+        if ((float)threads*blocks > (float)prop.maxGridSize[0] * prop.maxThreadsPerBlock)
+        {
+                printf("n is too large, please choose a smaller number!\n");
+        }
 
         if (blocks > prop.maxGridSize[0])
         {
@@ -475,152 +496,126 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
                 threads *= 2;
         }
 
-        blocks = MIN(maxBlocks, blocks);
+        if (reduction)
+        {
+                blocks = MIN(maxBlocks, blocks);
+        }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//! Compute sum reduction on CPU
+//! Uses Neumaier "improved Kahan–Babuška algorithm" for an accurate sum of large arrays.
+//! http://en.wikipedia.org/wiki/Kahan_summation_algorithm
+//!
+//! @param data       pointer to input data
+//! @param size       number of input data elements
+////////////////////////////////////////////////////////////////////////////////
+template<class T>
+__host__ T reduceCPU(T *data, int size)
+{
+        T sum = data[0];
+        T c = (T)0.0;
+
+        for (int i = 1; i < size; i++)
+        {
+                T t = sum + data[i];
+                if(fabs(sum) >= fabs(data[i]))
+                        c += (sum - t) + data[i];
+                else
+                        c += (data[i] - t) + sum;
+                sum = t;
+        }
+        return sum;
+}
+
 
 template <class T, unsigned int blockSize, bool nIsPow2>
 __global__ void deviceReduceKernel(T *g_idata, T *g_odata, unsigned int n)
 {
-        // Handle to thread block group
-        cg::thread_block cta = cg::this_thread_block();
         T *sdata = SharedMemory<T>();
 
         // perform first level of reduction,
         // reading from global memory, writing to shared memory
         unsigned int tid = threadIdx.x;
-        unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
-        unsigned int gridSize = blockSize*2*gridDim.x;
+        unsigned int gridSize = blockSize*gridDim.x;
+        unsigned int maskLength = (blockSize & 31); // 31 = warpSize-1
+        maskLength = (maskLength > 0) ? (32 - maskLength) : maskLength;
+        const unsigned int mask = (0xffffffff) >> maskLength;
 
         T mySum = 0;
 
         // we reduce multiple elements per thread.  The number is determined by the
         // number of active thread blocks (via gridDim).  More blocks will result
         // in a larger gridSize and therefore fewer elements per thread
-        while (i < n)
+        if (nIsPow2)
         {
-                mySum += g_idata[i];
+                unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
+                gridSize = gridSize << 1;
 
-                // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
-                if (nIsPow2 || i + blockSize < n)
-                        mySum += g_idata[i+blockSize];
-
-                i += gridSize;
-        }
-
-        // each thread puts its local sum into shared memory
-        sdata[tid] = mySum;
-        cg::sync(cta);
-
-
-        // do reduction in shared mem
-        if ((blockSize >= 512) && (tid < 256))
-        {
-                sdata[tid] = mySum = mySum + sdata[tid + 256];
-        }
-
-        cg::sync(cta);
-
-        if ((blockSize >= 256) &&(tid < 128))
-        {
-                sdata[tid] = mySum = mySum + sdata[tid + 128];
-        }
-
-        cg::sync(cta);
-
-        if ((blockSize >= 128) && (tid <  64))
-        {
-                sdata[tid] = mySum = mySum + sdata[tid +  64];
-        }
-
-        cg::sync(cta);
-
-#if (__CUDA_ARCH__ >= 300 )
-        if ( tid < 32 )
-        {
-                cg::coalesced_group active = cg::coalesced_threads();
-
-                // Fetch final intermediate sum from 2nd warp
-                if (blockSize >=  64) mySum += sdata[tid + 32];
-                // Reduce final warp using shuffle
-                for (int offset = warpSize/2; offset > 0; offset /= 2)
+                while (i < n)
                 {
-                        mySum += active.shfl_down(mySum, offset);
+                        mySum += g_idata[i];
+                        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+                        if ((i + blockSize) < n)
+                        {
+                                mySum += g_idata[i+blockSize];
+                        }
+                        i += gridSize;
                 }
         }
-#else
-        // fully unroll reduction within a single warp
-        if ((blockSize >=  64) && (tid < 32))
+        else
         {
-                sdata[tid] = mySum = mySum + sdata[tid + 32];
+                unsigned int i = blockIdx.x*blockSize + threadIdx.x;
+                while (i < n)
+                {
+                        mySum += g_idata[i];
+                        i += gridSize;
+                }
         }
 
-        cg::sync(cta);
+        // Reduce within warp using shuffle or reduce_add if T==int & CUDA_ARCH == SM 8.0
+        mySum = warpReduceSum<T>(mask, mySum);
 
-        if ((blockSize >=  32) && (tid < 16))
+        // each thread puts its local sum into shared memory
+        if ((tid % warpSize) == 0)
         {
-                sdata[tid] = mySum = mySum + sdata[tid + 16];
+                sdata[tid/warpSize] = mySum;
         }
 
-        cg::sync(cta);
+        __syncthreads();
 
-        if ((blockSize >=  16) && (tid <  8))
+        const unsigned int shmem_extent = (blockSize/warpSize) > 0 ? (blockSize/warpSize) : 1;
+        const unsigned int ballot_result = __ballot_sync(mask, tid < shmem_extent);
+        if (tid < shmem_extent)
         {
-                sdata[tid] = mySum = mySum + sdata[tid +  8];
+                mySum =  sdata[tid];
+                // Reduce final warp using shuffle or reduce_add if T==int & CUDA_ARCH == SM 8.0
+                mySum = warpReduceSum<T>(ballot_result, mySum);
         }
-
-        cg::sync(cta);
-
-        if ((blockSize >=   8) && (tid <  4))
-        {
-                sdata[tid] = mySum = mySum + sdata[tid +  4];
-        }
-
-        cg::sync(cta);
-
-        if ((blockSize >=   4) && (tid <  2))
-        {
-                sdata[tid] = mySum = mySum + sdata[tid +  2];
-        }
-
-        cg::sync(cta);
-
-        if ((blockSize >=   2) && ( tid <  1))
-        {
-                sdata[tid] = mySum = mySum + sdata[tid +  1];
-        }
-
-        cg::sync(cta);
-#endif
 
         // write result for this block to global mem
-        if (tid == 0) g_odata[blockIdx.x] = mySum;
+        if (tid == 0) {
+                g_odata[blockIdx.x] = mySum;
+        }
 }
 
-
-
-
-
 template <class T>
-__host__ T deviceReduce(T *in, long N)
+__host__ T deviceReduce(T *in, long N, int input_threads)
 {
         T *device_out;
 
-        int maxThreads = 256;
-        int maxBlocks = NearestPowerOf2(N)/maxThreads;
+        int maxThreads = input_threads;
+        int maxBlocks = iDivUp(N, maxThreads);
 
         int threads = 0;
         int blocks = 0;
 
-        getNumBlocksAndThreads(N, maxBlocks, maxThreads, blocks, threads);
-
-        //printf("N %d, threads: %d, blocks %d\n", N, threads, blocks);
-        //threads = maxThreads;
-        //blocks = NearestPowerOf2(N)/threads;
+        getNumBlocksAndThreads(N, maxBlocks, maxThreads, blocks, threads, true);
 
         checkCudaErrors(cudaMalloc(&device_out, sizeof(T)*blocks));
         checkCudaErrors(cudaMemset(device_out, 0, sizeof(T)*blocks));
 
-        int smemSize = (threads <= 32) ? 2 * threads * sizeof(T) : threads * sizeof(T);
+        int smemSize = ((threads/32)+1) * sizeof(T);
 
         bool isPower2 = isPow2(N);
 
@@ -1093,8 +1088,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 }
 
                                 // The following lines are to create images with the resulting (u,v) grid and weights
-                                //fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
-                                //OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
+                                fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
+                                OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
 
                                 int visCounter = 0;
                                 float gridWeightSum = 0.0f;
@@ -1184,24 +1179,36 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding)
 {
         //Declaring block size and number of blocks for visibilities
-        double variance;
-        double sum_weights = 0.0;
+        float variance;
+        float sum_weights = 0.0f;
         long UVpow2;
+        int device;
+        cudaDeviceProp dprop;
+        checkCudaErrors(cudaGetDevice(&device));
+        checkCudaErrors(cudaGetDeviceProperties(&dprop, device));
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i< datasets[d].data.total_frequencies; i++) {
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                        //Calculating beam noise
-                                        for (int j = 0; j < datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
-                                                if (datasets[d].fields[f].visibilities[i][s].weight[j] > 0.0) {
-                                                        //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
-                                                        sum_weights += datasets[d].fields[f].visibilities[i][s].weight[j];
-                                                }
-                                        }
+
+                                        //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
+                                        //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
+                                        sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
                                         *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
                                         UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                        if(blockSizeV == -1) {
+                                                int threads1D, blocks1D;
+                                                int threadsV, blocksV;
+                                                threads1D = 512;
+                                                blocks1D = iDivUp(UVpow2, threads1D);
+                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                                                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+                                        }else{
+                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+                                        }
+
                                 }
                         }
                 }
@@ -1212,7 +1219,7 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
         variance = 1.0f/sum_weights;
 
         if(verbose_flag) {
-                float aux_noise = sqrt(variance);
+                float aux_noise = sqrtf(variance);
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
@@ -1314,10 +1321,20 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                                                    cudaMemcpyHostToDevice));
                                         checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
                                                                    sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
-
                                         UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, fields[f].device_visibilities[i][s].threadsPerBlockUV);
+
+                                        if(blockSizeV == -1) {
+                                                int threads1D, blocks1D;
+                                                int threadsV, blocksV;
+                                                threads1D = 512;
+                                                blocks1D = iDivUp(UVpow2, threads1D);
+                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+                                        }else{
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+                                        }
 
                                         hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
@@ -1509,11 +1526,11 @@ __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, in
 __device__ float AiryDiskBeam(float distance, float lambda, float antenna_diameter, float pb_factor)
 {
         float atten = 1.0f;
-        if(distance != 0.0){
-          float r = pb_factor * lambda / antenna_diameter;
-          float bessel_arg = PI*distance/(r/RZ);
-          float bessel_func = j1f(bessel_arg);
-          atten = 4.0f * (bessel_func/bessel_arg) * (bessel_func/bessel_arg);
+        if(distance != 0.0) {
+                float r = pb_factor * lambda / antenna_diameter;
+                float bessel_arg = PI*distance/(r/RZ);
+                float bessel_func = j1f(bessel_arg);
+                atten = 4.0f * (bessel_func/bessel_arg) * (bessel_func/bessel_arg);
         }
 
         return atten;
@@ -2909,7 +2926,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                                         //REDUCTIONS
                                                         //chi2
                                                         resultchi2 += deviceReduce<float>(vars_gpu[0].device_chi2,
-                                                                                          datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                                                          datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
                                                 }
                                         }
                                 }
@@ -2958,7 +2975,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
 
                                                         result = deviceReduce<float>(vars_gpu[i % num_gpus].device_chi2,
-                                                                                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                                                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
                                                         //REDUCTIONS
                                                         //chi2
                                               #pragma omp atomic
@@ -3127,7 +3144,7 @@ __host__ float L1Norm(float *I, float * ds, float penalization_factor, int mod, 
         {
                 L1Vector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
                 checkCudaErrors(cudaDeviceSynchronize());
-                resultL1norm  = deviceReduce<float>(ds, M*N);
+                resultL1norm  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
 
         return resultL1norm;
@@ -3156,7 +3173,7 @@ __host__ float SEntropy(float *I, float * ds, float penalization_factor, int mod
         {
                 SVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, initial_values[index], eta, index);
                 checkCudaErrors(cudaDeviceSynchronize());
-                resultS  = deviceReduce<float>(ds, M*N);
+                resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
         final_S = resultS;
         return resultS;
@@ -3184,7 +3201,7 @@ __host__ float laplacian(float *I, float * ds, float penalization_factor, int mo
         {
                 LVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, imageIndex);
                 checkCudaErrors(cudaDeviceSynchronize());
-                resultS  = deviceReduce<float>(ds, M*N);
+                resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
         return resultS;
 };
@@ -3211,7 +3228,7 @@ __host__ float quadraticP(float *I, float * ds, float penalization_factor, int m
         {
                 QPVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
                 checkCudaErrors(cudaDeviceSynchronize());
-                resultS  = deviceReduce<float>(ds, M*N);
+                resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
         final_S = resultS;
         return resultS;
@@ -3239,7 +3256,7 @@ __host__ float totalvariation(float *I, float * ds, float penalization_factor, i
         {
                 TVVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
                 checkCudaErrors(cudaDeviceSynchronize());
-                resultS  = deviceReduce<float>(ds, M*N);
+                resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
         final_S = resultS;
         return resultS;
@@ -3267,7 +3284,7 @@ __host__ float TotalSquaredVariation(float *I, float * ds, float penalization_fa
         {
                 TSVVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
                 checkCudaErrors(cudaDeviceSynchronize());
-                resultS  = deviceReduce<float>(ds, M*N);
+                resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
         final_S = resultS;
         return resultS;
@@ -3303,7 +3320,7 @@ __host__ void calculateErrors(Image *image){
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                        sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                        sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
                                                         I_nu_0_Noise <<< numBlocksNN, threadsPerBlockNN >>>
                                                         (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
                                                         checkCudaErrors(cudaDeviceSynchronize());
@@ -3327,7 +3344,7 @@ __host__ void calculateErrors(Image *image){
                                         cudaGetDevice(&gpu_id);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                        sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                        sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
 
                                           #pragma omp critical
                                                         {

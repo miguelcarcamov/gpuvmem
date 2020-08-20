@@ -31,6 +31,7 @@ __host__ void readInputDat(char *file);
 __host__ void init_beam(int telescope, float *antenna_diameter, float *pb_factor, float *pb_cutoff);
 __host__ void print_help();
 __host__ char *strip(const char *string, const char *chars);
+__host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &blocks, int &threads, bool reduction);
 __host__ Vars getOptions(int argc, char **argv);
 __host__ float chiCuadrado(float *I);
 __host__ void dchiCuadrado(float *I, float *dxi2);
@@ -41,8 +42,10 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
 __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int num_gpus);
 __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHandle plan, int M, int N, int direction, bool shift);
 __host__ void clipping(cufftComplex *I, int iterations);
+template<class T>
+__host__ T reduceCPU(T *data, int size);
 template <class T>
-__host__ T deviceReduce(T *in, long N);
+__host__ T deviceReduce(T *in, long N, int input_threads);
 __host__ float chi2(float *I, VirtualImageProcessor *ip);
 __host__ void linkRestartDGi(float *dgi);
 __host__ void linkAddToDPhi(float *dphi, float *dgi, int index);

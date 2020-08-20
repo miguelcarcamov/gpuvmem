@@ -43,9 +43,6 @@ extern Image *I;
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-extern int threadsVectorNN;
-extern int blocksVectorNN;
-
 extern float MINPIX, ftol;
 extern int verbose_flag;
 extern int flag_opt;
@@ -136,7 +133,7 @@ __host__ void LBFGS::optimize()
                 {
                         getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, xi, 0, 0, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
-                        norm += deviceReduce<float>(norm_vector, M*N);
+                        norm += deviceReduce<float>(norm_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                 }
 
                 if(norm <= ftol) {
@@ -210,7 +207,7 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
                         //printf("Image %d, Iter :%d\n", i, k);
                         getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_s, k, k, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
-                        rho_den = deviceReduce<float>(aux_vector, M*N);
+                        rho_den = deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                         if(rho_den != 0.0f)
                                 rho = 1.0/rho_den;
                         else
@@ -219,7 +216,7 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
                         //alpha_k = Rho_k x (s_k' * q);
                         getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_s, d_q, k, 0, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
-                        alpha[i][k] = rho * deviceReduce<float>(aux_vector, M*N);
+                        alpha[i][k] = rho * deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                         //printf("1. alpha %f\n", alpha[i][k]);
                         //q = q - alpha_k * y_k;
                         updateQ<<<numBlocksNN, threadsPerBlockNN>>>(d_q, -alpha[i][k], d_y, k, M, N, i);
@@ -233,11 +230,11 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
         {
                 getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_s, lbfgs_it, lbfgs_it, M, N, i);
                 checkCudaErrors(cudaDeviceSynchronize());
-                sy = deviceReduce<float>(aux_vector, M*N);
+                sy = deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
 
                 getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_y, lbfgs_it, lbfgs_it, M, N, i);
                 checkCudaErrors(cudaDeviceSynchronize());
-                yy = deviceReduce<float>(aux_vector, M*N);
+                yy = deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
 
                 if(yy!=0.0)
                         sy_yy += sy/yy;
@@ -261,7 +258,7 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
                         getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_s, k, k, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
                         //Calculate rho
-                        rho_den = deviceReduce<float>(aux_vector, M*N);
+                        rho_den = deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                         if(rho_den != 0.0f)
                                 rho = 1.0/rho_den;
                         else
@@ -269,7 +266,7 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
                         //beta = rho * y_k' * r;
                         getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_r, k, 0, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
-                        beta = rho * deviceReduce<float>(aux_vector, M*N);
+                        beta = rho * deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                         //printf("2. image %d - iter %d - rho: %f, alpha: %f, beta: %f, alpha-beta: %f\n", i, k, rho, alpha[i][k], beta, alpha[i][k]-beta);
                         //r = r + s_k * (alpha_k - beta)
                         updateQ<<<numBlocksNN, threadsPerBlockNN>>>(d_r, alpha[i][k]-beta, d_s, k, M, N, i);

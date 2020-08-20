@@ -38,7 +38,6 @@
 #include "gaussianSinc2D.cuh"
 #include "gaussian2D.cuh"
 #include "sinc2D.cuh"
-#include "pswf_02D.cuh"
 #include "pswf_12D.cuh"
 #include "fixedpoint.cuh"
 #include <time.h>
@@ -133,10 +132,12 @@ __host__ int main(int argc, char **argv) {
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
         // Choose your antialiasing kernel!
-        //CKernel * sc = new PillBox2D(1,1);
+        CKernel * sc = new PillBox2D();
+        //CKernel *sc = new Gaussian2D(7,7);
+        //CKernel *sc = new Sinc2D(7,7);
         //CKernel * sc = new GaussianSinc2D(7, 7);
-        CKernel * sc = new PSWF_12D(7,7);
-        //sc->setW1(2.50f);
+        //CKernel * sc = new PSWF_12D(7,7);
+        sc->setW1(2.50f);
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class

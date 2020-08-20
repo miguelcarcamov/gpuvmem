@@ -43,9 +43,6 @@ Image *I;
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-extern int threadsVectorNN;
-extern int blocksVectorNN;
-
 extern float MINPIX, ftol;
 extern int verbose_flag;
 int flag_opt;
@@ -134,8 +131,8 @@ __host__ void ConjugateGradient::optimize()
                         checkCudaErrors(cudaDeviceSynchronize());
                 }
                 ////getSums (Reductions) of gg dgg
-                gg = deviceReduce<float>(device_gg_vector, M*N);
-                dgg = deviceReduce<float>(device_dgg_vector, M*N);
+                gg = deviceReduce<float>(device_gg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
+                dgg = deviceReduce<float>(device_dgg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                 if(gg == 0.0) {
                         printf("Exit due to gg = 0\n");
                         of->calcFunction(image->getImage());

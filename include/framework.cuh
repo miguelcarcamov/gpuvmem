@@ -8,6 +8,8 @@
 #include <ctgmath>
 #include <string>
 #include <functional>
+#include <numeric>
+#include <execution>
 #include <cuda_runtime.h>
 #include "device_launch_parameters.h"
 #include <math_constants.h>
@@ -387,7 +389,7 @@ virtual void configure(void *params) = 0;
 class CKernel
 {
 public:
-__host__ __device__ virtual void constructKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
+__host__ __device__ virtual void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
 CKernel::CKernel()
 {
         this->m = 7;
@@ -495,16 +497,18 @@ float getKernelValue(int i, int j)
 {
         return this->kernel[this->n * i + j];
 };
+std::vector<float> getKernel()
+{
+        return this->kernel;
+};
+
 void setmn(int m, int n){
         this->m = m; this->n = n;
         this->setm_times_n();
         this->setSupports();
         this->setKernelMemory();
 };
-void setMN(int M, int N){
-        this->M = M; this->N = N;
-        this->setM_times_N();
-};
+
 void setW1(float w1){
         this->w1 = w1;
 };
@@ -520,14 +524,9 @@ void setAngle(float angle){
 
 private:
 int m_times_n;
-int M_times_N;
 
 void setm_times_n(){
         this->m_times_n = this->m * this->n;
-};
-
-void setM_times_N(){
-        this->M_times_N = this->M * this->N;
 };
 
 void setSupports(){
@@ -543,8 +542,6 @@ void setKernelMemory(){
 protected:
 int m; //size of the kernel
 int n; //size of the kernel
-int M; //size of the gridding correction function
-int N; //size of the gridding correction function
 int support_x;
 int support_y;
 float w1;
@@ -587,8 +584,8 @@ __host__ __device__ float gaussian2D(float amp, float x, float y, float x0, floa
                 float fx = radius_x/(w*sigma_x);
                 float fy = radius_y/(w*sigma_y);
 
-                float val_x = powf(fx, alpha)/2.0f;
-                float val_y = powf(fy, alpha)/2.0f;
+                float val_x = powf(fx, alpha);
+                float val_y = powf(fy, alpha);
                 float G = amp*expf(-1.0f*(val_x+val_y));
 
                 return G;
@@ -652,47 +649,6 @@ __host__ __device__ float pillBox2D(float amp, float x, float y, float limit_x, 
         return pillBox1D(amp, x, limit_x)*pillBox1D(amp, y, limit_y);
 };
 
-__host__ __device__ float pswf_01D(float amp, float x, float x0, float sigma, float w, int m)
-{
-        float radius = distance(x, 0.0f, x0, 0.0f);
-        if(radius < w*sigma)
-        {
-                float alpha = m/2.0f;
-                float nu =  2.0f*radius/(m*sigma);
-                float pi_alpha = PI * alpha;
-                float num_1 = nu * nu;
-                float sqrtnum = sqrtf(1.0f-num_1);
-                float num = boost::math::cyl_bessel_j(0, pi_alpha * sqrtnum);
-                float den = boost::math::cyl_bessel_j(0, pi_alpha);
-                float val = amp*(num/den);
-                return val;
-        }else
-                return 0.0f;
-};
-
-__host__ __device__ float pswf_01D_GPU(float amp, float x, float x0, float sigma, float w, int m)
-{
-        float radius = distance(x, 0.0f, x0, 0.0f);
-        if(radius < w*sigma)
-        {
-                float alpha = m/2.0f;
-                float nu =  2.0f*radius/(m*sigma);
-                float pi_alpha = PI * alpha;
-                float num_1 = nu * nu;
-                float sqrtnum = sqrtf(1.0f-num_1);
-                float num = j0f(pi_alpha * sqrtnum);
-                float den = j0f(pi_alpha);
-                float val = amp*(num/den);
-                return val;
-        }else
-                return 0.0f;
-};
-
-__host__ __device__ float pswf_02D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, int m, int n)
-{
-        return amp*pswf_01D(1.0f, x, x0, sigma_x, w, m)*pswf_01D(1.0f, y, y0, sigma_y, w, n);
-};
-
 __host__ __device__ float pswf_11D_func(float nu)
 {
         float nu_end;
@@ -740,25 +696,23 @@ __host__ __device__ float pswf_11D_func(float nu)
         return res;
 };
 
-__host__ __device__ float pswf_11D(float amp, float x, float x0, float sigma, float w, int m)
+__host__ __device__ float pswf_11D(float amp, float x, float x0, float sigma, float w)
 {
         float nu, pswf, nu_sq, val;
         float radius = distance(x, 0.0f, x0, 0.0f);
-        if(radius < w*sigma)
-        {
-                nu =  radius/(m*sigma);
-                pswf = pswf_11D_func(nu);
-                nu_sq = nu * nu;
-                val = amp*(1.0f-nu_sq)*pswf;
-                return val;
-        }else
-                return 0.0f;
+
+        nu =  radius/(w*sigma);
+        pswf = pswf_11D_func(nu);
+        nu_sq = nu * nu;
+        val = amp*(1.0f-nu_sq)*pswf;
+        return val;
+
 };
 
-__host__ __device__ float pswf_12D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, int m, int n)
+__host__ __device__ float pswf_12D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
 {
-        float xval = pswf_11D(1.0f, x, x0, sigma_x, w, m);
-        float yval = pswf_11D(1.0f, y, y0, sigma_y, w, n);
+        float xval = pswf_11D(1.0f, x, x0, sigma_x, w);
+        float yval = pswf_11D(1.0f, y, y0, sigma_y, w);
         float val = amp*xval*yval;
         return val;
 };
