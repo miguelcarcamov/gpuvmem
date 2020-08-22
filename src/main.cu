@@ -154,7 +154,7 @@ __host__ int main(int argc, char **argv) {
         sy->setDevice(); // This routine sends the data to GPU memory
         Fi *chi2 = Singleton<FiFactory>::Instance().CreateFi(Chi2);
         Fi *e = Singleton<FiFactory>::Instance().CreateFi(Entropy);
-        Fi *l = Singleton<FiFactory>::Instance().CreateFi(Laplacian);
+        Fi *l = Singleton<FiFactory>::Instance().CreateFi(TotalSquaredVariation);
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
         l->configure(1, 0, 0);

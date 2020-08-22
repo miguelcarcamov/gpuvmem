@@ -994,6 +994,17 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         int local_max = 0;
         int max = 0;
         float pow2_factor, S2, w_avg;
+
+        /*
+           Private variables - parallel for loop
+         */
+        int j, k;
+        double grid_pos_x, grid_pos_y;
+        double3 uvw;
+        float w;
+        cufftComplex Vo;
+        int shifted_j, shifted_k;
+        int kernel_i, kernel_j;
         float ckernel_result = 1.0;
         for(int f=0; f < data->nfields; f++) {
                 for(int i=0; i < data->total_frequencies; i++) {
@@ -1001,14 +1012,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                #pragma omp parallel for schedule(static, 1) private(ckernel_result)
-                                for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++) {
-
-                                        int j, k;
-                                        double grid_pos_x, grid_pos_y;
-                                        double3 uvw;
-                                        float w;
-                                        cufftComplex Vo;
+                                #pragma omp parallel for schedule(static, 1) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
+                                for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
+                                {
 
                                         uvw = fields[f].visibilities[i][s].uvw[z];
                                         w = fields[f].visibilities[i][s].weight[z];
@@ -1035,22 +1041,24 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         grid_pos_y = uvw.y / fabs(deltav);
                                         j = round(grid_pos_x + N / 2);
                                         k = round(grid_pos_y + M / 2);
-                                        int shifted_j, shifted_k;
-                                        int kernel_i, kernel_j;
+
                                         for(int m=-ckernel->getSupportY(); m<=ckernel->getSupportY(); m++) {
                                                 for(int n=-ckernel->getSupportX(); n<=ckernel->getSupportX(); n++) {
                                                         shifted_j = j + n;
                                                         shifted_k = k + m;
                                                         kernel_j = n + ckernel->getSupportX();
                                                         kernel_i = m + ckernel->getSupportY();
-                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N) {
+                                                        #pragma omp ordered
+                                                        {
                                                         #pragma omp critical
                                                                 {
-                                                                        ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
-                                                                        g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
-                                                                        g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
-                                                                        g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
-                                                                        g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N) {
+                                                                                ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
+                                                                                g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
+                                                                                g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
+                                                                                g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
+                                                                                g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                        }
                                                                 }
                                                         }
                                                 }
@@ -1062,7 +1070,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 //OFITS(g_weights.data(), mod_in, "./", "weights_grid_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
                                 //OFITS(g_weights_aux.data(), mod_in, "./", "weights_grid_aux_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
                                 // Normalize visibilities and weights
-                                #pragma omp parallel for schedule(static, 1)
+                                #pragma omp parallel for schedule(static, 1) shared (g_weights, g_weights_aux, g_Vo, g_uvw)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = 0; j < N; j++) {
                                                 double deltau_meters = fabs(deltau) * freq_to_wavelength(fields[f].nu[i]);
@@ -1094,8 +1102,9 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 int visCounter = 0;
                                 float gridWeightSum = 0.0f;
 
-                                // We already know that on quadrants < N/2 there are only zeros
+                                // We already know that in quadrants < N/2 there are only zeros
                                 // Therefore, we start j from N/2
+                                #pragma omp parallel for shared(g_weights) reduction(+: gridWeightSum, visCounter)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
@@ -1111,10 +1120,11 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 w_avg = gridWeightSum / visCounter;
                                 S2 = 5.0f * 5.0f * pow2_factor / w_avg;
 
-                                #pragma omp parallel for schedule(static, 1)
+                                float weight;
+                                #pragma omp parallel for schedule(static, 1) shared(g_weights) private(weight)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
-                                                float weight = g_weights[N * k + j];
+                                                weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         g_weights[N * k + j] /= (1.0f + weight * S2);
                                                 } else {
@@ -1134,7 +1144,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 int l = 0;
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
-                                                float weight = g_weights[N * k + j];
+                                                weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
                                                         fields[f].visibilities[i][s].uvw[l].y = g_uvw[N * k + j].y;

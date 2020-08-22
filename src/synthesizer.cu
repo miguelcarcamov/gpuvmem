@@ -629,7 +629,7 @@ void MFS::setDevice()
         checkCudaErrors(cudaMalloc((void**)&device_weight_image, sizeof(float)*M*N));
         checkCudaErrors(cudaMemset(device_weight_image, 0, sizeof(float)*M*N));
 
-        //checkCudaErrors(cudaMalloc((void**)&device_distance_image, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_distance_image, sizeof(float)*M*N));
 
 
 
@@ -768,8 +768,8 @@ void MFS::setDevice()
                         weight_image<<<numBlocksNN, threadsPerBlockNN>>>(device_weight_image, datasets[d].fields[f].atten_image, noise_jypix, N);
                         checkCudaErrors(cudaDeviceSynchronize());
 
-                        //distance_image<<<numBlocksNN, threadsPerBlockNN>>>(device_distance_image, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, 4.5e-05, DELTAX, DELTAY, N);
-                        //checkCudaErrors(cudaDeviceSynchronize());
+                        distance_image<<<numBlocksNN, threadsPerBlockNN>>>(device_distance_image, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, 4.5e-05, DELTAX, DELTAY, N);
+                        checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
 
@@ -777,7 +777,7 @@ void MFS::setDevice()
         checkCudaErrors(cudaDeviceSynchronize());
         if(print_images) {
                 iohandler->IoPrintImage(device_noise_image, mod_in, mempath, "noise.fits", "", 0, 0, 1.0, M, N, true);
-                //iohandler->IoPrintImage(device_distance_image, mod_in, mempath, "distance.fits", "", 0, 0, 1.0, M, N);
+                iohandler->IoPrintImage(device_distance_image, mod_in, mempath, "distance.fits", "", 0, 0, 1.0, M, N, true);
         }
 
         float *host_noise_image = (float*)malloc(M*N*sizeof(float));
@@ -791,11 +791,11 @@ void MFS::setDevice()
                 printf("noise (Jy/pix) = %e\n", noise_jypix);
         }
 
-        //checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
+        checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
 
         free(host_noise_image);
         cudaFree(device_weight_image);
-        //cudaFree(device_distance_image);
+        cudaFree(device_distance_image);
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         cudaFree(datasets[d].fields[f].atten_image);
