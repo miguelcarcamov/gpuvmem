@@ -6,40 +6,9 @@ if(Boost_FOUND)
   add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
   # Search the compute capability of the first GPU and add CUDA specific FLAGS
   include(${CMAKE_CURRENT_SOURCE_DIR}/cuda_check.cmake)
-
-  target_sources(gpuvmem PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/brent.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/chi2.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/copyrightwarranty.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/directioncosines.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/entropy.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/error.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/f1dim.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/frprmn.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/functions.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/gridding.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/imageProcessor.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/ioms.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/l1norm.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/laplacian.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/lbfgs.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/linmin.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/mnbrak.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/MSFITSIO.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/quadraticpenalization.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/rngs.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/rvgs.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/synthesizer.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/totalsquaredvariation.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/totalvariation.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/gaussianSinc2D.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/pillBox2D.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/gaussian2D.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/sinc2D.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/pswf_12D.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/fixedpoint.cu
-  )
-
+  file(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu)
+  target_sources(gpuvmem PRIVATE ${SOURCE_FILES})
+  target_compile_features(gpuvmem PUBLIC cxx_std_11)
 
   if(PREFIX)
     set(BINARY_DIR ${PREFIX})
@@ -74,13 +43,13 @@ if(Boost_FOUND)
   endif()
 
   if(MEMORY_DEBUG)
-    message(NOTICE "Memory DEBUG is ON")
+    message(NOTICE "MEMORY DEBUG IS ON")
     set(COMPFLAGS "-g -G -D_FORCE_INLINES -w")
     set(TEMP "${TEMP}${COMPFLAGS}" )
     set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
   else()
-    message(NOTICE "Memory DEBUG is OFF")
+    message(NOTICE "MEMORY DEBUG IS OFF")
     set(COMPFLAGS "-D_FORCE_INLINES -w -O3")
     set(TEMP "${TEMP}${COMPFLAGS}" )
     set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
