@@ -1,7 +1,8 @@
 #include "sinc2D.cuh"
 
-__host__ __device__ void Sinc2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
+__host__ void Sinc2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
 {
+        this->setKernelMemory();
         float x, y;
         for(int i=0; i<this->m; i++) {
                 for(int j=0; j<this->n; j++) {
@@ -13,10 +14,10 @@ __host__ __device__ void Sinc2D::buildKernel(float amp, float x0, float y0, floa
 
 };
 
-__host__ __device__ float Sinc2D::GCF_fn(float amp, float nu, float w)
+__device__ float Sinc2D::GCF_fn(float amp, float nu, float w)
 {
         if(fabs(nu) < w)
-                return amp*1.0f;
+                return amp;
         else
                 return 0.0f;
 };

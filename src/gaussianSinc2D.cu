@@ -1,7 +1,8 @@
 #include "gaussianSinc2D.cuh"
 
-__host__ __device__ void GaussianSinc2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
+__host__ void GaussianSinc2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
 {
+        this->setKernelMemory();
         float x, y;
         for(int i=0; i<this->m; i++) {
                 for(int j=0; j<this->n; j++) {

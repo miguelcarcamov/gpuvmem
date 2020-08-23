@@ -34,7 +34,6 @@
 #include "frprmn.cuh"
 #include "directioncosines.cuh"
 #include "pillBox2D.cuh"
-#include "ellipticalGaussian2D.cuh"
 #include "gaussianSinc2D.cuh"
 #include "gaussian2D.cuh"
 #include "sinc2D.cuh"
@@ -137,7 +136,7 @@ __host__ int main(int argc, char **argv) {
         //CKernel *sc = new Sinc2D(7,7);
         //CKernel * sc = new GaussianSinc2D(7, 7);
         //CKernel * sc = new PSWF_12D(7,7);
-        sc->setW1(2.50f);
+        //sc->setW1(2.50f);
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class

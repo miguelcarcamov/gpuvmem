@@ -36,7 +36,7 @@ namespace cg = cooperative_groups;
 
 extern long M, N;
 extern int iterations, iter, nopositivity, image_count, \
-           status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, save_model_input, apply_noise, print_images, gridding;
+           status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, save_model_input, apply_noise, print_images, gridding, radius_mask;
 
 extern cufftHandle plan1GPU;
 extern cufftComplex *device_V, *device_fg_image, *device_I_nu;
@@ -252,6 +252,7 @@ __host__ void print_help() {
         printf("    -T  --threshold        Threshold to calculate the spectral index image from a certain number of sigmas in I_nu_0\n");
         printf("    -c  --copyright        Shows copyright conditions\n");
         printf("    -w  --warranty         Shows no warranty details\n");
+        printf("        --use-radius-mask  Use a mask based on a radius instead of the noise estimation\n");
         printf("        --savemodel-input  Saves the model visibilities on the model column of the input MS\n");
         printf("        --nopositivity     Run gpuvmem using chi2 with no posititivy restriction\n");
         printf("        --apply-noise      Apply random gaussian noise to visibilities\n");
@@ -314,6 +315,7 @@ __host__ Vars getOptions(int argc, char **argv) {
                 {"print-images", 0, &print_images, 1},
                 {"print-errors", 0, &print_errors, 1},
                 {"savemodel-input", 0, &save_model_input, 1},
+                {"use-radius-mask", 0, &radius_mask, 1},
                 /* These options don’t set a flag. */
                 {"input", 1, NULL, 'i' }, {"output", 1, NULL, 'o'}, {"output-image", 1, NULL, 'O'},
                 {"threshold", 0, NULL, 'T'}, {"nu_0", 0, NULL, 'F'}, {"inputdat", 1, NULL, 'I'},
@@ -1096,8 +1098,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 }
 
                                 // The following lines are to create images with the resulting (u,v) grid and weights
-                                fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
-                                OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
+                                //fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
+                                //OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
 
                                 int visCounter = 0;
                                 float gridWeightSum = 0.0f;
@@ -1571,7 +1573,6 @@ __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_c
 
         float arc = distance(x, y, 0.0, 0.0);
         float lambda = freq_to_wavelength(freq);
-
         atten = (*beam_maps[primary_beam])(arc, lambda, antenna_diameter, pb_factor);
 
         if(arc <= pb_cutoff) {

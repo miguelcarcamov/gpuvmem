@@ -13,7 +13,7 @@ float *host_I, sum_weights, *penalizators;
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
 
-int nopositivity = 0, verbose_flag = 0, clip_flag = 0, apply_noise = 0, print_images = 0, save_model_input = 0;
+int nopositivity = 0, verbose_flag = 0, clip_flag = 0, apply_noise = 0, print_images = 0, save_model_input = 0, radius_mask = 0;
 int gridding, it_maximum, status_mod_in;
 int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, print_errors, nMeasurementSets=0, max_number_vis;
 char *output, *mempath, *out_image, *msinput, *msoutput, *inputdat, *modinput;
@@ -407,11 +407,12 @@ void MFS::configure(int argc, char **argv)
         double deltay = RPDEG_D*DELTAY; //radians
         deltau = 1.0 / (M * deltax);
         deltav = 1.0 / (N * deltay);
-        printf("Building Antialiasing Kernel\n");
-        ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
-        printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
+
         if(gridding) {
                 printf("Doing gridding\n");
+                printf("Building Antialiasing Kernel\n");
+                ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
+                printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                 omp_set_num_threads(gridding);
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel);
@@ -428,7 +429,7 @@ void MFS::setDevice()
         deltav = 1.0 / (N * deltay);
 
         if(verbose_flag) {
-                printf("MS File Successfully Read\n");
+                printf("MS files successfully read!\n");
                 if(beam_noise == -1) {
                         printf("Beam noise wasn't provided by the user... Calculating...\n");
                 }
@@ -629,7 +630,8 @@ void MFS::setDevice()
         checkCudaErrors(cudaMalloc((void**)&device_weight_image, sizeof(float)*M*N));
         checkCudaErrors(cudaMemset(device_weight_image, 0, sizeof(float)*M*N));
 
-        checkCudaErrors(cudaMalloc((void**)&device_distance_image, sizeof(float)*M*N));
+        if(radius_mask)
+                checkCudaErrors(cudaMalloc((void**)&device_distance_image, sizeof(float)*M*N));
 
 
 
@@ -768,8 +770,10 @@ void MFS::setDevice()
                         weight_image<<<numBlocksNN, threadsPerBlockNN>>>(device_weight_image, datasets[d].fields[f].atten_image, noise_jypix, N);
                         checkCudaErrors(cudaDeviceSynchronize());
 
-                        distance_image<<<numBlocksNN, threadsPerBlockNN>>>(device_distance_image, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, 4.5e-05, DELTAX, DELTAY, N);
-                        checkCudaErrors(cudaDeviceSynchronize());
+                        if(radius_mask) {
+                                distance_image<<<numBlocksNN, threadsPerBlockNN>>>(device_distance_image, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, 4.5e-05, DELTAX, DELTAY, N);
+                                checkCudaErrors(cudaDeviceSynchronize());
+                        }
                 }
         }
 
@@ -777,7 +781,8 @@ void MFS::setDevice()
         checkCudaErrors(cudaDeviceSynchronize());
         if(print_images) {
                 iohandler->IoPrintImage(device_noise_image, mod_in, mempath, "noise.fits", "", 0, 0, 1.0, M, N, true);
-                iohandler->IoPrintImage(device_distance_image, mod_in, mempath, "distance.fits", "", 0, 0, 1.0, M, N, true);
+                if(radius_mask)
+                        iohandler->IoPrintImage(device_distance_image, mod_in, mempath, "distance.fits", "", 0, 0, 1.0, M, N, true);
         }
 
         float *host_noise_image = (float*)malloc(M*N*sizeof(float));
@@ -790,12 +795,13 @@ void MFS::setDevice()
                 printf("fg_scale = %e\n", fg_scale);
                 printf("noise (Jy/pix) = %e\n", noise_jypix);
         }
-
-        checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
+        if(radius_mask)
+                checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
 
         free(host_noise_image);
         cudaFree(device_weight_image);
-        cudaFree(device_distance_image);
+        if(radius_mask)
+                cudaFree(device_distance_image);
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         cudaFree(datasets[d].fields[f].atten_image);

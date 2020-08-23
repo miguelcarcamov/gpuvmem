@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8...3.12 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.8...3.16 FATAL_ERROR)
 project(gpuvmem LANGUAGES CXX CUDA)
 find_package(Boost REQUIRED)
 option(MEMORY_DEBUG "This sets the GDB debug for CUDA code")
@@ -32,7 +32,6 @@ if(Boost_FOUND)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/synthesizer.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalsquaredvariation.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/totalvariation.cu
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/ellipticalGaussian2D.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/gaussianSinc2D.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/pillBox2D.cu
       ${CMAKE_CURRENT_SOURCE_DIR}/src/gaussian2D.cu

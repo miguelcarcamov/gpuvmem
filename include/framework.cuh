@@ -389,35 +389,29 @@ virtual void configure(void *params) = 0;
 class CKernel
 {
 public:
-__host__ __device__ virtual void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
-CKernel::CKernel()
+__host__ virtual void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
+__host__ __device__ CKernel::CKernel()
 {
         this->m = 7;
         this->n = 7;
-        this->w1 = 2.52;
-        this->w2 = 1.55;
         this->alpha = 2;
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
-        this->setKernelMemory();
 };
 
-CKernel::CKernel(int m, int n)
+__host__ __device__ CKernel::CKernel(int m, int n)
 {
         this->m = m;
         this->n = n;
-        this->w1 = 2.52;
-        this->w2 = 1.55;
         this->alpha = 2;
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
-        this->setKernelMemory();
 };
 
 
-CKernel::CKernel(int m, int n, float w1)
+__host__ __device__ CKernel::CKernel(int m, int n, float w1)
 {
         this->n = m;
         this->n = n;
@@ -426,10 +420,9 @@ CKernel::CKernel(int m, int n, float w1)
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
-        this->setKernelMemory();
 };
 
-CKernel::CKernel(int m, int n, float w1, float w2)
+__host__ __device__ CKernel::CKernel(int m, int n, float w1, float w2)
 {
         this->m = m;
         this->n = n;
@@ -439,12 +432,11 @@ CKernel::CKernel(int m, int n, float w1, float w2)
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
-        this->setKernelMemory();
 };
 
 
 
-CKernel::CKernel(float w1, float w2, float angle, int m, int n)
+__host__ __device__ CKernel::CKernel(float w1, float w2, float angle, int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -454,10 +446,9 @@ CKernel::CKernel(float w1, float w2, float angle, int m, int n)
         this->angle = angle;
         this->setm_times_n();
         this->setSupports();
-        this->setKernelMemory();
 };
 
-CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
+__host__ __device__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -467,75 +458,69 @@ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
         this->angle = angle;
         this->setm_times_n();
         this->setSupports();
-        this->setKernelMemory();
 };
-int getm(){
+__host__ __device__ int getm(){
         return this->m;
 };
-int getn(){
+__host__ __device__ int getn(){
         return this->n;
 };
-int getSupportX(){
+__host__ __device__ int getSupportX(){
         return this->support_x;
 };
-int getSupportY(){
+__host__ __device__ int getSupportY(){
         return this->support_y;
 };
-float getW1(){
+__host__ __device__ float getW1(){
         return this->w1;
 };
-float getW2(){
+__host__ __device__ float getW2(){
         return this->w2;
 };
-float getAlpha(){
+__host__ __device__ float getAlpha(){
         return this->alpha;
 };
-float getAngle(){
+__host__ __device__ float getAngle(){
         return this->angle;
 };
-float getKernelValue(int i, int j)
+__host__ float getKernelValue(int i, int j)
 {
         return this->kernel[this->n * i + j];
 };
-std::vector<float> getKernel()
+__host__ std::vector<float> getKernel()
 {
         return this->kernel;
 };
 
-void setmn(int m, int n){
+__host__ __device__ void setmn(int m, int n){
         this->m = m; this->n = n;
         this->setm_times_n();
         this->setSupports();
-        this->setKernelMemory();
 };
 
-void setW1(float w1){
+__host__ __device__ void setW1(float w1){
         this->w1 = w1;
 };
-void setW2(float w2){
+__host__ __device__ void setW2(float w2){
         this->w2 = w2;
 };
-void setAlpha(float alpha){
+__host__ __device__ void setAlpha(float alpha){
         this->alpha = alpha;
 };
-void setAngle(float angle){
+__host__ __device__ void setAngle(float angle){
         this->angle = angle;
 };
 
 private:
 int m_times_n;
 
-void setm_times_n(){
+__host__ __device__ void setm_times_n(){
         this->m_times_n = this->m * this->n;
 };
 
-void setSupports(){
+__host__ __device__ void setSupports(){
         this->support_x = floor(this->m/2.0f);
         this->support_y = floor(this->m/2.0f);
-};
-
-void setKernelMemory(){
-        this->kernel.resize(this->m_times_n);
 };
 
 
@@ -550,19 +535,8 @@ float alpha;
 float angle;
 std::vector<float> kernel;
 
-__host__ __device__ float ellipticalGaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float angle)
-{
-        float x_i = x-x0;
-        float y_i = y-y0;
-        float cos_angle, sin_angle;
-        sincosf(angle, &sin_angle, &cos_angle);
-        float sin_angle_2 = sinf(2.0*angle);
-        float a = (cos_angle*cos_angle)/(2.0*sigma_x*sigma_x) + (sin_angle*sin_angle)/(2.0*sigma_y*sigma_y);
-        float b = sin_angle_2/(2.0*sigma_x*sigma_x) - sin_angle_2/(2.0*sigma_y*sigma_y);
-        float c = (sin_angle*sin_angle)/(2.0*sigma_x*sigma_x) + (cos_angle*cos_angle)/(2.0*sigma_y*sigma_y);
-        float G = amp*expf(-a*x_i*x_i - b*x_i*y_i - c*y_i*y_i);
-
-        return G;
+__host__ void setKernelMemory(){
+        this->kernel.resize(this->m_times_n);
 };
 
 __host__ __device__ float gaussian1D(float amp, float x, float x0, float sigma, float w, float alpha)
