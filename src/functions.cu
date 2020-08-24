@@ -515,20 +515,17 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
 template<class T>
 __host__ T reduceCPU(T *data, int size)
 {
-        T sum = (T)0.0;
-        if(size != 0) {
-                T sum = data[0];
-                T c = (T)0.0;
+        T sum = data[0];
+        T c = (T)0.0;
 
-                for (int i = 1; i < size; i++)
-                {
-                        T t = sum + data[i];
-                        if(fabs(sum) >= fabs(data[i]))
-                                c += (sum - t) + data[i];
-                        else
-                                c += (data[i] - t) + sum;
-                        sum = t;
-                }
+        for (int i = 1; i < size; i++)
+        {
+                T t = sum + data[i];
+                if(fabs(sum) >= fabs(data[i]))
+                        c += (sum - t) + data[i];
+                else
+                        c += (data[i] - t) + sum;
+                sum = t;
         }
         return sum;
 }
@@ -1205,23 +1202,24 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i< datasets[d].data.total_frequencies; i++) {
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
-
-                                        //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
-                                        //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
-                                        sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
-                                        *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-                                        UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        if(blockSizeV == -1) {
-                                                int threads1D, blocks1D;
-                                                int threadsV, blocksV;
-                                                threads1D = 512;
-                                                blocks1D = iDivUp(UVpow2, threads1D);
-                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
-                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
-                                                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
-                                        }else{
-                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+                                        if(fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
+                                                //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
+                                                sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
+                                                *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+                                                UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                if(blockSizeV == -1) {
+                                                        int threads1D, blocks1D;
+                                                        int threadsV, blocksV;
+                                                        threads1D = 512;
+                                                        blocks1D = iDivUp(UVpow2, threads1D);
+                                                        getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+                                                }else{
+                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+                                                }
                                         }
 
                                 }
@@ -1441,6 +1439,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
                                         checkCudaErrors(cudaDeviceSynchronize());
+
                                 }
                         }
                 }

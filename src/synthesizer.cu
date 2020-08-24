@@ -442,7 +442,6 @@ void MFS::setDevice()
 
         sum_weights = calculateNoise(datasets, &total_visibilities, variables.blockSizeV, gridding);
 
-        printf("Calculate Noise OK\n");
         this->visibilities->setTotalVisibilities(total_visibilities);
 
         for(int d=0; d<nMeasurementSets; d++) {
