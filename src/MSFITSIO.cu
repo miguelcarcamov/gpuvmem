@@ -334,7 +334,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                                 flagCol = flag_col(k);
                                 for(int j=0; j < data->channels[i]; j++) {
                                         for (int sto=0; sto < data->nstokes; sto++) {
-                                                if(flagCol(sto,j) == false) {
+                                                if(weights[sto] > 0.0f && flagCol(sto,j) == false) {
                                                         MS_uvw.x = uvw[0];
                                                         MS_uvw.y = uvw[1];
                                                         MS_uvw.z = uvw[2];
@@ -431,12 +431,12 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                         for(int i=0; i<data.total_frequencies; i++) {
                                 for(int s=0; s<data.nstokes; s++) {
                                         checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm,
-                                                             sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                                                             cudaMemcpyDeviceToHost));
+                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                                                                   cudaMemcpyDeviceToHost));
                                         checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].weight.data(),
-                                                             fields[f].device_visibilities[i][s].weight,
-                                                             sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                                                             cudaMemcpyDeviceToHost));
+                                                                   fields[f].device_visibilities[i][s].weight,
+                                                                   sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                                                                   cudaMemcpyDeviceToHost));
                                 }
                         }
                 }
@@ -456,7 +456,7 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                 for(int i=0; i<data.total_frequencies; i++) {
                         for(int s=0; s<data.nstokes; s++) {
                                 for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
-                                        if (fields[f].visibilities[i][s].uvw[j].x < 0){
+                                        if (fields[f].visibilities[i][s].uvw[j].x < 0) {
                                                 fields[f].visibilities[i][s].Vm[j].y *= -1;
                                         }
                                 }
@@ -526,7 +526,7 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
                                 flagCol = flag_col(k);
                                 for(int j=0; j < data.channels[i]; j++) {
                                         for (int sto=0; sto < data.nstokes; sto++) {
-                                                if(flagCol(sto,j) == false && weights[sto] > 0.0) {
+                                                if(flagCol(sto,j) == false && weights[sto] > 0.0f) {
                                                         c = fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto];
 
                                                         if(sim && noise) {
@@ -616,10 +616,10 @@ __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *ou
         cufftComplex *host_IFITS;
         host_IFITS = (cufftComplex*)malloc(M*N*sizeof(cufftComplex));
         float *image2D = (float*) malloc(M*N*sizeof(float));
-        if(isInGPU){
-          checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
+        if(isInGPU) {
+                checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
         }else{
-          memcpy(host_IFITS, I, M*N*sizeof(cufftComplex));
+                memcpy(host_IFITS, I, M*N*sizeof(cufftComplex));
         }
 
 
@@ -685,10 +685,10 @@ __host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, ch
         //unsigned int offset = M*N*index*sizeof(float);
         int offset = M*N*index;
 
-        if(isInGPU){
-          checkCudaErrors(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
+        if(isInGPU) {
+                checkCudaErrors(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
         }else{
-          memcpy(host_IFITS, &I[offset], M*N*sizeof(float));
+                memcpy(host_IFITS, &I[offset], M*N*sizeof(float));
         }
 
 
