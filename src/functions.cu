@@ -1574,7 +1574,6 @@ __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_c
         float arc = distance(x, y, 0.0, 0.0);
         float lambda = freq_to_wavelength(freq);
         atten = (*beam_maps[primary_beam])(arc, lambda, antenna_diameter, pb_factor);
-
         if(arc <= pb_cutoff) {
                 atten_result = atten;
         }else{
@@ -2878,9 +2877,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         cudaSetDevice(firstgpu);
 
-        float resultPhi = 0.0;
         float resultchi2  = 0.0;
-        float resultS  = 0.0;
 
         if(clip_flag) {
                 ip->clip(I);
@@ -2942,7 +2939,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         }
                                 }
                         }else{
-                              #pragma omp parallel for schedule(static,1)
+                              #pragma omp parallel for schedule(static,1) reduction(+: resultchi2)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         float result = 0.0;
@@ -2989,7 +2986,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                                                                      datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
                                                         //REDUCTIONS
                                                         //chi2
-                                              #pragma omp atomic
                                                         resultchi2 += result;
                                                 }
                                         }
@@ -3001,11 +2997,9 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         cudaSetDevice(firstgpu);
 
-        resultPhi = (0.5 * resultchi2);
-
         final_chi2 = resultchi2;
 
-        return resultPhi;
+        return 0.5f * resultchi2;
 };
 
 __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProcessor *ip)
