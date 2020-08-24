@@ -515,17 +515,20 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
 template<class T>
 __host__ T reduceCPU(T *data, int size)
 {
-        T sum = data[0];
-        T c = (T)0.0;
+        T sum = (T)0.0;
+        if(size != 0) {
+                T sum = data[0];
+                T c = (T)0.0;
 
-        for (int i = 1; i < size; i++)
-        {
-                T t = sum + data[i];
-                if(fabs(sum) >= fabs(data[i]))
-                        c += (sum - t) + data[i];
-                else
-                        c += (data[i] - t) + sum;
-                sum = t;
+                for (int i = 1; i < size; i++)
+                {
+                        T t = sum + data[i];
+                        if(fabs(sum) >= fabs(data[i]))
+                                c += (sum - t) + data[i];
+                        else
+                                c += (data[i] - t) + sum;
+                        sum = t;
+                }
         }
         return sum;
 }

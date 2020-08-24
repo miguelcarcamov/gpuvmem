@@ -429,7 +429,11 @@ void MFS::setDevice()
         deltav = 1.0 / (N * deltay);
 
         if(verbose_flag) {
-                printf("MS files successfully read!\n");
+                printf("MS files reading ");
+                if(gridding){
+                  printf("and gridding ");
+                }
+                print("OK!\n");
                 if(beam_noise == -1) {
                         printf("Beam noise wasn't provided by the user... Calculating...\n");
                 }
@@ -438,7 +442,7 @@ void MFS::setDevice()
 
         sum_weights = calculateNoise(datasets, &total_visibilities, variables.blockSizeV, gridding);
 
-        printf("calculate Noise OK\n");
+        printf("Calculate Noise OK\n");
         this->visibilities->setTotalVisibilities(total_visibilities);
 
         for(int d=0; d<nMeasurementSets; d++) {
