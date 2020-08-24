@@ -1207,19 +1207,19 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                                                 //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
                                                 sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
                                                 *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-                                                UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                if(blockSizeV == -1) {
-                                                        int threads1D, blocks1D;
-                                                        int threadsV, blocksV;
-                                                        threads1D = 512;
-                                                        blocks1D = iDivUp(UVpow2, threads1D);
-                                                        getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
-                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
-                                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
-                                                }else{
-                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                                        datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
-                                                }
+                                        }
+                                        UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                        if(blockSizeV == -1) {
+                                                int threads1D, blocks1D;
+                                                int threadsV, blocksV;
+                                                threads1D = 512;
+                                                blocks1D = iDivUp(UVpow2, threads1D);
+                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                                                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+                                        }else{
+                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
                                         }
 
                                 }
