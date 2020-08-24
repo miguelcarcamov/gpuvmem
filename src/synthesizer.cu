@@ -433,7 +433,7 @@ void MFS::setDevice()
                 if(gridding){
                   printf("and gridding ");
                 }
-                print("OK!\n");
+                printf("OK!\n");
                 if(beam_noise == -1) {
                         printf("Beam noise wasn't provided by the user... Calculating...\n");
                 }
