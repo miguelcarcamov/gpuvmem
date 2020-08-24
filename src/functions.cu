@@ -1202,7 +1202,7 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i< datasets[d].data.total_frequencies; i++) {
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                        if(fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                        if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                                 //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
                                                 //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
                                                 sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
