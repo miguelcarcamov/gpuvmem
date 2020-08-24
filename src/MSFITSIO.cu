@@ -140,6 +140,12 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         casacore::Table main_tab(dir);
         std::string data_column;
 
+        data->nsamples = main_tab.nrow();
+        if (data->nsamples == 0) {
+                printf("ERROR: nsamples is zero... exiting....\n");
+                exit(-1);
+        }
+
         if (main_tab.tableDesc().isColumn("CORRECTED"))
                 data_column="CORRECTED";
         else if (main_tab.tableDesc().isColumn("DATA"))
@@ -151,15 +157,22 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
         casacore::Vector<double> pointing_ref;
         casacore::Vector<double> pointing_phs;
+        int pointing_id;
 
         casacore::Table observation_tab(main_tab.keywordSet().asTable("OBSERVATION"));
         casacore::ROScalarColumn<casacore::String> obs_col(observation_tab,"TELESCOPE_NAME");
 
         data->telescope_name = obs_col(0);
 
-        casacore::Table field_tab(main_tab.keywordSet().asTable("FIELD"));
-        casacore::Table spectral_window_tab(main_tab.keywordSet().asTable("SPECTRAL_WINDOW"));
-        casacore::Table polarization_tab(main_tab.keywordSet().asTable("POLARIZATION"));
+        std::string field_query = "select REFERENCE_DIR,PHASE_DIR,ROWID() AS ID FROM "+dir+"/FIELD where !FLAG_ROW";
+        casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
+
+        std::string aux_query = "select DATA_DESC_ID FROM "+dir+" WHERE !FLAG_ROW AND ANY(WEIGHT > 0) AND ANY(!FLAG) ORDER BY UNIQUE DATA_DESC_ID";
+        std::string spw_query = "select NUM_CHAN,CHAN_FREQ,ROWID() AS ID FROM "+dir+"/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==["+aux_query+"])";
+        casacore::Table spectral_window_tab(casacore::tableCommand(spw_query.c_str()));
+
+        std::string pol_query = "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM "+dir+"/POLARIZATION where !FLAG_ROW";
+        casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
 
         std::string antenna_tab_query = "select POSITION,DISH_DIAMETER,NAME,STATION FROM "+dir+"/ANTENNA where !FLAG_ROW";
         std::string maxmin_baseline_query = "select GMAX(B_LENGTH) AS MAX_BLENGTH, GMIN(B_LENGTH) AS MIN_BLENGTH \
@@ -191,8 +204,8 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
         float max_wavelength = freq_to_wavelength(data->min_freq);
 
-        casacore::ROArrayColumn<double> dishposition_col(antenna_tab,"POSITION");
-        casacore::ROScalarColumn<double> dishdiameter_col(antenna_tab,"DISH_DIAMETER");
+        casacore::ROArrayColumn<casacore::Double> dishposition_col(antenna_tab,"POSITION");
+        casacore::ROScalarColumn<casacore::Double> dishdiameter_col(antenna_tab,"DISH_DIAMETER");
         casacore::ROScalarColumn<casacore::String> dishname_col(antenna_tab,"NAME");
         casacore::ROScalarColumn<casacore::String> dishstation_col(antenna_tab,"STATION");
 
@@ -230,16 +243,18 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         }
 
         data->nfields = field_tab.nrow();
-        casacore::ROTableRow field_row(field_tab, casacore::stringToVector("REFERENCE_DIR,PHASE_DIR"));
+        casacore::ROTableRow field_row(field_tab, casacore::stringToVector("ID,REFERENCE_DIR,PHASE_DIR"));
 
         for(int f=0; f<data->nfields; f++) {
 
                 const casacore::TableRecord &values = field_row.get(f);
+                pointing_id = values.asInt("ID");
                 pointing_ref = values.asArrayDouble("REFERENCE_DIR");
                 pointing_phs = values.asArrayDouble("PHASE_DIR");
 
                 fields.push_back(Field());
 
+                fields[f].id = pointing_id;
                 fields[f].ref_ra = pointing_ref[0];
                 fields[f].ref_dec = pointing_ref[1];
 
@@ -247,28 +262,22 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 fields[f].phs_dec = pointing_phs[1];
         }
 
-        casacore::ROScalarColumn<casacore::Int> n_corr(polarization_tab,"NUM_CORR");
-        data->nstokes=n_corr(0);
 
-        casacore::ROArrayColumn<casacore::Int> correlation_col(polarization_tab,"CORR_TYPE");
-        casacore::Vector<int> polarizations;
-        polarizations=correlation_col(0);
+        casacore::ROScalarColumn<casacore::Int64> ncorr_col(polarization_tab,"NUM_CORR");
+        data->nstokes=ncorr_col(0);
+        casacore::ROArrayColumn<casacore::Int64> correlation_col(polarization_tab,"CORR_TYPE");
+        casacore::Vector<casacore::Int64> polarizations = correlation_col(0);
 
         for(int i=0; i<data->nstokes; i++) {
                 data->corr_type.push_back(polarizations[i]);
         }
 
-        casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,"CHAN_FREQ");
-
-        data->nsamples = main_tab.nrow();
-        if (data->nsamples == 0) {
-                printf("ERROR: nsamples is zero... exiting....\n");
-                exit(-1);
-        }
-
         data->n_internal_frequencies = spectral_window_tab.nrow();
 
-        casacore::ROScalarColumn<casacore::Int> n_chan_freq(spectral_window_tab,"NUM_CHAN");
+        casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,"CHAN_FREQ");
+
+        casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,"NUM_CHAN");
+
         for(int i = 0; i < data->n_internal_frequencies; i++) {
                 data->channels.push_back(n_chan_freq(i));
         }

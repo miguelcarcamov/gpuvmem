@@ -93,6 +93,7 @@ typedef struct device_visibilities {
 }DVis;
 
 typedef struct field {
+        int id;
         int valid_frequencies;
         double ref_ra, ref_dec;
         double phs_ra, phs_dec;
