@@ -562,7 +562,7 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
 
                         query_tab.flush();
 
-                        string sub_query = "select from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
+                        string sub_query = "select from "+dir+" where DATA_DESC_ID="+std::to_string(data.n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
                         if(W_projection)
                                 sub_query += " ORDERBY ASC UVW[2]";
 
