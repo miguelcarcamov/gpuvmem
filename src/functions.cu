@@ -2894,7 +2894,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
         }
 
         ip->clipWNoise(I);
-
+        omp_set_num_threads(num_gpus);
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
@@ -3020,7 +3020,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
         if(clip_flag) {
                 ip->clip(I);
         }
-
+        omp_set_num_threads(num_gpus);
         for(int d=0; d<nMeasurementSets; d++) {
                 if(num_gpus == 1) {
                         for(int f=0; f<datasets[d].data.nfields; f++) {
@@ -3328,6 +3328,7 @@ __host__ void calculateErrors(Image *image){
         checkCudaErrors(cudaMalloc((void**)&errors, sizeof(float)*M*N*image->getImageCount()));
         checkCudaErrors(cudaMemset(errors, 0, sizeof(float)*M*N*image->getImageCount()));
         float sum_weights;
+        omp_set_num_threads(num_gpus);
         for(int d=0; d<nMeasurementSets; d++) {
                 if(num_gpus == 1) {
                         cudaSetDevice(selected);
