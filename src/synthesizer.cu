@@ -430,8 +430,8 @@ void MFS::setDevice()
 
         if(verbose_flag) {
                 printf("MS files reading ");
-                if(gridding){
-                  printf("and gridding ");
+                if(gridding) {
+                        printf("and gridding ");
                 }
                 printf("OK!\n");
                 if(beam_noise == -1) {
@@ -680,10 +680,12 @@ void MFS::setDevice()
                                 cudaSetDevice(selected);
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
-                                                (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
+                                                        hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
+                                                        (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                }
                                         }
                                 }
 
@@ -698,10 +700,12 @@ void MFS::setDevice()
                                         cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
-                                                (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
+                                                        hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
+                                                        (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                }
                                         }
                                 }
 
