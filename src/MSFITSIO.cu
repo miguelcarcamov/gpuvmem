@@ -278,7 +278,10 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
         casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,"NUM_CHAN");
 
+        casacore::ROScalarColumn<casacore::Int64> spectral_window_ids(spectral_window_tab,"ID");
+
         for(int i = 0; i < data->n_internal_frequencies; i++) {
+                data->n_internal_frequencies_ids.push_back(spectral_window_ids(i));
                 data->channels.push_back(n_chan_freq(i));
         }
 
@@ -319,7 +322,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                         dataCol.resize(data->nstokes, data->channels[i]);
                         flagCol.resize(data->nstokes, data->channels[i]);
 
-                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
+                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data->n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
                         if(W_projection && random_prob < 1.0)
                         {
                                 query += " and RAND()<"+std::to_string(random_prob)+" ORDERBY ASC UVW[2]";
@@ -518,7 +521,7 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
                         dataCol.resize(data.nstokes, data.channels[i]);
                         flagCol.resize(data.nstokes, data.channels[i]);
 
-                        query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(i)+" and FIELD_ID="+std::to_string(f)+" and !FLAG_ROW";
+                        query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data.n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
 
                         if(W_projection)
                                 query += " ORDERBY ASC UVW[2]";

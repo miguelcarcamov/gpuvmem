@@ -51,6 +51,7 @@ enum {AIRYDISK, GAUSSIAN};
 
 typedef struct MSData {
         int n_internal_frequencies;
+        std::vector<int> n_internal_frequencies_ids;
         int total_frequencies;
         std::vector<int> channels;
         int nfields;
