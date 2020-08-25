@@ -444,8 +444,8 @@ void MFS::setDevice()
 
         this->visibilities->setTotalVisibilities(total_visibilities);
         printf("Num GPUS: %d\n", num_gpus);
-        printf("Threads: %d\n", omp_get_num_threads());
         omp_set_num_threads(num_gpus);
+        printf("Threads: %d\n", omp_get_num_threads());
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
