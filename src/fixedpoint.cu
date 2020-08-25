@@ -51,7 +51,7 @@ __host__ std::vector<float> fixedPointOpt(std::vector<float> guess, std::vector<
                 }
                 it++;
         }
-
+        std::cout << "Fixed point iterations: " << it << std::endl;
         return x1;
 
 }

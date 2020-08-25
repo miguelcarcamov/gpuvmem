@@ -53,8 +53,8 @@ inline bool IsAppBuiltAs64()
 }
 
 /*
- This is a function that runs gpuvmem and calculates new regularization values according to the Belge et al. 2002 paper.
-*/
+   This is a function that runs gpuvmem and calculates new regularization values according to the Belge et al. 2002 paper.
+ */
 std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer)
 {
 
@@ -70,7 +70,7 @@ std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer)
         synthesizer->clearRun();
         synthesizer->run();
         std::vector<float> fi_values = synthesizer->getOptimizator()->getObjectiveFuntion()->get_fi_values();
-        std::vector<float> lambdas(fi_values.size(), 0.0f);
+        std::vector<float> lambdas(fi_values.size(), 1.0f);
 
         for(int i=0; i < fi_values.size(); i++)
         {
@@ -79,8 +79,7 @@ std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer)
                         lambdas[i] = fi_values[0]/fi_values[i] * (logf(fi_values[i])/logf(fi_values[0]));
                         if(lambdas[i] < 0.0f)
                                 lambdas[i] = 0.0f;
-                }else
-                        lambdas[i] = 1.0f;
+                }
         }
 
         return lambdas;
@@ -152,7 +151,7 @@ __host__ int main(int argc, char **argv) {
 
         sy->setDevice(); // This routine sends the data to GPU memory
         Fi *chi2 = Singleton<FiFactory>::Instance().CreateFi(Chi2);
-        Fi *e = Singleton<FiFactory>::Instance().CreateFi(Entropy);
+        Fi *e = Singleton<FiFactory>::Instance().CreateFi(L1Norm);
         Fi *l = Singleton<FiFactory>::Instance().CreateFi(TotalSquaredVariation);
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
@@ -176,11 +175,9 @@ __host__ int main(int argc, char **argv) {
                 i++;
         }
 
-        std::vector<float> final_lambdas = fixedPointOpt(lambdas, &runGpuvmem, 1e-5, 40, sy);*/
+        std::vector<float> final_lambdas = fixedPointOpt(lambdas, &runGpuvmem, 1e-6, 60, sy);*/
         sy->run();
-        //e->setPenalizationFactor(0.00001);
-        //l->setPenalizationFactor(0.00005);
-        //std::cout << "Trying to run another iteration" << std::endl;
+
         sy->writeImages();
         sy->writeResiduals();
         sy->unSetDevice(); // This routine performs memory cleanup and release
