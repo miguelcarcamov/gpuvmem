@@ -680,7 +680,7 @@ void MFS::setDevice()
                                 cudaSetDevice(selected);
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
+                                                if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                                         hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
                                                         (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
@@ -700,7 +700,7 @@ void MFS::setDevice()
                                         cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
+                                                if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                                         hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                                 datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
                                                         (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
