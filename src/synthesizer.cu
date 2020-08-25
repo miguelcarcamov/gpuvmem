@@ -443,7 +443,7 @@ void MFS::setDevice()
         sum_weights = calculateNoise(datasets, &total_visibilities, variables.blockSizeV, gridding);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
-
+        printf("Threads: %d\n", omp_get_num_threads());
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
@@ -671,7 +671,7 @@ void MFS::setDevice()
 
         initFFT(vars_gpu, M, N, firstgpu, num_gpus);
 
-        //Time is taken from first kernel
+        //Time is taken from first kernels
         t = clock();
         start = omp_get_wtime();
         for(int d=0; d<nMeasurementSets; d++) {
