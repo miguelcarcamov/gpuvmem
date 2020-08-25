@@ -2894,7 +2894,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
         }
 
         ip->clipWNoise(I);
-        omp_set_num_threads(num_gpus);
+
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
@@ -2949,6 +2949,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         }
                                 }
                         }else{
+                                omp_set_num_threads(num_gpus);
                               #pragma omp parallel for schedule(static,1) reduction(+: resultchi2)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
@@ -3020,10 +3021,10 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
         if(clip_flag) {
                 ip->clip(I);
         }
-        omp_set_num_threads(num_gpus);
+
         for(int d=0; d<nMeasurementSets; d++) {
-                if(num_gpus == 1) {
-                        for(int f=0; f<datasets[d].data.nfields; f++) {
+                for(int f=0; f<datasets[d].data.nfields; f++) {
+                        if(num_gpus == 1) {
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s < datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
@@ -3048,9 +3049,8 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                 }
                                         }
                                 }
-                        }
-                }else{
-                        for(int f=0; f<datasets[d].data.nfields; f++) {
+                        }else{
+                                omp_set_num_threads(num_gpus);
                           #pragma omp parallel for schedule(static,1)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
@@ -3082,6 +3082,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                                 checkCudaErrors(cudaDeviceSynchronize());
                                                         }
                                                 }
+
                                         }
                                 }
                         }
@@ -3328,11 +3329,10 @@ __host__ void calculateErrors(Image *image){
         checkCudaErrors(cudaMalloc((void**)&errors, sizeof(float)*M*N*image->getImageCount()));
         checkCudaErrors(cudaMemset(errors, 0, sizeof(float)*M*N*image->getImageCount()));
         float sum_weights;
-        omp_set_num_threads(num_gpus);
         for(int d=0; d<nMeasurementSets; d++) {
-                if(num_gpus == 1) {
-                        cudaSetDevice(selected);
-                        for(int f=0; f<datasets[d].data.nfields; f++) {
+                for(int f=0; f<datasets[d].data.nfields; f++) {
+                        if(num_gpus == 1) {
+                                cudaSetDevice(selected);
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
@@ -3346,9 +3346,8 @@ __host__ void calculateErrors(Image *image){
                                                 }
                                         }
                                 }
-                        }
-                }else{
-                        for(int f=0; f<datasets[d].data.nfields; f++) {
+                        }else{
+                                omp_set_num_threads(num_gpus);
                           #pragma omp parallel for private(sum_weights) schedule(static,1)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {

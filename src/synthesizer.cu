@@ -443,9 +443,7 @@ void MFS::setDevice()
         sum_weights = calculateNoise(datasets, &total_visibilities, variables.blockSizeV, gridding);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
-        printf("Num GPUS: %d\n", num_gpus);
-        omp_set_num_threads(num_gpus);
-        printf("Threads: %d\n", omp_get_num_threads());
+
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
@@ -692,6 +690,7 @@ void MFS::setDevice()
                                 }
 
                         }else{
+                            omp_set_num_threads(num_gpus);
                             #pragma omp parallel for schedule(static,1)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
@@ -727,6 +726,7 @@ void MFS::setDevice()
                         }
                 }else{
                         for(int f=0; f<datasets[d].data.nfields; f++) {
+                                omp_set_num_threads(num_gpus);
                                 #pragma omp parallel for schedule(static,1)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
