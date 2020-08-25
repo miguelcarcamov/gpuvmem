@@ -1007,9 +1007,11 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         cufftComplex Vo;
         int shifted_j, shifted_k;
         int kernel_i, kernel_j;
+        int visCounterPerFreq = 0;
         float ckernel_result = 1.0;
         for(int f=0; f < data->nfields; f++) {
                 for(int i=0; i < data->total_frequencies; i++) {
+                        visCounterPerFreq = 0;
                         for(int s=0; s< data->nstokes; s++) {
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
@@ -1163,6 +1165,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                 if (fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                         fields[f].numVisibilitiesPerFreqPerStoke[i][s] = visCounter;
+                                        visCounterPerFreq += visCounter;
                                 }else{
                                         fields[f].numVisibilitiesPerFreqPerStoke[i][s] = 0;
                                 }
@@ -1180,6 +1183,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         }
 
                         fields[f].backup_numVisibilitiesPerFreq[i] = fields[f].numVisibilitiesPerFreq[i];
+                        fields[f].numVisibilitiesPerFreq[i] = visCounterPerFreq;
                 }
         }
 
