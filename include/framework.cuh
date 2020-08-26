@@ -21,7 +21,6 @@
 #include "MSFITSIO.cuh"
 #include "copyrightwarranty.cuh"
 #include <cooperative_groups.h>
-#include <cooperative_groups/reduce.h>
 
 typedef struct varsPerGPU {
         float *device_chi2;

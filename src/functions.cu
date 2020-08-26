@@ -77,17 +77,17 @@ __device__ FnPtr beam_maps[2] = {
 template<class T>
 struct SharedMemory
 {
-    __device__ inline operator       T *()
-    {
-        extern __shared__ int __smem[];
-        return (T *)__smem;
-    }
+        __device__ inline operator       T *()
+        {
+                extern __shared__ int __smem[];
+                return (T *)__smem;
+        }
 
-    __device__ inline operator const T *() const
-    {
-        extern __shared__ int __smem[];
-        return (T *)__smem;
-    }
+        __device__ inline operator const T *() const
+        {
+                extern __shared__ int __smem[];
+                return (T *)__smem;
+        }
 };
 
 // specialize for double to avoid unaligned memory
@@ -95,37 +95,18 @@ struct SharedMemory
 template<>
 struct SharedMemory<double>
 {
-    __device__ inline operator       double *()
-    {
-        extern __shared__ double __smem_d[];
-        return (double *)__smem_d;
-    }
-
-    __device__ inline operator const double *() const
-    {
-        extern __shared__ double __smem_d[];
-        return (double *)__smem_d;
-    }
-};
-
-template <class T> __device__ __forceinline__ T warpReduceSum(unsigned int mask, T mySum)
-{
-        for (int offset = warpSize/2; offset > 0; offset /= 2)
+        __device__ inline operator       double *()
         {
-                mySum += __shfl_down_sync(mask, mySum, offset);
+                extern __shared__ double __smem_d[];
+                return (double *)__smem_d;
         }
-        return mySum;
-};
 
-#if __CUDA_ARCH__ >= 800
-// Specialize warpReduceFunc for int inputs to use __reduce_add_sync intrinsic
-// when on SM 8.0 or higher
-template<> __device__ __forceinline__ int warpReduceSum<int>(unsigned int mask, int mySum)
-{
-        mySum = __reduce_add_sync(mask, mySum);
-        return mySum;
+        __device__ inline operator const double *() const
+        {
+                extern __shared__ double __smem_d[];
+                return (double *)__smem_d;
+        }
 };
-#endif
 
 
 __host__ void goToError()
@@ -530,65 +511,93 @@ __host__ T reduceCPU(T *data, int size)
         return sum;
 }
 
-// Performs a reduction step and updates numTotal with how many are remaining
-template <typename T, typename Group>
-__device__ T cg_reduce_n(T in, Group &threads) {
-        return cg::reduce(threads, in, cg::plus<T>());
-}
-
-template <class T>
-__global__ void cg_reduceSumKernel(T *g_idata, T *g_odata, unsigned int n)
+template <class T, int blockSize, bool nIsPow2>
+__global__ void reduceSumKernel(T *g_idata, T *g_odata, unsigned int n)
 {
-        // Shared memory for intermediate steps
-        T *sdata = SharedMemory<T>();
         // Handle to thread block group
         cg::thread_block cta = cg::this_thread_block();
-        // Handle to tile in thread block
-        cg::thread_block_tile<32> tile = cg::tiled_partition<32>(cta);
+        T *sdata = SharedMemory<T>();
 
+        // perform first level of reduction,
+        // reading from global memory, writing to shared memory
+        unsigned int tid = threadIdx.x;
+        unsigned int gridSize = blockSize*gridDim.x;
 
-        unsigned int ctaSize = cta.size();
-        unsigned int numCtas = gridDim.x;
-        unsigned int threadRank = cta.thread_rank();
-        unsigned int threadIndex = (blockIdx.x * ctaSize) + threadRank;
+        T mySum = 0;
 
-        T threadVal = 0;
+        // we reduce multiple elements per thread.  The number is determined by the
+        // number of active thread blocks (via gridDim).  More blocks will result
+        // in a larger gridSize and therefore fewer elements per thread
+        if (nIsPow2)
         {
-                unsigned int i = threadIndex;
-                unsigned int indexStride = (numCtas * ctaSize);
-                while (i < n) {
-                        threadVal += g_idata[i];
-                        i += indexStride;
-                }
-                sdata[threadRank] = threadVal;
-        }
+                unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
+                gridSize = gridSize << 1;
 
-        // Wait for all tiles to finish and reduce within CTA
-        {
-                unsigned int ctaSteps = tile.meta_group_size();
-                unsigned int ctaIndex = ctaSize >> 1;
-                while (ctaIndex >= 32) {
-                        cta.sync();
-                        if (threadRank < ctaIndex) {
-                                threadVal += sdata[threadRank + ctaIndex];
-                                sdata[threadRank] = threadVal;
+                while (i < n)
+                {
+                        mySum += g_idata[i];
+                        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+                        if ((i + blockSize) < n)
+                        {
+                                mySum += g_idata[i+blockSize];
                         }
-                        ctaSteps >>= 1;
-                        ctaIndex >>= 1;
+                        i += gridSize;
                 }
         }
-
-        // Shuffle redux instead of smem redux
+        else
         {
-                cta.sync();
-                if (tile.meta_group_rank() == 0) {
-                        threadVal = cg_reduce_n(threadVal, tile);
+                unsigned int i = blockIdx.x*blockSize + threadIdx.x;
+                while (i < n)
+                {
+                        mySum += g_idata[i];
+                        i += gridSize;
                 }
         }
 
-        if (threadRank == 0)
-                g_odata[blockIdx.x] = threadVal;
+        // each thread puts its local sum into shared memory
+        sdata[tid] = mySum;
+        cg::sync(cta);
+
+
+        // do reduction in shared mem
+        if ((blockSize >= 512) && (tid < 256))
+        {
+                sdata[tid] = mySum = mySum + sdata[tid + 256];
+        }
+
+        cg::sync(cta);
+
+        if ((blockSize >= 256) &&(tid < 128))
+        {
+                sdata[tid] = mySum = mySum + sdata[tid + 128];
+        }
+
+        cg::sync(cta);
+
+        if ((blockSize >= 128) && (tid <  64))
+        {
+                sdata[tid] = mySum = mySum + sdata[tid +  64];
+        }
+
+        cg::sync(cta);
+
+        cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
+
+        if (cta.thread_rank() < 32)
+        {
+                // Fetch final intermediate sum from 2nd warp
+                if (blockSize >=  64) mySum += sdata[tid + 32];
+                // Reduce final warp using shuffle
+                for (int offset = tile32.size()/2; offset > 0; offset /= 2)
+                {
+                        mySum += tile32.shfl_down(mySum, offset);
+                }
+        }
+
+        // write result for this block to global mem
+        if (cta.thread_rank() == 0) g_odata[blockIdx.x] = mySum;
 }
+
 
 template <class T>
 __host__ T deviceReduce(T *in, long N, int input_threads)
@@ -610,7 +619,96 @@ __host__ T deviceReduce(T *in, long N, int input_threads)
         T *h_odata = (T *) malloc(blocks*sizeof(T));
         checkCudaErrors(cudaMalloc((void **) &d_odata, blocks*sizeof(T)));
 
-        cg_reduceSumKernel<T><<<blocks, threads, smemSize>>>(in, d_odata, N);
+        if (isPow2(N))
+        {
+                switch (threads)
+                {
+                case 512:
+                        reduceSumKernel<T, 512, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 256:
+                        reduceSumKernel<T, 256, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 128:
+                        reduceSumKernel<T, 128, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 64:
+                        reduceSumKernel<T,  64, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 32:
+                        reduceSumKernel<T,  32, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 16:
+                        reduceSumKernel<T,  16, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  8:
+                        reduceSumKernel<T,   8, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  4:
+                        reduceSumKernel<T,   4, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  2:
+                        reduceSumKernel<T,   2, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  1:
+                        reduceSumKernel<T,   1, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+                }
+        }
+        else
+        {
+                switch (threads)
+                {
+                case 512:
+                        reduceSumKernel<T, 512, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 256:
+                        reduceSumKernel<T, 256, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 128:
+                        reduceSumKernel<T, 128, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 64:
+                        reduceSumKernel<T,  64, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 32:
+                        reduceSumKernel<T,  32, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 16:
+                        reduceSumKernel<T,  16, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  8:
+                        reduceSumKernel<T,   8, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  4:
+                        reduceSumKernel<T,   4, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  2:
+                        reduceSumKernel<T,   2, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  1:
+                        reduceSumKernel<T,   1, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+                }
+        }
         checkCudaErrors(cudaDeviceSynchronize());
 
         checkCudaErrors(cudaMemcpy(h_odata, d_odata, blocks*sizeof(T), cudaMemcpyDeviceToHost));
