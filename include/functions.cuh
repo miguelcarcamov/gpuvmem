@@ -25,7 +25,7 @@ enum stokes {I_s, Q_s, U_s, V_s, RR, RL, LR, LL, XX, XY, YX, YY, RX, RY, LX, LY,
 __host__ void goToError();
 __host__ int iDivUp(int a, int b);
 __host__ bool isPow2(unsigned int x);
-__host__ long NearestPowerOf2(long x);
+__host__ unsigned int NearestPowerOf2(unsigned int x);
 __host__ float median(std::vector<float> v);
 __host__ void readInputDat(char *file);
 __host__ void init_beam(int telescope, float *antenna_diameter, float *pb_factor, float *pb_cutoff);
