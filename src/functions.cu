@@ -598,7 +598,6 @@ __global__ void reduceSumKernel(T *g_idata, T *g_odata, unsigned int n)
         if (cta.thread_rank() == 0) g_odata[blockIdx.x] = mySum;
 }
 
-
 template <class T>
 __host__ T deviceReduce(T *in, long N, int input_threads)
 {
@@ -1238,8 +1237,12 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
         }
 
 
-
-        variance = 1.0f/sum_weights;
+        if(sum_weights > 0.0f)
+                variance = 1.0f/sum_weights;
+        else{
+                printf("Error: The sum of the visibility weights cannot be zero\n");
+                exit(-1);
+        }
 
         if(verbose_flag) {
                 float aux_noise = sqrtf(variance);
@@ -1653,31 +1656,24 @@ __global__ void total_attenuation(float *total_atten, float antenna_diameter, fl
         total_atten[N*i+j] += attenPerFreq;
 }
 
-__global__ void mean_attenuation(float *total_atten, int channels, long N)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        total_atten[N*i+j] /= channels;
-}
-
-
-__global__ void weight_image(float *weight_image, float *total_atten, float noise_jypix, long N)
+__global__ void weight_image(float *weight_image, float *total_atten, long N)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float atten = total_atten[N*i+j];
-        weight_image[N*i+j] += (atten / noise_jypix) * (atten / noise_jypix);
+        weight_image[N*i+j] += atten * atten;
 }
 
-__global__ void noise_image(float *noise_image, float *weight_image, float noise_jypix, long N)
+__global__ void noise_image(float *noise_image, float *weight_image, float max_weight, float noise_jypix, long N)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        float noiseval;
-        noiseval = sqrtf(1.0/weight_image[N*i+j]);
+        float noise_squared = noise_jypix * noise_jypix;
+        float normalized_weight = (weight_image[N*i+j]/max_weight)/noise_squared;
+        float noiseval = sqrtf(1.0/normalized_weight);
         noise_image[N*i+j] = noiseval;
 }
 

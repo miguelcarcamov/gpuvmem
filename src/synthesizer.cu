@@ -717,69 +717,29 @@ void MFS::setDevice()
                         }
                 }
 
-                if(num_gpus == 1) {
-                        cudaSetDevice(selected);
-                        for(int f=0; f<datasets[d].data.nfields; f++) {
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N, datasets[d].antennas[0].primary_beam);
-                                                checkCudaErrors(cudaDeviceSynchronize());
-                                        }
-                                }
-                        }
-                }else{
-                        for(int f=0; f<datasets[d].data.nfields; f++) {
-                                omp_set_num_threads(num_gpus);
-                                #pragma omp parallel for schedule(static,1)
-                                for (int i = 0; i < datasets[d].data.total_frequencies; i++)
-                                {
-                                        unsigned int j = omp_get_thread_num();
-                                        //unsigned int num_cpu_threads = omp_get_num_threads();
-                                        // set and check the CUDA device for this CPU thread
-                                        int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
-                                        cudaGetDevice(&gpu_id);
-                                        if(datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                #pragma omp critical
-                                                {
-                                                        total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N, datasets[d].antennas[0].primary_beam);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
-                                                }
-                                        }
-                                }
-                        }
-                }
+
+                cudaSetDevice(firstgpu);
+
 
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-                        if(datasets[d].fields[f].valid_frequencies > 0) {
-                                if(num_gpus == 1) {
-                                        cudaSetDevice(selected);
-                                        mean_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].fields[f].valid_frequencies, N);
-                                        checkCudaErrors(cudaDeviceSynchronize());
-                                }else{
-                                        cudaSetDevice(firstgpu);
-                                        mean_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].fields[f].valid_frequencies, N);
-                                        checkCudaErrors(cudaDeviceSynchronize());
-                                }
-                                if(print_images) {
-                                        std::string atten_name =  "dataset_" + std::to_string(d) + "_atten";
-                                        iohandler->IoPrintImageIteration(datasets[d].fields[f].atten_image, mod_in, mempath, atten_name.c_str(), "", f, 0, 1.0, M, N, true);
-                                }
+                        total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(datasets[d].fields[f].atten_image, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, nu_0, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, N, datasets[d].antennas[0].primary_beam);
+                        checkCudaErrors(cudaDeviceSynchronize());
+
+                        if(print_images) {
+                                std::string atten_name =  "dataset_" + std::to_string(d) + "_atten";
+                                iohandler->IoPrintImageIteration(datasets[d].fields[f].atten_image, mod_in, mempath, atten_name.c_str(), "", f, 0, 1.0, M, N, true);
                         }
                 }
+
         }
 
 
 
-        if(num_gpus == 1) {
-                cudaSetDevice(selected);
-        }else{
-                cudaSetDevice(firstgpu);
-        }
+        cudaSetDevice(firstgpu);
 
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-                        weight_image<<<numBlocksNN, threadsPerBlockNN>>>(device_weight_image, datasets[d].fields[f].atten_image, noise_jypix, N);
+                        weight_image<<<numBlocksNN, threadsPerBlockNN>>>(device_weight_image, datasets[d].fields[f].atten_image, N);
                         checkCudaErrors(cudaDeviceSynchronize());
 
                         if(radius_mask) {
@@ -789,7 +749,11 @@ void MFS::setDevice()
                 }
         }
 
-        noise_image<<<numBlocksNN, threadsPerBlockNN>>>(device_noise_image, device_weight_image, noise_jypix, N);
+        float *host_weight_image = (float*)malloc(M*N*sizeof(float));
+        checkCudaErrors(cudaMemcpy2D(host_weight_image, sizeof(float), device_weight_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToHost));
+        float max_weight = *std::max_element(host_weight_image,host_weight_image+(M*N));
+
+        noise_image<<<numBlocksNN, threadsPerBlockNN>>>(device_noise_image, device_weight_image, max_weight, noise_jypix, N);
         checkCudaErrors(cudaDeviceSynchronize());
         if(print_images) {
                 iohandler->IoPrintImage(device_noise_image, mod_in, mempath, "noise.fits", "", 0, 0, 1.0, M, N, true);
@@ -811,6 +775,7 @@ void MFS::setDevice()
                 checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
 
         free(host_noise_image);
+        free(host_weight_image);
         cudaFree(device_weight_image);
         if(radius_mask)
                 cudaFree(device_distance_image);
