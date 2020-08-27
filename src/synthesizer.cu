@@ -293,7 +293,10 @@ void MFS::configure(int argc, char **argv)
         string_values = countAndSeparateStrings(variables.gpus);
         count_gpus = string_values.size();
 
-        if(count_gpus == 1) {
+        if(count_gpus == 0) {
+                multigpu = 0;
+                selected = 0;
+        }else if(count_gpus == 1) {
                 multigpu = 0;
                 selected = atoi(string_values[0].c_str());
         }else{
@@ -572,11 +575,11 @@ void MFS::setDevice()
                         }
 
 
-                        datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_ref;// + 6.0f;
-                        datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_ref;// - 7.0f;
+                        datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_ref;
+                        datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_ref;
 
-                        datasets[d].fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;// + 5.0f;
-                        datasets[d].fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;// - 7.0f;
+                        datasets[d].fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
+                        datasets[d].fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
 
 
                         if(verbose_flag) {
@@ -690,7 +693,7 @@ void MFS::setDevice()
                                 }
 
                         }else{
-                            omp_set_num_threads(num_gpus);
+                                omp_set_num_threads(num_gpus);
                             #pragma omp parallel for schedule(static,1)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
