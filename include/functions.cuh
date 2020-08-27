@@ -20,7 +20,7 @@ const float RPARCSEC = (PI/(180.0*3600.0));
 const float RPARCM = (PI/(180.0*60.0));
 const float RZ = 1.2196698912665045;
 
-enum stokes {I_s, Q_s, U_s, V_s, RR, RL, LR, LL, XX, XY, YX, YY, RX, RY, LX, LY, XR, XL, YR, YL, PP, PQ, QP, QQ, RCircular, LCircular, Linear, Ptotal, Plinear, PFtotal, PFlinear, Pangle};
+enum stokes {None, I_s, Q_s, U_s, V_s, RR, RL, LR, LL, XX, XY, YX, YY, RX, RY, LX, LY, XR, XL, YR, YL, PP, PQ, QP, QQ, RCircular, LCircular, Linear, Ptotal, Plinear, PFtotal, PFlinear, Pangle};
 
 __host__ void goToError();
 __host__ int iDivUp(int a, int b);
