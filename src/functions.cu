@@ -1203,12 +1203,14 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i< datasets[d].data.total_frequencies; i++) {
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                        if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
-                                                //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
-                                                sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
-                                                *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+                                        if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                        //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
+                                                        //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
+                                                        sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
+                                                        *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
+                                                }
                                         }
                                         UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         if(blockSizeV == -1) {
@@ -2912,37 +2914,40 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY)
+                                                {
+                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
 
-                                                        checkCudaErrors(cudaMemset(vars_gpu[0].device_chi2, 0, sizeof(float) * max_number_vis));
+                                                                checkCudaErrors(cudaMemset(vars_gpu[0].device_chi2, 0, sizeof(float) * max_number_vis));
 
-                                                        // BILINEAR INTERPOLATION
-                                                        vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                        (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                // BILINEAR INTERPOLATION
+                                                                vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                                (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
-                                                        //DFT 2D
-                                                        /*DFT2D <<<fields[f].visibilities[i][s].numBlocksUV,
-                                                           fields[f].visibilities[i][s].threadsPerBlockUV>>>(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_I_nu, fields[f].device_visibilities[i][s].uvw, device_noise_image, noise_cut, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, M, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                           checkCudaErrors(cudaDeviceSynchronize());*/
+                                                                //DFT 2D
+                                                                /*DFT2D <<<fields[f].visibilities[i][s].numBlocksUV,
+                                                                   fields[f].visibilities[i][s].threadsPerBlockUV>>>(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_I_nu, fields[f].device_visibilities[i][s].uvw, device_noise_image, noise_cut, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, M, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                                   checkCudaErrors(cudaDeviceSynchronize());*/
 
-                                                        // RESIDUAL CALCULATION
-                                                        residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                        (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                // RESIDUAL CALCULATION
+                                                                residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                                (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
-                                                        ////chi 2 VECTOR
-                                                        chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                        (vars_gpu[0].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                ////chi 2 VECTOR
+                                                                chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                                (vars_gpu[0].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
-                                                        //REDUCTIONS
-                                                        //chi2
-                                                        resultchi2 += deviceReduce<float>(vars_gpu[0].device_chi2,
-                                                                                          datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                                                //REDUCTIONS
+                                                                //chi2
+                                                                resultchi2 += deviceReduce<float>(vars_gpu[0].device_chi2,
+                                                                                                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                                        }
                                                 }
                                         }
                                 }
@@ -2970,32 +2975,34 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[i % num_gpus].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
                                         checkCudaErrors(cudaDeviceSynchronize());
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
 
-                                                        checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_chi2, 0, sizeof(float)*max_number_vis));
-                                                        // BILINEAR INTERPOLATION
-                                                        vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                        (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_chi2, 0, sizeof(float)*max_number_vis));
+                                                                // BILINEAR INTERPOLATION
+                                                                vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                                (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
-                                                        // RESIDUAL CALCULATION
-                                                        residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                        (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                // RESIDUAL CALCULATION
+                                                                residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                                (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
-                                                        ////chi2 VECTOR
-                                                        chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>> (vars_gpu[i % num_gpus].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                ////chi2 VECTOR
+                                                                chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>> (vars_gpu[i % num_gpus].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
 
-                                                        result = deviceReduce<float>(vars_gpu[i % num_gpus].device_chi2,
-                                                                                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
-                                                        //REDUCTIONS
-                                                        //chi2
-                                                        resultchi2 += result;
+                                                                result = deviceReduce<float>(vars_gpu[i % num_gpus].device_chi2,
+                                                                                             datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                                                //REDUCTIONS
+                                                                //chi2
+                                                                resultchi2 += result;
+                                                        }
                                                 }
                                         }
                                 }
@@ -3025,25 +3032,27 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                         if(num_gpus == 1) {
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s < datasets[d].data.nstokes; s++) {
-                                                if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                        checkCudaErrors(cudaMemset(vars_gpu[0].device_dchi2, 0, sizeof(float) *
-                                                                                   M*N));
-                                                        //size_t shared_memory;
-                                                        //shared_memory = 3*fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(double) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(float) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(cufftComplex);
-                                                        DChi2 <<< numBlocksNN, threadsPerBlockNN >>>
-                                                        (device_noise_image, vars_gpu[0].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
-                                                        //DChi2_SharedMemory<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[0].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                                checkCudaErrors(cudaMemset(vars_gpu[0].device_dchi2, 0, sizeof(float) *
+                                                                                           M*N));
+                                                                //size_t shared_memory;
+                                                                //shared_memory = 3*fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(double) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(float) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(cufftComplex);
+                                                                DChi2 <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                (device_noise_image, vars_gpu[0].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
+                                                                //DChi2_SharedMemory<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[0].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
 
-                                                        if (flag_opt % 2 == 0)
-                                                                DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                (device_noise_image, result_dchi2, vars_gpu[0].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                        else
-                                                                DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                (device_noise_image, result_dchi2, vars_gpu[0].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                if (flag_opt % 2 == 0)
+                                                                        DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                        (device_noise_image, result_dchi2, vars_gpu[0].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
+                                                                else
+                                                                        DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                        (device_noise_image, result_dchi2, vars_gpu[0].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
 
+                                                        }
                                                 }
                                         }
                                 }
@@ -3059,28 +3068,30 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                         cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                        checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_dchi2, 0, sizeof(float) *
-                                                                                   M*N));
-                                                        //size_t shared_memory;
-                                                        //shared_memory = 3*fields[f].numVisibilitiesPerFreq[i]*sizeof(float) + fields[f].numVisibilitiesPerFreq[i]*sizeof(cufftComplex);
-                                                        DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[i % num_gpus].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
-                                                        //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[i%num_gpus].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
-
-
-                                          #pragma omp critical
-                                                        {
-                                                                if (flag_opt % 2 == 0)
-                                                                        DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                        (device_noise_image, result_dchi2, vars_gpu[i % num_gpus].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                                else
-                                                                        DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                        (device_noise_image, result_dchi2, vars_gpu[i % num_gpus].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
+                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                                checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_dchi2, 0, sizeof(float) *
+                                                                                           M*N));
+                                                                //size_t shared_memory;
+                                                                //shared_memory = 3*fields[f].numVisibilitiesPerFreq[i]*sizeof(float) + fields[f].numVisibilitiesPerFreq[i]*sizeof(cufftComplex);
+                                                                DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[i % num_gpus].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
+                                                                //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[i%num_gpus].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
                                                                 checkCudaErrors(cudaDeviceSynchronize());
-                                                        }
-                                                }
 
+
+                                                                #pragma omp critical
+                                                                {
+                                                                        if (flag_opt % 2 == 0)
+                                                                                DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                                (device_noise_image, result_dchi2, vars_gpu[i % num_gpus].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
+                                                                        else
+                                                                                DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                                (device_noise_image, result_dchi2, vars_gpu[i % num_gpus].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
+                                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                }
+                                                        }
+
+                                                }
                                         }
                                 }
                         }
@@ -3333,14 +3344,16 @@ __host__ void calculateErrors(Image *image){
                                 cudaSetDevice(selected);
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                        sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
-                                                        I_nu_0_Noise <<< numBlocksNN, threadsPerBlockNN >>>
-                                                        (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
-                                                        alpha_Noise <<< numBlocksNN, threadsPerBlockNN >>>
-                                                        (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                        if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
+                                                                sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                                                I_nu_0_Noise <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                                alpha_Noise <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                        }
                                                 }
                                         }
                                 }
@@ -3356,17 +3369,19 @@ __host__ void calculateErrors(Image *image){
                                         cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                        sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                        if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
+                                                                sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
 
-                                          #pragma omp critical
-                                                        {
-                                                                I_nu_0_Noise << < numBlocksNN, threadsPerBlockNN >> >
-                                                                (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
-                                                                alpha_Noise << < numBlocksNN, threadsPerBlockNN >> >
-                                                                (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                                #pragma omp critical
+                                                                {
+                                                                        I_nu_0_Noise << < numBlocksNN, threadsPerBlockNN >> >
+                                                                        (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
+                                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                        alpha_Noise << < numBlocksNN, threadsPerBlockNN >> >
+                                                                        (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
+                                                                        checkCudaErrors(cudaDeviceSynchronize());
+                                                                }
                                                         }
                                                 }
                                         }
