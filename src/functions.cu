@@ -204,6 +204,12 @@ __host__ void readInputDat(char *file)
                         }
                 }
         }
+
+        if(random_probability == 0.0) {
+                printf("The random probability cannot be zero as you will not get any data\n");
+                goToError();
+        }
+
 }
 
 __host__ void print_help() {
