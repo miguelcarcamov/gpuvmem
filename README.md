@@ -114,7 +114,9 @@ Create your input.dat file with the following data and change the parameters as 
 
     noise_cut	100.5
     ftol		1.0e-12
-    random_probability 0.0
+    random_probability 1.0
+
+Random probability it's the probability of how much data you want to get randomly from your entire dataset. If it is 0.5 you will get approximately half of your dataset randomly sampled. If it is 1.0 you will get your entire dataset.
 
 # Use GPUVMEM:
 
@@ -145,6 +147,7 @@ Example: `./bin/gpuvmem options [ arguments ...]`
     -T  --threshold        Threshold to calculate the spectral index image from above a certain number of sigmas in I_nu_0
     -c  --copyright        Shows copyright conditions
     -w  --warranty         Shows no warranty details
+    --use-radius-mask      Use a mask based on a radius instead of the noise estimation
     --savemodel-input      Saves the model visibilities on the model column of the input MS
     --nopositivity         Run gpuvmem using chi2 with no posititivy restriction
     --apply-noise          Apply random gaussian noise to visibilities
