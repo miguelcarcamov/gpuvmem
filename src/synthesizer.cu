@@ -540,7 +540,8 @@ void MFS::setDevice()
                 checkCudaErrors(cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float)*max_number_vis));
         }
 
-        printf("Beam size: %e x %e (arcsec)/ %lf (degrees)\n", beam_bmaj*3600.0, beam_bmin*3600.0, beam_bpa);
+        printf("Estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*3600.0, beam_bmin*3600.0, beam_bpa);
+        printf("gpuvmem estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*1200.0, beam_bmin*1200.0, beam_bpa); // ~ A third of the clean beam
         beam_bmaj = beam_bmaj / fabs(DELTAX); // Beam major axis to pixels
         beam_bmin = beam_bmin / fabs(DELTAX); // Beam minor axis to pixels
         noise_jypix = beam_noise / (PI_D * beam_bmaj * beam_bmin / (4.0 * log(2.0) )); // Estimating noise at FWHM
