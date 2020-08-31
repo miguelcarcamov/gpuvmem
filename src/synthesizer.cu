@@ -5,10 +5,11 @@
 long M, N, numVisibilities;
 int iter=0;
 
-float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, beam_noise, beam_bmaj, *device_noise_image, *device_weight_image, *device_distance_image;
-float beam_bmin, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
+float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
+float beam_noise, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
 float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
+double beam_bmaj, beam_bmin, beam_bpa;
 
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
@@ -171,10 +172,9 @@ void MFS::configure(int argc, char **argv)
         dec = canvas_vars.dec;
         crpix1 = canvas_vars.crpix1;
         crpix2 = canvas_vars.crpix2;
-        beam_bmaj = canvas_vars.beam_bmaj;
-        beam_bmin = canvas_vars.beam_bmin;
         beam_noise = canvas_vars.beam_noise;
 
+        //printf("Beam size canvas: %lf x %lf (arcsec)/ %lf (degrees)\n", canvas_vars.beam_bmaj*3600.0, canvas_vars.beam_bmin*3600.0, canvas_vars.beam_bpa);
         cudaDeviceProp dprop[num_gpus];
 
         if(verbose_flag) {
@@ -419,8 +419,6 @@ void MFS::configure(int argc, char **argv)
                 omp_set_num_threads(gridding);
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel);
-
-                omp_set_num_threads(num_gpus);
         }
 }
 
@@ -442,8 +440,10 @@ void MFS::setDevice()
                 }
         }
 
+        // Estimates the noise in JY/BEAM, beam major, minor axis and angle in degrees.
+        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, gridding, &beam_bmaj, &beam_bmin, &beam_bpa);
 
-        sum_weights = calculateNoise(datasets, &total_visibilities, variables.blockSizeV, gridding);
+        omp_set_num_threads(num_gpus);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
 
@@ -540,7 +540,10 @@ void MFS::setDevice()
                 checkCudaErrors(cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float)*max_number_vis));
         }
 
-        noise_jypix = beam_noise / (PI * beam_bmaj * beam_bmin / (4 * log(2) ));
+        printf("Beam size: %e x %e (arcsec)/ %lf (degrees)\n", beam_bmaj*3600.0, beam_bmin*3600.0, beam_bpa);
+        beam_bmaj = beam_bmaj / fabs(DELTAX); // Beam major axis to pixels
+        beam_bmin = beam_bmin / fabs(DELTAX); // Beam minor axis to pixels
+        noise_jypix = beam_noise / (PI_D * beam_bmaj * beam_bmin / (4.0 * log(2.0) )); // Estimating noise at FWHM
 
         /////////////////////////////////////////////////////CALCULATE DIRECTION COSINES/////////////////////////////////////////////////
         double raimage = ra * RPDEG_D;

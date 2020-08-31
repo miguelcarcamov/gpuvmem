@@ -74,8 +74,9 @@ __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float 
         fits_read_key(canvas, TDOUBLE, "CRPIX2", &c_vars.crpix2, NULL, &status_canvas);
         fits_read_key(canvas, TLONG, "NAXIS1", &c_vars.M, NULL, &status_canvas);
         fits_read_key(canvas, TLONG, "NAXIS2", &c_vars.N, NULL, &status_canvas);
-        fits_read_key(canvas, TFLOAT, "BMAJ", &c_vars.beam_bmaj, NULL, &status_canvas);
-        fits_read_key(canvas, TFLOAT, "BMIN", &c_vars.beam_bmin, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BMAJ", &c_vars.beam_bmaj, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BMIN", &c_vars.beam_bmin, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BPA", &c_vars.beam_bpa, NULL, &status_canvas);
         fits_read_key(canvas, TFLOAT, "NOISE", &c_vars.beam_noise, NULL, &status_noise);
 
 
@@ -88,8 +89,8 @@ __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float 
                 c_vars.beam_noise = b_noise_aux;
         }
 
-        c_vars.beam_bmaj = c_vars.beam_bmaj/ fabs(c_vars.DELTAX);
-        c_vars.beam_bmin = c_vars.beam_bmin/ c_vars.DELTAY;
+        c_vars.beam_bmaj = c_vars.beam_bmaj;
+        c_vars.beam_bmin = c_vars.beam_bmin;
         c_vars.DELTAX = fabs(c_vars.DELTAX);
         c_vars.DELTAY *= -1.0;
 

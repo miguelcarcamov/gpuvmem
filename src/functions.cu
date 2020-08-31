@@ -48,7 +48,8 @@ extern float noise_jypix, fg_scale, noise_cut, MINPIX, \
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 
-extern float beam_noise, beam_bmaj, beam_bmin, b_noise_aux;
+extern double beam_bmaj, beam_bmin, beam_bpa;
+extern float beam_noise, b_noise_aux;
 extern float *initial_values, *penalizators, robust_param;
 extern double ra, dec, DELTAX, DELTAY, deltau, deltav, crpix1, crpix2;
 extern float threshold;
@@ -1194,14 +1195,36 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         data->max_number_visibilities_in_channel_and_stokes = max;
 }
 
+__host__ void calc_sBeam(std::vector<double3> uvw, std::vector<float> weight, float nu, double *s_uu, double *s_vv, double *s_uv)
+{
 
-__host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding)
+        double u_lambda, v_lambda;
+        #pragma omp parallel for shared(uvw, weight) private(u_lambda, v_lambda)
+        for(int i=0; i<uvw.size(); i++) {
+                u_lambda = metres_to_lambda(uvw[i].x, nu);
+                v_lambda = metres_to_lambda(uvw[i].y, nu);
+                #pragma omp critical
+                {
+                        *s_uu += u_lambda * u_lambda * weight[i];
+                        *s_vv += v_lambda * v_lambda * weight[i];
+                        *s_uv += u_lambda * v_lambda * weight[i];
+                }
+        }
+
+}
+
+
+__host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa)
 {
         //Declaring block size and number of blocks for visibilities
         float variance;
         float sum_weights = 0.0f;
         long UVpow2;
-        int device;
+        double s_uu = 0.0;
+        double s_vv = 0.0;
+        double s_uv = 0.0;
+
+        int device = -1;
         cudaDeviceProp dprop;
         checkCudaErrors(cudaGetDevice(&device));
         checkCudaErrors(cudaGetDeviceProperties(&dprop, device));
@@ -1213,6 +1236,7 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                                                 if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                                         //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
                                                         //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
+                                                        calc_sBeam(datasets[d].fields[f].visibilities[i][s].uvw, datasets[d].fields[f].visibilities[i][s].weight, datasets[d].fields[f].nu[i], &s_uu, &s_vv, &s_uv);
                                                         sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
                                                         *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
@@ -1244,6 +1268,20 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                 }
         }
 
+        s_uu /= sum_weights;
+        s_vv /= sum_weights;
+        s_uv /= sum_weights;
+        double uv_square = s_uv * s_uv;
+        double uu_minus_vv = s_uu - s_vv;
+        double uu_plus_vv = s_uu + s_vv;
+        double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
+        double bmaj_rad = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv - sqrt_in); // Major axis in radians
+        double bmin_rad = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv + sqrt_in); // Minor axis in radians
+        double theta_rad = -0.5*atan2(2.0*s_uv, uu_minus_vv); // Angle in radians
+
+        *bmaj = bmaj_rad / RPDEG_D; // Major axis to degrees
+        *bmin = bmin_rad / RPDEG_D; // Minor axis to degrees
+        *bpa = theta_rad / RPDEG_D; // Angle to degrees
 
         if(sum_weights > 0.0f)
                 variance = 1.0f/sum_weights;
