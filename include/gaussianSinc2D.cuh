@@ -7,7 +7,7 @@
 class GaussianSinc2D : public CKernel {
 public:
 __host__ void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y);
-__device__ float buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w){return 1.0f;};
+__device__ float buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha){return 1.0f;};
 __host__ __device__ GaussianSinc2D() : CKernel(){
         this->w1 = 2.52;
         this->w2 = 1.55;

@@ -22,7 +22,7 @@ __device__ float Sinc2D::GCF_fn(float amp, float nu, float w)
                 return 0.0f;
 };
 
-__device__ float Sinc2D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
+__device__ float Sinc2D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
 {
         float distance_x = distance(x, y, x0, y0) * sigma_x;
         float distance_y = distance(x, y, x0, y0) * sigma_y;

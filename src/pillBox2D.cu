@@ -16,7 +16,7 @@ __host__ void PillBox2D::buildKernel(float amp, float x0, float y0, float sigma_
         }
 };
 
-__device__ float PillBox2D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
+__device__ float PillBox2D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
 {
         return 1.0f;
 }

@@ -1268,6 +1268,8 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
                 }
         }
 
+        // We have calculate the running means so we divide by the sum of the weights
+        
         s_uu /= sum_weights;
         s_vv /= sum_weights;
         s_uv /= sum_weights;
