@@ -4,7 +4,8 @@
 
 # Papers and documentation
 
--   <https://doi.org/10.1016/j.ascom.2017.11.003>
+-   Paper: <https://doi.org/10.1016/j.ascom.2017.11.003>
+-   Wiki: <https://github.com/miguelcarcamov/gpuvmem/wiki>
 
 
 # Citing
