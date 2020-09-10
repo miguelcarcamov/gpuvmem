@@ -65,6 +65,8 @@ if(Boost_FOUND)
   endif()
 
   target_link_libraries(gpuvmem cfitsio m casa_casa casa_tables casa_ms casa_measures cudart cuda cufft stdc++ gomp ${Boost_LIBRARIES})
+  # Adding install target
+  install(TARGETS gpuvmem DESTINATION bin)
   # Tests - Tests all the testing datasets
   enable_testing()
   set(TEST_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests)
