@@ -12,6 +12,7 @@ extern int nPenalizators;
 Chi2::Chi2()
 {
         this->ip = new ImageProcessor();
+        this->name = "CHI2";
 };
 
 void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd)

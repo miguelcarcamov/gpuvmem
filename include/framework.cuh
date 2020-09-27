@@ -22,6 +22,11 @@
 #include "copyrightwarranty.cuh"
 #include <cooperative_groups.h>
 
+extern long M, N;
+extern int image_count;
+extern float * penalizators;
+extern int nPenalizators;
+
 typedef struct varsPerGPU {
         float *device_chi2;
         float *device_dchi2;
@@ -100,7 +105,6 @@ virtual float calcFi(float *p) = 0;
 virtual void calcGi(float *p, float *xi) = 0;
 virtual void restartDGi() = 0;
 virtual void addToDphi(float *device_dphi) = 0;
-virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd) = 0;
 
 float get_fivalue(){
         return this->fi_value;
@@ -135,8 +139,41 @@ float penalization_factor = 1;
 int imageIndex;
 int mod;
 int order;
+char *name = "default";
 cufftComplex * Inu = NULL;
 int imageToAdd;
+public:
+virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
+  this->imageIndex = imageIndex;
+  this->order = order;
+  this->mod = mod;
+  this->imageToAdd = imageToAdd;
+
+  if(imageIndex > image_count -1 || imageToAdd > image_count -1)
+  {
+          printf("There is no image for the provided index %s\n", this->name);
+          exit(-1);
+  }
+
+  if(penalizatorIndex != -1)
+  {
+          if(penalizatorIndex < 0)
+          {
+                  printf("invalid index for penalizator %s\n", this->name);
+                  exit(-1);
+          }else if(penalizatorIndex > (nPenalizators - 1)){
+                  this->penalization_factor = penalizators[nPenalizators -1 ];
+          }else{
+                  this->penalization_factor = penalizators[penalizatorIndex];
+          }
+  }
+
+  checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
+  checkCudaErrors(cudaMemset(device_S, 0, sizeof(float)*M*N));
+
+  checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
+};
 };
 
 
