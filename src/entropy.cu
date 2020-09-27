@@ -6,7 +6,7 @@ extern float * penalizators;
 extern int nPenalizators;
 
 Entropy::Entropy(){
-  this->name = "Entropy";
+        this->name = "Entropy";
 };
 
 float Entropy::calcFi(float *p)

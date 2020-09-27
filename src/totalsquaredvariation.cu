@@ -6,6 +6,7 @@ extern float * penalizators;
 extern int nPenalizators;
 
 TotalSquaredVariationP::TotalSquaredVariationP(){
+  this->name = "Total Squared Variation";
 };
 
 float TotalSquaredVariationP::calcFi(float *p)
@@ -19,7 +20,6 @@ void TotalSquaredVariationP::calcGi(float *p, float *xi)
 {
         DTSVariation(p, device_DS, penalization_factor, mod, order, imageIndex);
 };
-
 
 void TotalSquaredVariationP::restartDGi()
 {

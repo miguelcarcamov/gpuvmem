@@ -12,7 +12,7 @@ extern int nPenalizators;
 Chi2::Chi2()
 {
         this->ip = new ImageProcessor();
-        this->name = "CHI2";
+        this->name = "Chi2";
 };
 
 void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
@@ -26,7 +26,7 @@ void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd)
         {
                 if(penalizatorIndex > (nPenalizators - 1) || penalizatorIndex < 0)
                 {
-                        printf("invalid index for penalizator (chi2)\n");
+                        printf("invalid index for penalizator (%s)\n", this->name);
                         exit(-1);
                 }else{
                         this->penalization_factor = penalizators[penalizatorIndex];

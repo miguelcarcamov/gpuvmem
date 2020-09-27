@@ -6,7 +6,7 @@ extern float * penalizators;
 extern int nPenalizators;
 
 Laplacian::Laplacian(){
-  this->name = "Laplacian";
+        this->name = "Laplacian";
 };
 
 float Laplacian::calcFi(float *p)

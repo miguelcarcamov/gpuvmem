@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.8...3.16 FATAL_ERROR)
-project(gpuvmem LANGUAGES CXX CUDA)
+project(gpuvmem LANGUAGES C CXX CUDA)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(Boost REQUIRED)
+find_package(CFITSIO REQUIRED)
+set(CASACORE_MAKE_REQUIRED_EXTERNALS_OPTIONAL TRUE)
+find_package(Casacore REQUIRED COMPONENTS casa ms tables measures)
 option(MEMORY_DEBUG "This sets the GDB debug for CUDA code")
 if(Boost_FOUND)
   add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
@@ -23,13 +27,12 @@ if(Boost_FOUND)
         RUNTIME_OUTPUT_DIRECTORY ${BINARY_DIR}
     )
   endif()
-
   message(NOTICE "We are currently using the latest casacore stable version >=v3.2.1")
   message(NOTICE "If one these versions are not installed in your computer, please make sure to install it")
   message(NOTICE "For more information please read the README.md file")
-  set(CASACORE_DIR /usr/local/include/casacore)
   target_include_directories(gpuvmem PUBLIC
-  ${CASACORE_DIR}
+  ${CASACORE_INCLUDE_DIRS}
+  ${CFITSIO_INCLUDE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${Boost_INCLUDE_DIRS}
   ${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc
@@ -63,8 +66,18 @@ if(Boost_FOUND)
       set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
     endif()
   endif()
-
-  target_link_libraries(gpuvmem cfitsio m casa_casa casa_tables casa_ms casa_measures cudart cuda cufft stdc++ gomp ${Boost_LIBRARIES})
+  
+  set(ALL_CUDA_LIBRARIES
+    ${CUDA_cuda_LIBRARY}
+    ${CUDA_cudart_LIBRARY}
+    ${CUDA_cufft_LIBRARY}
+  )
+  set(ALL_LIBRARIES
+  	${CASACORE_LIBRARIES}
+  	${CFITSIO_LIBRARY}
+  	${Boost_LIBRARIES}
+  )
+  target_link_libraries(gpuvmem m stdc++ gomp ${ALL_CUDA_LIBRARIES} ${ALL_LIBRARIES})
   # Adding install target
   install(TARGETS gpuvmem DESTINATION bin)
   # Tests - Tests all the testing datasets

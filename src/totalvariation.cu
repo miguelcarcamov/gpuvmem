@@ -6,6 +6,7 @@ extern float * penalizators;
 extern int nPenalizators;
 
 TVariation::TVariation(){
+        this->name = "Total Variation";
 };
 
 float TVariation::calcFi(float *p)

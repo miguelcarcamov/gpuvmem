@@ -295,6 +295,16 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
         data->total_frequencies = total_frequencies;
 
+        for(int f=0; f<data->nfields; f++) {
+                for(int i = 0; i < data->n_internal_frequencies; i++) {
+                        casacore::Vector<double> chan_freq_vector;
+                        chan_freq_vector=chan_freq_col(i);
+                        for(int j = 0; j < data->channels[i]; j++) {
+                                fields[f].nu.push_back(chan_freq_vector[j]);
+                        }
+                }
+        }
+
         for(int f=0; f < data->nfields; f++) {
                 fields[f].visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                 fields[f].device_visibilities.resize(data->total_frequencies, std::vector<DVis>(data->nstokes, DVis()));
@@ -382,17 +392,6 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                                  * We will allocate memory for model visibilities using the size of the observed visibilities vector.
                                  */
                                 fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), complexZero<cufftComplex>());
-                        }
-                }
-        }
-
-
-        for(int f=0; f<data->nfields; f++) {
-                for(int i = 0; i < data->n_internal_frequencies; i++) {
-                        casacore::Vector<double> chan_freq_vector;
-                        chan_freq_vector=chan_freq_col(i);
-                        for(int j = 0; j < data->channels[i]; j++) {
-                                fields[f].nu.push_back(chan_freq_vector[j]);
                         }
                 }
         }

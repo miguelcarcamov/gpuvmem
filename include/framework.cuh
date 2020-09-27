@@ -159,7 +159,7 @@ virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
   {
           if(penalizatorIndex < 0)
           {
-                  printf("invalid index for penalizator %s\n", this->name);
+                  printf("invalid index for penalizator (%s)\n", this->name);
                   exit(-1);
           }else if(penalizatorIndex > (nPenalizators - 1)){
                   this->penalization_factor = penalizators[nPenalizators -1 ];

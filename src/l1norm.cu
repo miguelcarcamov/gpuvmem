@@ -6,6 +6,7 @@ extern float * penalizators;
 extern int nPenalizators;
 
 L1norm::L1norm(){
+        this->name = "L1 Norm";
 };
 
 float L1norm::calcFi(float *p)
