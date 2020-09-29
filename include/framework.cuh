@@ -131,18 +131,6 @@ virtual float calculateSecondDerivate() = 0;
 float getPenalizationFactor(){
         return this->penalization_factor;
 }
-protected:
-float fi_value;
-float *device_S;
-float *device_DS;
-float penalization_factor = 1;
-int imageIndex;
-int mod;
-int order;
-char *name = "default";
-cufftComplex * Inu = NULL;
-int imageToAdd;
-public:
 virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
   this->imageIndex = imageIndex;
   this->order = order;
@@ -162,7 +150,7 @@ virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
                   printf("invalid index for penalizator (%s)\n", this->name);
                   exit(-1);
           }else if(penalizatorIndex > (nPenalizators - 1)){
-                  this->penalization_factor = penalizators[nPenalizators -1 ];
+                  this->penalization_factor = 0.0f;
           }else{
                   this->penalization_factor = penalizators[penalizatorIndex];
           }
@@ -174,6 +162,18 @@ virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
   checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
   checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
 };
+
+protected:
+float fi_value;
+float *device_S;
+float *device_DS;
+float penalization_factor = 1.0f;
+int imageIndex;
+int mod;
+int order;
+char *name = "default";
+cufftComplex * Inu = NULL;
+int imageToAdd;
 };
 
 
