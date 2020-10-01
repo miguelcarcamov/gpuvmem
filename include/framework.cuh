@@ -109,6 +109,9 @@ virtual void addToDphi(float *device_dphi) = 0;
 float get_fivalue(){
         return this->fi_value;
 };
+float getPenalizationFactor(){
+        return this->penalization_factor;
+};
 void set_fivalue(float fi){
         this->fi_value = fi;
 };
@@ -127,10 +130,8 @@ void setS(float *S){
 void setDS(float *DS){
         cudaFree(device_DS); this->device_DS = DS;
 };
+
 virtual float calculateSecondDerivate() = 0;
-float getPenalizationFactor(){
-        return this->penalization_factor;
-}
 virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
   this->imageIndex = imageIndex;
   this->order = order;
