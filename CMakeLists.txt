@@ -6,6 +6,7 @@ find_package(CFITSIO REQUIRED)
 set(CASACORE_MAKE_REQUIRED_EXTERNALS_OPTIONAL TRUE)
 find_package(Casacore REQUIRED COMPONENTS casa ms tables measures)
 option(MEMORY_DEBUG "This sets the GDB debug for CUDA code")
+option(USE_FAST_MATH "This option accelerate CUDA math functions decreasing precision")
 if(Boost_FOUND)
   add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
   # Search the compute capability of the first GPU and add CUDA specific FLAGS
@@ -52,21 +53,21 @@ if(Boost_FOUND)
     set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
   else()
+    message(NOTICE "MEMORY DEBUG IS OFF")
     if(USE_FAST_MATH)
-      message(NOTICE "MEMORY DEBUG IS OFF")
+      message(NOTICE "USING FAST_MATH")
       set(COMPFLAGS "-D_FORCE_INLINES -w --use_fast_math -O3")
       set(TEMP "${TEMP}${COMPFLAGS}" )
       set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
       set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
     else()
-      message(NOTICE "MEMORY DEBUG IS OFF")
       set(COMPFLAGS "-D_FORCE_INLINES -w -O3")
       set(TEMP "${TEMP}${COMPFLAGS}" )
       set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
       set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
     endif()
   endif()
-  
+
   set(ALL_CUDA_LIBRARIES
     ${CUDA_cuda_LIBRARY}
     ${CUDA_cudart_LIBRARY}
