@@ -339,7 +339,6 @@ void MFS::configure(int argc, char **argv)
                                 num_gpus = 1;
                         }else{
                                 num_gpus = multigpu;
-                                omp_set_num_threads(num_gpus);
                         }
                 }
         }
@@ -416,9 +415,8 @@ void MFS::configure(int argc, char **argv)
                 printf("Building Antialiasing Kernel\n");
                 ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
                 printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
-                omp_set_num_threads(gridding);
                 for(int d=0; d<nMeasurementSets; d++)
-                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel);
+                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel, gridding);
         }
 }
 
@@ -442,8 +440,6 @@ void MFS::setDevice()
 
         // Estimates the noise in JY/BEAM, beam major, minor axis and angle in degrees.
         sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, gridding, &beam_bmaj, &beam_bmin, &beam_bpa);
-
-        omp_set_num_threads(num_gpus);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
 
@@ -697,8 +693,7 @@ void MFS::setDevice()
                                 }
 
                         }else{
-                                omp_set_num_threads(num_gpus);
-                            #pragma omp parallel for schedule(static,1)
+                            #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         unsigned int j = omp_get_thread_num();
@@ -948,7 +943,6 @@ void MFS::writeResiduals()
                 deltav = 1.0 / (N * deltay);
 
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
-                omp_set_num_threads(num_gpus);
                 for(int d=0; d<nMeasurementSets; d++)
                         degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N);
 

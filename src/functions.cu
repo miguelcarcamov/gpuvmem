@@ -984,7 +984,7 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
         }
 }
 
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel)
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel, int gridding)
 {
         std::vector<float> g_weights(M*N);
         std::vector<float> g_weights_aux(M*N);
@@ -1020,7 +1020,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                #pragma omp parallel for schedule(static, 1) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
+                                #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                 {
 
@@ -1269,7 +1269,7 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
         }
 
         // We have calculate the running means so we divide by the sum of the weights
-        
+
         s_uu /= sum_weights;
         s_vv /= sum_weights;
         s_uv /= sum_weights;
@@ -1426,7 +1426,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                 }
         }else{
                 for(int f=0; f<data.nfields; f++) {
-            #pragma omp parallel for schedule(static,1)
+                        #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
                         for (int i = 0; i < data.total_frequencies; i++)
                         {
                                 unsigned int j = omp_get_thread_num();
@@ -2933,7 +2933,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         cudaSetDevice(firstgpu);
 
-        float resultchi2  = 0.0;
+        float resultchi2  = 0.0f;
 
         if(clip_flag) {
                 ip->clip(I);
@@ -2998,8 +2998,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         }
                                 }
                         }else{
-                                omp_set_num_threads(num_gpus);
-                              #pragma omp parallel for schedule(static,1) reduction(+: resultchi2)
+                              #pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         float result = 0.0;
@@ -3103,8 +3102,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                         }
                                 }
                         }else{
-                                omp_set_num_threads(num_gpus);
-                          #pragma omp parallel for schedule(static,1)
+                          #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         unsigned int j = omp_get_thread_num();
@@ -3404,8 +3402,7 @@ __host__ void calculateErrors(Image *image){
                                         }
                                 }
                         }else{
-                                omp_set_num_threads(num_gpus);
-                          #pragma omp parallel for private(sum_weights) schedule(static,1)
+                          #pragma omp parallel for private(sum_weights) num_threads(num_gpus) schedule(static,1)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         unsigned int j = omp_get_thread_num();
