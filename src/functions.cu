@@ -1213,16 +1213,36 @@ __host__ void calc_sBeam(std::vector<double3> uvw, std::vector<float> weight, fl
 
 }
 
+__host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv)
+{
+        double3 beam_size;
+        double uv_square = s_uv * s_uv;
+        double uu_minus_vv = s_uu - s_vv;
+        double uu_plus_vv = s_uu + s_vv;
+        double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
+        beam_size.x = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv - sqrt_in); // Major axis in radians
+        beam_size.y = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv + sqrt_in); // Minor axis in radians
+        beam_size.z = -0.5*atan2(2.0*s_uv, uu_minus_vv); // Angle in radians
+
+        return beam_size;
+}
+
 
 __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa)
 {
         //Declaring block size and number of blocks for visibilities
         float variance;
-        float sum_weights = 0.0f;
+        float sum_weights_parallel = 0.0f;
+        float sum_weights_crossed = 0.0f;
         long UVpow2;
-        double s_uu = 0.0;
-        double s_vv = 0.0;
-        double s_uv = 0.0;
+
+        double s_uu_parallel = 0.0;
+        double s_vv_parallel = 0.0;
+        double s_uv_parallel = 0.0;
+
+        double s_uu_crossed = 0.0;
+        double s_vv_crossed = 0.0;
+        double s_uv_crossed = 0.0;
 
         int device = -1;
         cudaDeviceProp dprop;
@@ -1232,14 +1252,20 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i< datasets[d].data.total_frequencies; i++) {
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                        if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
-                                                if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                        if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+
                                                         //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
                                                         //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
-                                                        calc_sBeam(datasets[d].fields[f].visibilities[i][s].uvw, datasets[d].fields[f].visibilities[i][s].weight, datasets[d].fields[f].nu[i], &s_uu, &s_vv, &s_uv);
-                                                        sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
+                                                        calc_sBeam(datasets[d].fields[f].visibilities[i][s].uvw, datasets[d].fields[f].visibilities[i][s].weight, datasets[d].fields[f].nu[i], &s_uu_parallel, &s_vv_parallel, &s_uv_parallel);
+                                                        sum_weights_parallel += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
                                                         *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
+
+                                                }else{
+                                                        calc_sBeam(datasets[d].fields[f].visibilities[i][s].uvw, datasets[d].fields[f].visibilities[i][s].weight, datasets[d].fields[f].nu[i], &s_uu_crossed, &s_vv_crossed, &s_uv_crossed);
+                                                        sum_weights_crossed += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
+                                                        *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
                                                 }
                                         }
                                         UVpow2 = NearestPowerOf2(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
@@ -1270,30 +1296,30 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
 
         // We have calculate the running means so we divide by the sum of the weights
 
-        s_uu /= sum_weights;
-        s_vv /= sum_weights;
-        s_uv /= sum_weights;
-        double uv_square = s_uv * s_uv;
-        double uu_minus_vv = s_uu - s_vv;
-        double uu_plus_vv = s_uu + s_vv;
-        double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
-        double bmaj_rad = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv - sqrt_in); // Major axis in radians
-        double bmin_rad = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv + sqrt_in); // Minor axis in radians
-        double theta_rad = -0.5*atan2(2.0*s_uv, uu_minus_vv); // Angle in radians
+        s_uu_parallel /= sum_weights;
+        s_vv_parallel /= sum_weights;
+        s_uv_parallel /= sum_weights;
 
-        *bmaj = bmaj_rad / RPDEG_D; // Major axis to degrees
-        *bmin = bmin_rad / RPDEG_D; // Minor axis to degrees
-        *bpa = theta_rad / RPDEG_D; // Angle to degrees
+        s_uu_crossed /= sum_weights;
+        s_vv_crossed /= sum_weights;
+        s_uv_crossed /= sum_weights;
+
+        beam_size_rad_parallel = calc_beamSize(s_uu_parallel, s_vv_parallel, s_uv_parallel)
+        beam_size_rad_crossed = calc_beamSize(s_uu_crossed, s_vv_crossed, s_uv_crossed)
+
+        *bmaj = beam_size_rad_parallel / RPDEG_D; // Major axis to degrees
+        *bmin = beam_size_rad_parallel / RPDEG_D; // Minor axis to degrees
+        *bpa = beam_size_rad_parallel / RPDEG_D; // Angle to degrees
 
         if(sum_weights > 0.0f)
-                variance = 1.0f/sum_weights;
+                variance = 1.0f/sum_weights_parallel;
         else{
                 printf("Error: The sum of the visibility weights cannot be zero\n");
                 exit(-1);
         }
 
         if(verbose_flag) {
-                float aux_noise = sqrtf(variance);
+                float aux_noise = sqrtf(variance_parallel);
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
@@ -1309,7 +1335,7 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
                 printf("Keyword NOISE = %e\n", beam_noise);
         }
 
-        return sum_weights;
+        return sum_weights_parallel;
 }
 
 __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<cufftComplex> Vm_gridded_sp, std::vector<double3> uvw_gridded_sp, double deltau, double deltav, float freq, long M, long N, int numvis)
