@@ -143,12 +143,6 @@ void MFS::configure(int argc, char **argv)
                 initial_values.push_back(atof(string_values[i].c_str()));
 
         string_values.clear();
-        if(image_count == 1)
-        {
-                initial_values.push_back(0.0f);
-                image_count++;
-                imagesChanged = 1;
-        }
 
         /*
          *
@@ -953,12 +947,14 @@ void MFS::writeResiduals()
 
         printf("Saving residuals and model to MS...\n");
         for(int d=0; d<nMeasurementSets; d++) {
-                if(!save_model_input) {
-                        iohandler->IocopyMS(datasets[d].name, datasets[d].oname);
+                iohandler->IocopyMS(datasets[d].name, datasets[d].oname);
+                if(!save_model_input) {                      
                         iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
                         iohandler->IowriteMS(datasets[d].oname, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
-                }else
+                }else{
+                        iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
                         iohandler->IowriteMS(datasets[d].name, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
+                }
 
         }
 

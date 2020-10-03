@@ -3147,6 +3147,33 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
 
 };
 
+
+// XX = I + Q	          I = (XX + YY) / 2	             RR = I + V	             I = (LL + RR) / 2
+// YY = I - Q	          Q = (XX - YY) / 2	             LL = I - V	             V = (RR - LL) / 2
+// XY = U + iV	        U = (XY + YX) / 2	             RL = Q + iU	           Q = (RL + LR) / 2
+// YX = U - iV	        V = i(YX - XY) / 2	           LR = Q - iU	           U = i(LR - RL) / 2
+
+__host__ float chi2_polarization(float *I, VirtualImageProcessor *ip){
+
+        for(int d=0; d<nMeasurementSets; d++) {
+                for(int f=0; f<datasets[d].data.nfields; f++) {
+                        if(num_gpus == 1) {
+                                cudaSetDevice(selected);
+                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
+                                        for(int s=0; s < datasets[d].data.nstokes; s++) {
+                                          
+                                        }
+                                }
+                        }
+                }
+        }
+
+};
+
+__host__ void dchi2_polarization(float *I, float *dxi2, float *result_dchi2, VirtualImageProcessor *ip){
+
+};
+
 __host__ void linkAddToDPhi(float *dphi, float *dgi, int index)
 {
         cudaSetDevice(firstgpu);
