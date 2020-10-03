@@ -3075,6 +3075,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
+                                cudaSetDevice(selected);
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s < datasets[d].data.nstokes; s++) {
                                                 if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
@@ -3154,14 +3155,14 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
 // YX = U - iV	        V = i(YX - XY) / 2	           LR = Q - iU	           U = i(LR - RL) / 2
 
 __host__ float chi2_polarization(float *I, VirtualImageProcessor *ip){
-
+        cudaSetDevice(firstgpu);
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
                                 cudaSetDevice(selected);
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s < datasets[d].data.nstokes; s++) {
-                                          
+
                                         }
                                 }
                         }
@@ -3171,6 +3172,20 @@ __host__ float chi2_polarization(float *I, VirtualImageProcessor *ip){
 };
 
 __host__ void dchi2_polarization(float *I, float *dxi2, float *result_dchi2, VirtualImageProcessor *ip){
+        cudaSetDevice(firstgpu);
+        for(int d=0; d<nMeasurementSets; d++) {
+                for(int f=0; f<datasets[d].data.nfields; f++) {
+                        if(num_gpus == 1) {
+                                cudaSetDevice(selected);
+                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
+                                        for(int s=0; s < datasets[d].data.nstokes; s++) {
+                                                if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
 
 };
 

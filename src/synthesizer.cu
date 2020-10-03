@@ -612,8 +612,8 @@ void MFS::setDevice()
 
         for(int g=0; g<num_gpus; g++) {
                 cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_V, sizeof(cufftComplex)*M*N));
-                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_I_nu, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_V, sizeof(cufftComplex)*M*N*image_count));
+                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_I_nu, sizeof(cufftComplex)*M*N*image_count));
         }
 
 
@@ -637,8 +637,8 @@ void MFS::setDevice()
 
         for(int g=0; g<num_gpus; g++) {
                 cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N));
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N*image_count));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N*image_count));
 
         }
 
@@ -809,8 +809,8 @@ void MFS::clearRun()
 
         for(int g=0; g<num_gpus; g++) {
                 cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N));
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N*image_count));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N*image_count));
 
         }
 
@@ -948,7 +948,7 @@ void MFS::writeResiduals()
         printf("Saving residuals and model to MS...\n");
         for(int d=0; d<nMeasurementSets; d++) {
                 iohandler->IocopyMS(datasets[d].name, datasets[d].oname);
-                if(!save_model_input) {                      
+                if(!save_model_input) {
                         iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
                         iohandler->IowriteMS(datasets[d].oname, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
                 }else{
