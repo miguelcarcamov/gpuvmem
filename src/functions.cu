@@ -1213,6 +1213,20 @@ __host__ void calc_sBeam(std::vector<double3> uvw, std::vector<float> weight, fl
 
 }
 
+__host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv)
+{
+        double3 beam_size;
+        double uv_square = s_uv * s_uv;
+        double uu_minus_vv = s_uu - s_vv;
+        double uu_plus_vv = s_uu + s_vv;
+        double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
+        beam_size.x = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv - sqrt_in); // Major axis in radians
+        beam_size.y = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv + sqrt_in); // Minor axis in radians
+        beam_size.z = -0.5*atan2(2.0*s_uv, uu_minus_vv); // Angle in radians
+
+        return beam_size;
+}
+
 
 __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa)
 {
@@ -1273,17 +1287,12 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
         s_uu /= sum_weights;
         s_vv /= sum_weights;
         s_uv /= sum_weights;
-        double uv_square = s_uv * s_uv;
-        double uu_minus_vv = s_uu - s_vv;
-        double uu_plus_vv = s_uu + s_vv;
-        double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
-        double bmaj_rad = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv - sqrt_in); // Major axis in radians
-        double bmin_rad = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv + sqrt_in); // Minor axis in radians
-        double theta_rad = -0.5*atan2(2.0*s_uv, uu_minus_vv); // Angle in radians
 
-        *bmaj = bmaj_rad / RPDEG_D; // Major axis to degrees
-        *bmin = bmin_rad / RPDEG_D; // Minor axis to degrees
-        *bpa = theta_rad / RPDEG_D; // Angle to degrees
+        double3 beam_size_rad = calc_beamSize(s_uu, s_vv, s_uv);
+
+        *bmaj = beam_size_rad.x / RPDEG_D; // Major axis to degrees
+        *bmin = beam_size_rad.y / RPDEG_D; // Minor axis to degrees
+        *bpa = beam_size_rad.z / RPDEG_D; // Angle to degrees
 
         if(sum_weights > 0.0f)
                 variance = 1.0f/sum_weights;
