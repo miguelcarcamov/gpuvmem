@@ -956,10 +956,10 @@ void MFS::writeResiduals()
                 iohandler->IocopyMS(datasets[d].name, datasets[d].oname);
                 if(!save_model_input) {
                         iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
-                        iohandler->IowriteMS(datasets[d].oname, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
+                        iohandler->IowriteMS(datasets[d].oname, "MODEL_DATA", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
                 }else{
                         iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
-                        iohandler->IowriteMS(datasets[d].name, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
+                        iohandler->IowriteMS(datasets[d].name, "MODEL_DATA", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
                 }
 
         }
