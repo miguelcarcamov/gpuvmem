@@ -158,6 +158,8 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 exit(-1);
         }
 
+        printf("GPUVMEM is reading %s data column\n", data_column.c_str());
+
         casacore::Vector<double> pointing_ref;
         casacore::Vector<double> pointing_phs;
         int pointing_id;
