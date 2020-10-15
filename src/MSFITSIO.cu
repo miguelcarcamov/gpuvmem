@@ -147,7 +147,9 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 exit(-1);
         }
 
-        if (main_tab.tableDesc().isColumn("CORRECTED"))
+        if (main_tab.tableDesc().isColumn("CORRECTED") && main_tab.tableDesc().isColumn("DATA"))
+                data_column="CORRECTED";
+        else if (main_tab.tableDesc().isColumn("CORRECTED"))
                 data_column="CORRECTED";
         else if (main_tab.tableDesc().isColumn("DATA"))
                 data_column="DATA";
