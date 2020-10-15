@@ -147,14 +147,14 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 exit(-1);
         }
 
-        if (main_tab.tableDesc().isColumn("CORRECTED") && main_tab.tableDesc().isColumn("DATA"))
-                data_column="CORRECTED";
-        else if (main_tab.tableDesc().isColumn("CORRECTED"))
-                data_column="CORRECTED";
+        if (main_tab.tableDesc().isColumn("CORRECTED_DATA") && main_tab.tableDesc().isColumn("DATA"))
+                data_column="CORRECTED_DATA";
+        else if (main_tab.tableDesc().isColumn("CORRECTED_DATA"))
+                data_column="CORRECTED_DATA";
         else if (main_tab.tableDesc().isColumn("DATA"))
                 data_column="DATA";
         else{
-                printf("ERROR: There is no column CORRECTED OR DATA in this Measurement SET. Exiting...\n");
+                printf("ERROR: There is no column CORRECTED_DATA OR DATA in this Measurement SET. Exiting...\n");
                 exit(-1);
         }
 
