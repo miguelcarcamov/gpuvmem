@@ -555,13 +555,13 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
                                                         }
 
                                                         dataCol(sto,j) = casacore::Complex(vis.x, vis.y);
-                                                        //weights[sto] = fields[f].visibilities[g+j][sto].weight[c];
+                                                        weights[sto] = fields[f].visibilities[g+j][sto].weight[c];
                                                         fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto]++;
                                                 }
                                         }
                                 }
                                 data_col.put(k, dataCol);
-                                //weight_col.put(k, weights);
+                                weight_col.put(k, weights);
                         }
 
                         query_tab.flush();
