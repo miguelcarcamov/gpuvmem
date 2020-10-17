@@ -1107,39 +1107,19 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 //fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
                                 //OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
 
-                                int visCounter = 0;
-                                float gridWeightSum = 0.0f;
-
                                 // We already know that in quadrants < N/2 there are only zeros
                                 // Therefore, we start j from N/2
-                                #pragma omp parallel for shared(g_weights) reduction(+: gridWeightSum, visCounter)
+                                int visCounter = 0;
+                                #pragma omp parallel for shared(g_weights) reduction(+: visCounter)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
-                                                        gridWeightSum += weight;
                                                         visCounter++;
                                                 }
                                         }
                                 }
 
-                                // Briggs/Robust formula
-                                pow2_factor = pow(10.0, -2.0 * robust);
-                                w_avg = gridWeightSum / visCounter;
-                                S2 = 5.0f * 5.0f * pow2_factor / w_avg;
-
-                                float weight;
-                                #pragma omp parallel for schedule(static, 1) shared(g_weights) private(weight)
-                                for (int k = 0; k < M; k++) {
-                                        for (int j = N/2; j < N; j++) {
-                                                weight = g_weights[N * k + j];
-                                                if (weight > 0.0f) {
-                                                        g_weights[N * k + j] /= (1.0f + weight * S2);
-                                                } else {
-                                                        g_weights[N * k + j] = 0.0f;
-                                                }
-                                        }
-                                }
 
                                 fields[f].visibilities[i][s].uvw.resize(visCounter);
                                 fields[f].visibilities[i][s].Vo.resize(visCounter);
@@ -1150,6 +1130,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 fields[f].visibilities[i][s].weight.resize(visCounter);
 
                                 int l = 0;
+                                float weight;
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
                                                 weight = g_weights[N * k + j];

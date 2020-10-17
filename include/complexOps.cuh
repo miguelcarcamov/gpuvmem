@@ -35,6 +35,20 @@ __host__ __device__ T multComplexComplex(T c1, T c2)
 }
 
 template <class T, class R>
+__host__ __device__ T divComplexReal(T c1, R c2)
+{
+
+        T result;
+
+        result.x = c1.x / c2;
+        result.y = c1.y / c2;
+
+        return result;
+
+}
+
+
+template <class T, class R>
 __host__ __device__ T divComplexComplex(T c1, T c2)
 {
 
