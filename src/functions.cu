@@ -1038,6 +1038,13 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
                                         uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
 
+                                        //Apply hermitian symmetry (it will be applied afterwards)
+                                        if (uvw.x < 0.0) {
+                                                uvw.x *= -1.0;
+                                                uvw.y *= -1.0;
+                                                Vo.y *= -1.0;
+                                        }
+
                                         grid_pos_x = uvw.x / fabs(deltau);
                                         grid_pos_y = uvw.y / fabs(deltav);
                                         j = round(grid_pos_x + N / 2);
@@ -1053,7 +1060,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                         {
                                                         #pragma omp critical
                                                                 {
-                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N) {
+                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N) {
                                                                                 ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
                                                                                 g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
                                                                                 g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
@@ -1105,7 +1112,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 int visCounter = 0;
                                 #pragma omp parallel for shared(g_weights) reduction(+: visCounter)
                                 for (int k = 0; k < M; k++) {
-                                        for (int j = 0; j < N; j++) {
+                                        for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         visCounter++;
@@ -1125,7 +1132,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 int l = 0;
                                 float weight;
                                 for (int k = 0; k < M; k++) {
-                                        for (int j = 0; j < N; j++) {
+                                        for (int j = N/2; j < N; j++) {
                                                 weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
@@ -1469,14 +1476,23 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
                                                                    sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
 
-                                        UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                        if(blockSizeV == -1) {
+                                                int threads1D, blocks1D;
+                                                int threadsV, blocksV;
+                                                threads1D = 512;
+                                                blocks1D = iDivUp(UVpow2, threads1D);
+                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+                                        }else{
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+                                        }
 
-                                      /*  hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                        hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        checkCudaErrors(cudaDeviceSynchronize());*/
+                                        checkCudaErrors(cudaDeviceSynchronize());
 
                                         // Interpolation / Degridding
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
