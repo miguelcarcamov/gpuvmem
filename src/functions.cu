@@ -1037,13 +1037,6 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
                                         uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
                                         uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
-                                        //Apply hermitian symmetry (it will be applied afterwards)
-                                        if (uvw.x < 0.0) {
-                                                uvw.x *= -1.0;
-                                                uvw.y *= -1.0;
-                                                Vo.y *= -1.0;
-                                        }
-
 
                                         grid_pos_x = uvw.x / fabs(deltau);
                                         grid_pos_y = uvw.y / fabs(deltav);
@@ -1060,7 +1053,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                         {
                                                         #pragma omp critical
                                                                 {
-                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N) {
+                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N) {
                                                                                 ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
                                                                                 g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
                                                                                 g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
@@ -1112,7 +1105,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 int visCounter = 0;
                                 #pragma omp parallel for shared(g_weights) reduction(+: visCounter)
                                 for (int k = 0; k < M; k++) {
-                                        for (int j = N/2; j < N; j++) {
+                                        for (int j = 0; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         visCounter++;
@@ -1132,7 +1125,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 int l = 0;
                                 float weight;
                                 for (int k = 0; k < M; k++) {
-                                        for (int j = N/2; j < N; j++) {
+                                        for (int j = 0; j < N; j++) {
                                                 weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
                                                         fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
