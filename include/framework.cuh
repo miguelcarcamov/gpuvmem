@@ -217,7 +217,8 @@ imageMap *functionMapping;
 
 class WeightingScheme{
 public:
-  virtual void apply(std::vector<MSDataset> d) = 0;
+  virtual void apply(std::vector<MSDataset>& d) = 0;
+  virtual void configure(void* params) = 0;
 };
 
 
@@ -225,7 +226,7 @@ class Visibilities
 {
 public:
 
-void setMSDataset(std::vector<MSDataset> d){
+void setMSDataset(std::vector<MSDataset>& d){
         this->datasets = d;
 };
 void setTotalVisibilities(int t){
@@ -241,22 +242,22 @@ void setMaxNumberVis(int t){
 };
 
 std::vector<MSDataset> getMSDataset(){
-        return datasets;
+        return this->datasets;
 };
 int getTotalVisibilities(){
-        return total_visibilities;
+        return this->total_visibilities;
 };
 
 int getMaxNumberVis(){
-        return max_number_vis;
+        return this->max_number_vis;
 };
 
 int getNDatasets(){
-        return ndatasets;
+        return this->ndatasets;
 };
 
 void applyWeightingScheme(WeightingScheme *scheme){
-  scheme->apply(this->getMSDataset());
+  scheme->apply(this->datasets);
 }
 
 private:

@@ -1018,7 +1018,6 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         visCounterPerFreq = 0;
                         for(int s=0; s< data->nstokes; s++) {
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
@@ -1031,7 +1030,6 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         //Backing up original visibilities and (u,v) positions
                                         fields[f].backup_visibilities[i][s].uvw[z] = uvw;
                                         fields[f].backup_visibilities[i][s].Vo[z] = Vo;
-                                        fields[f].backup_visibilities[i][s].weight[z] = w;
 
                                         // Visibilities from metres to klambda
                                         uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
@@ -1353,7 +1351,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-
+                                        printf("Original number of vis: %d\n", fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
                                                                    sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                         checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
@@ -1375,6 +1373,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
 
                                         // Copy original (u,v) positions and weights to host and device
                                         fields[f].visibilities[i][s].uvw.assign(fields[f].backup_visibilities[i][s].uvw.begin(), fields[f].backup_visibilities[i][s].uvw.end());
+                                        printf("Backup size weight: %d\n", fields[f].backup_visibilities[i][s].weight.size());
                                         fields[f].visibilities[i][s].weight.assign(fields[f].backup_visibilities[i][s].weight.begin(), fields[f].backup_visibilities[i][s].weight.end());
 
                                         checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),

@@ -2,10 +2,7 @@
 
 NaturalWeightingScheme::NaturalWeightingScheme(){};
 
-void NaturalWeightingScheme::apply(std::vector<MSDataset> d)
-{
-        return;
-};
+void NaturalWeightingScheme::apply(std::vector<MSDataset>& d){};
 
 namespace {
 WeightingScheme* CreateWeightingScheme()

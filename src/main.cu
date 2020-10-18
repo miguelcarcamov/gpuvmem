@@ -140,7 +140,7 @@ __host__ int main(int argc, char **argv) {
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
-        WeightingScheme *scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(naturalWeightingScheme);
+        WeightingScheme *scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(uniformWeightingScheme);
         sy->setIoHandler(ioms);
         sy->setOrder(&optimizationOrder);
         sy->setWeightingScheme(scheme);
