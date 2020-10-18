@@ -412,8 +412,7 @@ void MFS::configure(int argc, char **argv)
         if(NULL == this->scheme){
           this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
         }
-        
-        this->visibilities->applyWeightingScheme(this->scheme);
+        this->scheme->apply(datasets);
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");

@@ -16,9 +16,7 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
                 for(int f=0; f < d[j].data.nfields; f++) {
                         for(int i=0; i < d[j].data.total_frequencies; i++) {
                                 for(int s=0; s < d[j].data.nstokes; s++) {
-                                        printf("original vis: %d\n", d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         d[j].fields[f].backup_visibilities[i][s].weight.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        printf("Backup weight after resize: %d\n", d[j].fields[f].backup_visibilities[i][s].weight.size());
                                         xy_pos.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
                                         #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights) private(x, y, grid_pos_x, grid_pos_y, uvw, w)

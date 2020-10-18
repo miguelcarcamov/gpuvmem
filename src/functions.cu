@@ -1351,7 +1351,6 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        printf("Original number of vis: %d\n", fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
                                                                    sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                         checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
@@ -1373,7 +1372,6 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
 
                                         // Copy original (u,v) positions and weights to host and device
                                         fields[f].visibilities[i][s].uvw.assign(fields[f].backup_visibilities[i][s].uvw.begin(), fields[f].backup_visibilities[i][s].uvw.end());
-                                        printf("Backup size weight: %d\n", fields[f].backup_visibilities[i][s].weight.size());
                                         fields[f].visibilities[i][s].weight.assign(fields[f].backup_visibilities[i][s].weight.begin(), fields[f].backup_visibilities[i][s].weight.end());
 
                                         checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
