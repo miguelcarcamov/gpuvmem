@@ -126,6 +126,7 @@ __host__ int main(int argc, char **argv) {
         enum {MS}; // Io
         enum {SecondDerivative}; // Error calculation
         enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D, pswf_02D, pswf_12D}; // CKernels for gridding
+        enum {naturalWeightingScheme, uniformWeightingScheme};
 
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
@@ -139,8 +140,10 @@ __host__ int main(int argc, char **argv) {
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
+        WeightingScheme *scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(naturalWeightingScheme);
         sy->setIoHandler(ioms);
         sy->setOrder(&optimizationOrder);
+        sy->setWeightingScheme(scheme);
         sy->setGriddingKernel(sc);
         sy->configure(argc, argv);
         cg->setObjectiveFunction(of);

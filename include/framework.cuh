@@ -215,6 +215,12 @@ float *error_image;
 imageMap *functionMapping;
 };
 
+class WeightingScheme{
+public:
+  virtual void apply(std::vector<MSDataset> d) = 0;
+};
+
+
 class Visibilities
 {
 public:
@@ -248,6 +254,10 @@ int getMaxNumberVis(){
 int getNDatasets(){
         return ndatasets;
 };
+
+void applyWeightingScheme(WeightingScheme *scheme){
+  scheme->apply(this->getMSDataset());
+}
 
 private:
 std::vector<MSDataset> datasets;
@@ -755,6 +765,10 @@ __host__ void setIoHandler(Io *handler){
 __host__ void setError(Error *e){
         this->error = e;
 };
+
+__host__ void setWeightingScheme(WeightingScheme *scheme){
+        this->scheme = scheme;
+};
 __host__ void setOrder(void (*func)(Optimizator *o,Image *I)){
         this->Order = func;
 };
@@ -795,6 +809,7 @@ int imagesChanged = 0;
 void (*IoOrderIterations)(float *I, Io *io) = NULL;
 void (*IoOrderEnd)(float *I, Io *io) = NULL;
 void (*IoOrderError)(float *I, Io *io) = NULL;
+WeightingScheme *scheme = NULL;
 };
 
 
@@ -824,6 +839,40 @@ Synthesizer* CreateSynthesizer(int SynthesizerId)
         {
                 // not found
                 throw std::runtime_error("Unknown Synthesizer ID");
+        }
+        // Invoke the creation function
+        return (i->second)();
+};
+
+private:
+CallbackMap callbacks_;
+};
+
+class WeightingSchemeFactory
+{
+public:
+typedef WeightingScheme* (*CreateWeightingSchemeCallback)();
+private:
+typedef std::map<int, CreateWeightingSchemeCallback> CallbackMap;
+public:
+// Returns true if registration was succesfull
+bool RegisterWeightingScheme(int WeightingSchemeId, CreateWeightingSchemeCallback CreateFn)
+{
+        return callbacks_.insert(CallbackMap::value_type(WeightingSchemeId, CreateFn)).second;
+};
+
+bool UnregisterWeightingScheme(int WeightingSchemeId)
+{
+        return callbacks_.erase(WeightingSchemeId) == 1;
+};
+
+WeightingScheme* CreateWeightingScheme(int WeightingSchemeId)
+{
+        CallbackMap::const_iterator i = callbacks_.find(WeightingSchemeId);
+        if (i == callbacks_.end())
+        {
+                // not found
+                throw std::runtime_error("Unknown WeightingScheme ID");
         }
         // Invoke the creation function
         return (i->second)();

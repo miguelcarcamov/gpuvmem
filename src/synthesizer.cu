@@ -409,7 +409,10 @@ void MFS::configure(int argc, char **argv)
         double deltay = RPDEG_D*DELTAY; //radians
         deltau = 1.0 / (M * deltax);
         deltav = 1.0 / (N * deltay);
-
+        if(NULL != this->scheme){
+          this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
+        }
+        this->visibilities->applyWeightingScheme(this->scheme);
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
