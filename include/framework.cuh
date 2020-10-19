@@ -133,35 +133,35 @@ void setDS(float *DS){
 
 virtual float calculateSecondDerivate() = 0;
 virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
-  this->imageIndex = imageIndex;
-  this->order = order;
-  this->mod = mod;
-  this->imageToAdd = imageToAdd;
+        this->imageIndex = imageIndex;
+        this->order = order;
+        this->mod = mod;
+        this->imageToAdd = imageToAdd;
 
-  if(imageIndex > image_count -1 || imageToAdd > image_count -1)
-  {
-          printf("There is no image for the provided index %s\n", this->name);
-          exit(-1);
-  }
+        if(imageIndex > image_count -1 || imageToAdd > image_count -1)
+        {
+                printf("There is no image for the provided index %s\n", this->name);
+                exit(-1);
+        }
 
-  if(penalizatorIndex != -1)
-  {
-          if(penalizatorIndex < 0)
-          {
-                  printf("invalid index for penalizator (%s)\n", this->name);
-                  exit(-1);
-          }else if(penalizatorIndex > (nPenalizators - 1)){
-                  this->penalization_factor = 0.0f;
-          }else{
-                  this->penalization_factor = penalizators[penalizatorIndex];
-          }
-  }
+        if(penalizatorIndex != -1)
+        {
+                if(penalizatorIndex < 0)
+                {
+                        printf("invalid index for penalizator (%s)\n", this->name);
+                        exit(-1);
+                }else if(penalizatorIndex > (nPenalizators - 1)) {
+                        this->penalization_factor = 0.0f;
+                }else{
+                        this->penalization_factor = penalizators[penalizatorIndex];
+                }
+        }
 
-  checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
-  checkCudaErrors(cudaMemset(device_S, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_S, 0, sizeof(float)*M*N));
 
-  checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
-  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
 };
 
 protected:
@@ -215,10 +215,23 @@ float *error_image;
 imageMap *functionMapping;
 };
 
-class WeightingScheme{
+class WeightingScheme {
 public:
-  virtual void apply(std::vector<MSDataset>& d) = 0;
-  virtual void configure(void* params) = 0;
+virtual void apply(std::vector<MSDataset>& d) = 0;
+virtual void configure(void* params) = 0;
+
+void restoreWeights(std::vector<MSDataset>& d){
+        for(int j=0; j < d.size(); j++) {
+                for(int f=0; f < d[j].data.nfields; f++) {
+                        for(int i=0; i < d[j].data.total_frequencies; i++) {
+                                for(int s=0; s < d[j].data.nstokes; s++) {
+                                        d[j].fields[f].visibilities[i][s].weight.assign(d[j].fields[f].backup_visibilities[i][s].weight.begin(), d[j].fields[f].backup_visibilities[i][s].weight.end());
+                                }
+                        }
+                }
+        }
+};
+
 };
 
 
@@ -257,7 +270,7 @@ int getNDatasets(){
 };
 
 void applyWeightingScheme(WeightingScheme *scheme){
-  scheme->apply(this->datasets);
+        scheme->apply(this->datasets);
 }
 
 private:

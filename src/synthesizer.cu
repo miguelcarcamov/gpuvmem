@@ -412,7 +412,9 @@ void MFS::configure(int argc, char **argv)
         if(NULL == this->scheme){
           this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
         }
+
         this->scheme->apply(datasets);
+
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
@@ -935,6 +937,8 @@ void MFS::writeResiduals()
         printf("Transferring residuals to host memory\n");
         if(!gridding)
         {
+                //Restoring the weights to the original
+                this->scheme->restoreWeights(datasets);
                 //Saving residuals to disk
                 for(int d=0; d<nMeasurementSets; d++) {
                         residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
@@ -946,6 +950,7 @@ void MFS::writeResiduals()
                 deltav = 1.0 / (N * deltay);
 
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
+                // In the de-gridding procedure weights are also restored to the original
                 for(int d=0; d<nMeasurementSets; d++)
                         degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N);
 
