@@ -984,7 +984,7 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
         }
 }
 
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel, int gridding)
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, CKernel *ckernel, int gridding)
 {
         std::vector<float> g_weights(M*N);
         std::vector<float> g_weights_aux(M*N);

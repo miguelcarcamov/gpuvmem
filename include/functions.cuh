@@ -37,7 +37,7 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
 __host__ Vars getOptions(int argc, char **argv);
 __host__ float chiCuadrado(float *I);
 __host__ void dchiCuadrado(float *I, float *dxi2);
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel, int gridding);
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, CKernel *ckernel, int gridding);
 __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<cufftComplex> Vm_gridded_sp, std::vector<double3> uvw_gridded_sp, double deltau, double deltav, float freq, long M, long N, int numvis);
 __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N);
 __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa);

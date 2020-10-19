@@ -9,6 +9,7 @@
 #include <string>
 #include <functional>
 #include <numeric>
+#include <execution>
 #include <cuda_runtime.h>
 #include "device_launch_parameters.h"
 #include <math_constants.h>

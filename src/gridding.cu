@@ -1,7 +1,6 @@
 #include "gridding.cuh"
 
 extern double deltau, deltav;
-extern float robust_param;
 extern long M, N;
 extern int num_gpus;
 
@@ -22,7 +21,7 @@ void Gridding::applyCriteria(Visibilities *v)
         complexValZero.y = 0.0f;
         for(int d=0; d< v->getNDatasets(); d++) {
                 omp_set_num_threads(threads);
-                do_gridding(v->getMSDataset()[d].fields,&v->getMSDataset()[d].data, deltau, deltav, M, N, robust_param, NULL, this->threads);
+                do_gridding(v->getMSDataset()[d].fields,&v->getMSDataset()[d].data, deltau, deltav, M, N, NULL, this->threads);
                 omp_set_num_threads(num_gpus);
         }
 };

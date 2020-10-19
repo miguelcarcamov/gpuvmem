@@ -413,15 +413,15 @@ void MFS::configure(int argc, char **argv)
           this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
         }
 
+        this->scheme->configure(&robust_param);
         this->scheme->apply(datasets);
-
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
                 ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
                 printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
-                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel, gridding);
+                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
         }
 }
 

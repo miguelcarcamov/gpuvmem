@@ -64,7 +64,7 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
 
                                            d[j].fields[f].visibilities[i][s].weight[z] /= g_weights[N*y + x];
                                         }
-                                        
+
                                         std::fill_n(g_weights.begin(), M*N, 0.0f);
 
 
