@@ -139,8 +139,10 @@ void MFS::configure(int argc, char **argv)
                 exit(-1);
         }
 
-        for(int i=0; i< image_count; i++)
-                initial_values.push_back(atof(string_values[i].c_str()));
+        //for(int i=0; i< image_count; i++)
+        //        initial_values.push_back(atof(string_values[i].c_str()));
+        initial_values.push_back(atof(string_values[0].c_str()) * -1.0f * eta);
+        initial_values.push_back(atof(string_values[1].c_str()));
 
         string_values.clear();
         if(image_count == 1)
