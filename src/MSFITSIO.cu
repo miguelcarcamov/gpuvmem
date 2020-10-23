@@ -74,8 +74,9 @@ __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float 
         fits_read_key(canvas, TDOUBLE, "CRPIX2", &c_vars.crpix2, NULL, &status_canvas);
         fits_read_key(canvas, TLONG, "NAXIS1", &c_vars.M, NULL, &status_canvas);
         fits_read_key(canvas, TLONG, "NAXIS2", &c_vars.N, NULL, &status_canvas);
-        fits_read_key(canvas, TFLOAT, "BMAJ", &c_vars.beam_bmaj, NULL, &status_canvas);
-        fits_read_key(canvas, TFLOAT, "BMIN", &c_vars.beam_bmin, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BMAJ", &c_vars.beam_bmaj, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BMIN", &c_vars.beam_bmin, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BPA", &c_vars.beam_bpa, NULL, &status_canvas);
         fits_read_key(canvas, TFLOAT, "NOISE", &c_vars.beam_noise, NULL, &status_noise);
 
 
@@ -88,8 +89,8 @@ __host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float 
                 c_vars.beam_noise = b_noise_aux;
         }
 
-        c_vars.beam_bmaj = c_vars.beam_bmaj/ fabs(c_vars.DELTAX);
-        c_vars.beam_bmin = c_vars.beam_bmin/ c_vars.DELTAY;
+        c_vars.beam_bmaj = c_vars.beam_bmaj;
+        c_vars.beam_bmin = c_vars.beam_bmin;
         c_vars.DELTAX = fabs(c_vars.DELTAX);
         c_vars.DELTAY *= -1.0;
 
@@ -146,14 +147,18 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 exit(-1);
         }
 
-        if (main_tab.tableDesc().isColumn("CORRECTED"))
-                data_column="CORRECTED";
+        if (main_tab.tableDesc().isColumn("CORRECTED_DATA") && main_tab.tableDesc().isColumn("DATA"))
+                data_column="CORRECTED_DATA";
+        else if (main_tab.tableDesc().isColumn("CORRECTED_DATA"))
+                data_column="CORRECTED_DATA";
         else if (main_tab.tableDesc().isColumn("DATA"))
                 data_column="DATA";
         else{
-                printf("ERROR: There is no column CORRECTED OR DATA in this Measurement SET. Exiting...\n");
+                printf("ERROR: There is no column CORRECTED_DATA OR DATA in this Measurement SET. Exiting...\n");
                 exit(-1);
         }
+
+        printf("GPUVMEM is reading %s data column\n", data_column.c_str());
 
         casacore::Vector<double> pointing_ref;
         casacore::Vector<double> pointing_phs;
@@ -294,13 +299,23 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
         data->total_frequencies = total_frequencies;
 
+        for(int f=0; f<data->nfields; f++) {
+                for(int i = 0; i < data->n_internal_frequencies; i++) {
+                        casacore::Vector<double> chan_freq_vector;
+                        chan_freq_vector=chan_freq_col(i);
+                        for(int j = 0; j < data->channels[i]; j++) {
+                                fields[f].nu.push_back(chan_freq_vector[j]);
+                        }
+                }
+        }
+
         for(int f=0; f < data->nfields; f++) {
                 fields[f].visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                 fields[f].device_visibilities.resize(data->total_frequencies, std::vector<DVis>(data->nstokes, DVis()));
                 fields[f].numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
                 fields[f].numVisibilitiesPerFreq.resize(data->total_frequencies,0);
+                fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                 if(gridding) {
-                        fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                         fields[f].backup_numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
                         fields[f].backup_numVisibilitiesPerFreq.resize(data->total_frequencies,0);
                 }
@@ -381,17 +396,6 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                                  * We will allocate memory for model visibilities using the size of the observed visibilities vector.
                                  */
                                 fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), complexZero<cufftComplex>());
-                        }
-                }
-        }
-
-
-        for(int f=0; f<data->nfields; f++) {
-                for(int i = 0; i < data->n_internal_frequencies; i++) {
-                        casacore::Vector<double> chan_freq_vector;
-                        chan_freq_vector=chan_freq_col(i);
-                        for(int j = 0; j < data->channels[i]; j++) {
-                                fields[f].nu.push_back(chan_freq_vector[j]);
                         }
                 }
         }

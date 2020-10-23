@@ -22,6 +22,11 @@
 #include "copyrightwarranty.cuh"
 #include <cooperative_groups.h>
 
+extern long M, N;
+extern int image_count;
+extern float * penalizators;
+extern int nPenalizators;
+
 typedef struct varsPerGPU {
         float *device_chi2;
         float *device_dchi2;
@@ -100,10 +105,12 @@ virtual float calcFi(float *p) = 0;
 virtual void calcGi(float *p, float *xi) = 0;
 virtual void restartDGi() = 0;
 virtual void addToDphi(float *device_dphi) = 0;
-virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd) = 0;
 
 float get_fivalue(){
         return this->fi_value;
+};
+float getPenalizationFactor(){
+        return this->penalization_factor;
 };
 void set_fivalue(float fi){
         this->fi_value = fi;
@@ -123,18 +130,49 @@ void setS(float *S){
 void setDS(float *DS){
         cudaFree(device_DS); this->device_DS = DS;
 };
+
 virtual float calculateSecondDerivate() = 0;
-float getPenalizationFactor(){
-        return this->penalization_factor;
-}
+virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
+        this->imageIndex = imageIndex;
+        this->order = order;
+        this->mod = mod;
+        this->imageToAdd = imageToAdd;
+
+        if(imageIndex > image_count -1 || imageToAdd > image_count -1)
+        {
+                printf("There is no image for the provided index %s\n", this->name);
+                exit(-1);
+        }
+
+        if(penalizatorIndex != -1)
+        {
+                if(penalizatorIndex < 0)
+                {
+                        printf("invalid index for penalizator (%s)\n", this->name);
+                        exit(-1);
+                }else if(penalizatorIndex > (nPenalizators - 1)) {
+                        this->penalization_factor = 0.0f;
+                }else{
+                        this->penalization_factor = penalizators[penalizatorIndex];
+                }
+        }
+
+        checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_S, 0, sizeof(float)*M*N));
+
+        checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
+};
+
 protected:
 float fi_value;
 float *device_S;
 float *device_DS;
-float penalization_factor = 1;
+float penalization_factor = 1.0f;
 int imageIndex;
 int mod;
 int order;
+char *name = "default";
 cufftComplex * Inu = NULL;
 int imageToAdd;
 };
@@ -177,11 +215,31 @@ float *error_image;
 imageMap *functionMapping;
 };
 
+class WeightingScheme {
+public:
+virtual void apply(std::vector<MSDataset>& d) = 0;
+virtual void configure(void* params) = 0;
+
+void restoreWeights(std::vector<MSDataset>& d){
+        for(int j=0; j < d.size(); j++) {
+                for(int f=0; f < d[j].data.nfields; f++) {
+                        for(int i=0; i < d[j].data.total_frequencies; i++) {
+                                for(int s=0; s < d[j].data.nstokes; s++) {
+                                        d[j].fields[f].visibilities[i][s].weight.assign(d[j].fields[f].backup_visibilities[i][s].weight.begin(), d[j].fields[f].backup_visibilities[i][s].weight.end());
+                                }
+                        }
+                }
+        }
+};
+
+};
+
+
 class Visibilities
 {
 public:
 
-void setMSDataset(std::vector<MSDataset> d){
+void setMSDataset(std::vector<MSDataset>& d){
         this->datasets = d;
 };
 void setTotalVisibilities(int t){
@@ -197,19 +255,23 @@ void setMaxNumberVis(int t){
 };
 
 std::vector<MSDataset> getMSDataset(){
-        return datasets;
+        return this->datasets;
 };
 int getTotalVisibilities(){
-        return total_visibilities;
+        return this->total_visibilities;
 };
 
 int getMaxNumberVis(){
-        return max_number_vis;
+        return this->max_number_vis;
 };
 
 int getNDatasets(){
-        return ndatasets;
+        return this->ndatasets;
 };
+
+void applyWeightingScheme(WeightingScheme *scheme){
+        scheme->apply(this->datasets);
+}
 
 private:
 std::vector<MSDataset> datasets;
@@ -717,6 +779,10 @@ __host__ void setIoHandler(Io *handler){
 __host__ void setError(Error *e){
         this->error = e;
 };
+
+__host__ void setWeightingScheme(WeightingScheme *scheme){
+        this->scheme = scheme;
+};
 __host__ void setOrder(void (*func)(Optimizator *o,Image *I)){
         this->Order = func;
 };
@@ -757,6 +823,7 @@ int imagesChanged = 0;
 void (*IoOrderIterations)(float *I, Io *io) = NULL;
 void (*IoOrderEnd)(float *I, Io *io) = NULL;
 void (*IoOrderError)(float *I, Io *io) = NULL;
+WeightingScheme *scheme = NULL;
 };
 
 
@@ -786,6 +853,40 @@ Synthesizer* CreateSynthesizer(int SynthesizerId)
         {
                 // not found
                 throw std::runtime_error("Unknown Synthesizer ID");
+        }
+        // Invoke the creation function
+        return (i->second)();
+};
+
+private:
+CallbackMap callbacks_;
+};
+
+class WeightingSchemeFactory
+{
+public:
+typedef WeightingScheme* (*CreateWeightingSchemeCallback)();
+private:
+typedef std::map<int, CreateWeightingSchemeCallback> CallbackMap;
+public:
+// Returns true if registration was succesfull
+bool RegisterWeightingScheme(int WeightingSchemeId, CreateWeightingSchemeCallback CreateFn)
+{
+        return callbacks_.insert(CallbackMap::value_type(WeightingSchemeId, CreateFn)).second;
+};
+
+bool UnregisterWeightingScheme(int WeightingSchemeId)
+{
+        return callbacks_.erase(WeightingSchemeId) == 1;
+};
+
+WeightingScheme* CreateWeightingScheme(int WeightingSchemeId)
+{
+        CallbackMap::const_iterator i = callbacks_.find(WeightingSchemeId);
+        if (i == callbacks_.end())
+        {
+                // not found
+                throw std::runtime_error("Unknown WeightingScheme ID");
         }
         // Invoke the creation function
         return (i->second)();

@@ -48,7 +48,8 @@ extern float noise_jypix, fg_scale, noise_cut, MINPIX, \
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 
-extern float beam_noise, beam_bmaj, beam_bmin, b_noise_aux;
+extern double beam_bmaj, beam_bmin, beam_bpa;
+extern float beam_noise, b_noise_aux;
 extern float *initial_values, *penalizators, robust_param;
 extern double ra, dec, DELTAX, DELTAY, deltau, deltav, crpix1, crpix2;
 extern float threshold;
@@ -983,7 +984,7 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
         }
 }
 
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel)
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, CKernel *ckernel, int gridding)
 {
         std::vector<float> g_weights(M*N);
         std::vector<float> g_weights_aux(M*N);
@@ -1017,9 +1018,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         visCounterPerFreq = 0;
                         for(int s=0; s< data->nstokes; s++) {
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                #pragma omp parallel for schedule(static, 1) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
+                                #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                 {
 
@@ -1030,19 +1030,18 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         //Backing up original visibilities and (u,v) positions
                                         fields[f].backup_visibilities[i][s].uvw[z] = uvw;
                                         fields[f].backup_visibilities[i][s].Vo[z] = Vo;
-                                        fields[f].backup_visibilities[i][s].weight[z] = w;
 
                                         // Visibilities from metres to klambda
                                         uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
                                         uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
                                         uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
+
                                         //Apply hermitian symmetry (it will be applied afterwards)
                                         if (uvw.x < 0.0) {
                                                 uvw.x *= -1.0;
                                                 uvw.y *= -1.0;
                                                 Vo.y *= -1.0;
                                         }
-
 
                                         grid_pos_x = uvw.x / fabs(deltau);
                                         grid_pos_y = uvw.y / fabs(deltav);
@@ -1106,39 +1105,19 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 //fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
                                 //OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
 
-                                int visCounter = 0;
-                                float gridWeightSum = 0.0f;
-
                                 // We already know that in quadrants < N/2 there are only zeros
                                 // Therefore, we start j from N/2
-                                #pragma omp parallel for shared(g_weights) reduction(+: gridWeightSum, visCounter)
+                                int visCounter = 0;
+                                #pragma omp parallel for shared(g_weights) reduction(+: visCounter)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
-                                                        gridWeightSum += weight;
                                                         visCounter++;
                                                 }
                                         }
                                 }
 
-                                // Briggs/Robust formula
-                                pow2_factor = pow(10.0, -2.0 * robust);
-                                w_avg = gridWeightSum / visCounter;
-                                S2 = 5.0f * 5.0f * pow2_factor / w_avg;
-
-                                float weight;
-                                #pragma omp parallel for schedule(static, 1) shared(g_weights) private(weight)
-                                for (int k = 0; k < M; k++) {
-                                        for (int j = N/2; j < N; j++) {
-                                                weight = g_weights[N * k + j];
-                                                if (weight > 0.0f) {
-                                                        g_weights[N * k + j] /= (1.0f + weight * S2);
-                                                } else {
-                                                        g_weights[N * k + j] = 0.0f;
-                                                }
-                                        }
-                                }
 
                                 fields[f].visibilities[i][s].uvw.resize(visCounter);
                                 fields[f].visibilities[i][s].Vo.resize(visCounter);
@@ -1149,6 +1128,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 fields[f].visibilities[i][s].weight.resize(visCounter);
 
                                 int l = 0;
+                                float weight;
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
                                                 weight = g_weights[N * k + j];
@@ -1194,14 +1174,50 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         data->max_number_visibilities_in_channel_and_stokes = max;
 }
 
+__host__ void calc_sBeam(std::vector<double3> uvw, std::vector<float> weight, float nu, double *s_uu, double *s_vv, double *s_uv)
+{
 
-__host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding)
+        double u_lambda, v_lambda;
+        #pragma omp parallel for shared(uvw, weight) private(u_lambda, v_lambda)
+        for(int i=0; i<uvw.size(); i++) {
+                u_lambda = metres_to_lambda(uvw[i].x, nu);
+                v_lambda = metres_to_lambda(uvw[i].y, nu);
+                #pragma omp critical
+                {
+                        *s_uu += u_lambda * u_lambda * weight[i];
+                        *s_vv += v_lambda * v_lambda * weight[i];
+                        *s_uv += u_lambda * v_lambda * weight[i];
+                }
+        }
+
+}
+
+__host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv)
+{
+        double3 beam_size;
+        double uv_square = s_uv * s_uv;
+        double uu_minus_vv = s_uu - s_vv;
+        double uu_plus_vv = s_uu + s_vv;
+        double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
+        beam_size.x = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv - sqrt_in); // Major axis in radians
+        beam_size.y = 2.0*sqrt(log(2.0))/PI_D/sqrt(uu_plus_vv + sqrt_in); // Minor axis in radians
+        beam_size.z = -0.5*atan2(2.0*s_uv, uu_minus_vv); // Angle in radians
+
+        return beam_size;
+}
+
+
+__host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa)
 {
         //Declaring block size and number of blocks for visibilities
         float variance;
         float sum_weights = 0.0f;
         long UVpow2;
-        int device;
+        double s_uu = 0.0;
+        double s_vv = 0.0;
+        double s_uv = 0.0;
+
+        int device = -1;
         cudaDeviceProp dprop;
         checkCudaErrors(cudaGetDevice(&device));
         checkCudaErrors(cudaGetDeviceProperties(&dprop, device));
@@ -1213,6 +1229,7 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                                                 if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                                         //sum_inverse_weight += 1 / fields[f].visibilities[i][s].weight[j];
                                                         //sum_weights += std::accumulate(datasets[d].fields[f].visibilities[i][s].weight.begin(), datasets[d].fields[f].visibilities[i][s].weight.end(), 0.0f);
+                                                        calc_sBeam(datasets[d].fields[f].visibilities[i][s].uvw, datasets[d].fields[f].visibilities[i][s].weight, datasets[d].fields[f].nu[i], &s_uu, &s_vv, &s_uv);
                                                         sum_weights += reduceCPU<float>(datasets[d].fields[f].visibilities[i][s].weight.data(), datasets[d].fields[f].visibilities[i][s].weight.size());
                                                         *total_visibilities += datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
@@ -1244,6 +1261,17 @@ __host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visib
                 }
         }
 
+        // We have calculate the running means so we divide by the sum of the weights
+
+        s_uu /= sum_weights;
+        s_vv /= sum_weights;
+        s_uv /= sum_weights;
+
+        double3 beam_size_rad = calc_beamSize(s_uu, s_vv, s_uv);
+
+        *bmaj = beam_size_rad.x / RPDEG_D; // Major axis to degrees
+        *bmin = beam_size_rad.y / RPDEG_D; // Minor axis to degrees
+        *bpa = beam_size_rad.z / RPDEG_D; // Angle to degrees
 
         if(sum_weights > 0.0f)
                 variance = 1.0f/sum_weights;
@@ -1323,7 +1351,6 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-
                                         checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
                                                                    sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                         checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
@@ -1386,7 +1413,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                 }
         }else{
                 for(int f=0; f<data.nfields; f++) {
-            #pragma omp parallel for schedule(static,1)
+                        #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
                         for (int i = 0; i < data.total_frequencies; i++)
                         {
                                 unsigned int j = omp_get_thread_num();
@@ -1446,9 +1473,18 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
                                                                    sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
 
-                                        UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                        if(blockSizeV == -1) {
+                                                int threads1D, blocks1D;
+                                                int threadsV, blocksV;
+                                                threads1D = 512;
+                                                blocks1D = iDivUp(UVpow2, threads1D);
+                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+                                        }else{
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+                                        }
 
                                         hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
@@ -2893,7 +2929,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         cudaSetDevice(firstgpu);
 
-        float resultchi2  = 0.0;
+        float resultchi2  = 0.0f;
 
         if(clip_flag) {
                 ip->clip(I);
@@ -2958,8 +2994,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                         }
                                 }
                         }else{
-                                omp_set_num_threads(num_gpus);
-                              #pragma omp parallel for schedule(static,1) reduction(+: resultchi2)
+                              #pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         float result = 0.0;
@@ -3036,6 +3071,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
+                                cudaSetDevice(selected);
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
                                         for(int s=0; s < datasets[d].data.nstokes; s++) {
                                                 if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
@@ -3063,8 +3099,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                         }
                                 }
                         }else{
-                                omp_set_num_threads(num_gpus);
-                          #pragma omp parallel for schedule(static,1)
+                          #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         unsigned int j = omp_get_thread_num();
@@ -3364,8 +3399,7 @@ __host__ void calculateErrors(Image *image){
                                         }
                                 }
                         }else{
-                                omp_set_num_threads(num_gpus);
-                          #pragma omp parallel for private(sum_weights) schedule(static,1)
+                          #pragma omp parallel for private(sum_weights) num_threads(num_gpus) schedule(static,1)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         unsigned int j = omp_get_thread_num();

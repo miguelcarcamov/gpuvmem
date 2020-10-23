@@ -13,7 +13,7 @@ float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();
 void addToDphi(float *device_dphi);
-void configure(int penalizatorIndex, int imageIndex, int imageToAdd);
+void configure(int penalizatorIndex, int imageIndex, int imageToAdd) override;
 void setPenalizationFactorFromInputIndex(int index){
 };
 float calculateSecondDerivate(){

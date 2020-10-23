@@ -5,10 +5,11 @@
 long M, N, numVisibilities;
 int iter=0;
 
-float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, beam_noise, beam_bmaj, *device_noise_image, *device_weight_image, *device_distance_image;
-float beam_bmin, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
+float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
+float beam_noise, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
 float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
+double beam_bmaj, beam_bmin, beam_bpa;
 
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
@@ -138,8 +139,10 @@ void MFS::configure(int argc, char **argv)
                 exit(-1);
         }
 
-        for(int i=0; i< image_count; i++)
-                initial_values.push_back(atof(string_values[i].c_str()));
+        //for(int i=0; i< image_count; i++)
+        //        initial_values.push_back(atof(string_values[i].c_str()));
+        initial_values.push_back(atof(string_values[0].c_str()) * -1.0f * eta);
+        initial_values.push_back(atof(string_values[1].c_str()));
 
         string_values.clear();
         if(image_count == 1)
@@ -171,10 +174,9 @@ void MFS::configure(int argc, char **argv)
         dec = canvas_vars.dec;
         crpix1 = canvas_vars.crpix1;
         crpix2 = canvas_vars.crpix2;
-        beam_bmaj = canvas_vars.beam_bmaj;
-        beam_bmin = canvas_vars.beam_bmin;
         beam_noise = canvas_vars.beam_noise;
 
+        //printf("Beam size canvas: %lf x %lf (arcsec)/ %lf (degrees)\n", canvas_vars.beam_bmaj*3600.0, canvas_vars.beam_bmin*3600.0, canvas_vars.beam_bpa);
         cudaDeviceProp dprop[num_gpus];
 
         if(verbose_flag) {
@@ -339,7 +341,6 @@ void MFS::configure(int argc, char **argv)
                                 num_gpus = 1;
                         }else{
                                 num_gpus = multigpu;
-                                omp_set_num_threads(num_gpus);
                         }
                 }
         }
@@ -410,17 +411,19 @@ void MFS::configure(int argc, char **argv)
         double deltay = RPDEG_D*DELTAY; //radians
         deltau = 1.0 / (M * deltax);
         deltav = 1.0 / (N * deltay);
+        if(NULL == this->scheme){
+          this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
+        }
 
+        this->scheme->configure(&robust_param);
+        this->scheme->apply(datasets);
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
                 ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
                 printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
-                omp_set_num_threads(gridding);
                 for(int d=0; d<nMeasurementSets; d++)
-                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel);
-
-                omp_set_num_threads(num_gpus);
+                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
         }
 }
 
@@ -442,8 +445,8 @@ void MFS::setDevice()
                 }
         }
 
-
-        sum_weights = calculateNoise(datasets, &total_visibilities, variables.blockSizeV, gridding);
+        // Estimates the noise in JY/BEAM, beam major, minor axis and angle in degrees.
+        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, gridding, &beam_bmaj, &beam_bmin, &beam_bpa);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
 
@@ -540,7 +543,11 @@ void MFS::setDevice()
                 checkCudaErrors(cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float)*max_number_vis));
         }
 
-        noise_jypix = beam_noise / (PI * beam_bmaj * beam_bmin / (4 * log(2) ));
+        printf("Estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*3600.0, beam_bmin*3600.0, beam_bpa);
+        printf("gpuvmem estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*1200.0, beam_bmin*1200.0, beam_bpa); // ~ A third of the clean beam
+        beam_bmaj = beam_bmaj / fabs(DELTAX); // Beam major axis to pixels
+        beam_bmin = beam_bmin / fabs(DELTAX); // Beam minor axis to pixels
+        noise_jypix = beam_noise / (PI_D * beam_bmaj * beam_bmin / (4.0 * log(2.0) )); // Estimating noise at FWHM
 
         /////////////////////////////////////////////////////CALCULATE DIRECTION COSINES/////////////////////////////////////////////////
         double raimage = ra * RPDEG_D;
@@ -693,8 +700,7 @@ void MFS::setDevice()
                                 }
 
                         }else{
-                                omp_set_num_threads(num_gpus);
-                            #pragma omp parallel for schedule(static,1)
+                            #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
                                 for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                                 {
                                         unsigned int j = omp_get_thread_num();
@@ -933,6 +939,8 @@ void MFS::writeResiduals()
         printf("Transferring residuals to host memory\n");
         if(!gridding)
         {
+                //Restoring the weights to the original
+                this->scheme->restoreWeights(datasets);
                 //Saving residuals to disk
                 for(int d=0; d<nMeasurementSets; d++) {
                         residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
@@ -944,7 +952,7 @@ void MFS::writeResiduals()
                 deltav = 1.0 / (N * deltay);
 
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
-                omp_set_num_threads(num_gpus);
+                // In the de-gridding procedure weights are also restored to the original
                 for(int d=0; d<nMeasurementSets; d++)
                         degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N);
 
@@ -955,12 +963,14 @@ void MFS::writeResiduals()
 
         printf("Saving residuals and model to MS...\n");
         for(int d=0; d<nMeasurementSets; d++) {
+                iohandler->IocopyMS(datasets[d].name, datasets[d].oname);
                 if(!save_model_input) {
-                        iohandler->IocopyMS(datasets[d].name, datasets[d].oname);
                         iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
-                        iohandler->IowriteMS(datasets[d].oname, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
-                }else
-                        iohandler->IowriteMS(datasets[d].name, "MODEL", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
+                        iohandler->IowriteMS(datasets[d].oname, "MODEL_DATA", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
+                }else{
+                        iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
+                        iohandler->IowriteMS(datasets[d].name, "MODEL_DATA", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
+                }
 
         }
 

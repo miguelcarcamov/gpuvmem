@@ -14,10 +14,12 @@
 #define TCOMPLEX     83
 #define TDBLCOMPLEX 163
 
-const float RPDEG = (PI/180.0);
+const float RPDEG = (PI/180.0f);
 const double RPDEG_D = (PI_D/180.0);
-const float RPARCSEC = (PI/(180.0*3600.0));
-const float RPARCM = (PI/(180.0*60.0));
+const float RPARCSEC = (PI/(180.0f*3600.0f));
+const float RPARCSEC_D = (PI_D/(180.0*3600.0));
+const float RPARCM = (PI/(180.0f*60.0f));
+const float RPARCM_D = (PI_D/(180.0*60.0));
 const float RZ = 1.2196698912665045;
 
 enum stokes {None, I_s, Q_s, U_s, V_s, RR, RL, LR, LL, XX, XY, YX, YY, RX, RY, LX, LY, XR, XL, YR, YL, PP, PQ, QP, QQ, RCircular, LCircular, Linear, Ptotal, Plinear, PFtotal, PFlinear, Pangle};
@@ -35,10 +37,11 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
 __host__ Vars getOptions(int argc, char **argv);
 __host__ float chiCuadrado(float *I);
 __host__ void dchiCuadrado(float *I, float *dxi2);
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel);
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, CKernel *ckernel, int gridding);
 __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<cufftComplex> Vm_gridded_sp, std::vector<double3> uvw_gridded_sp, double deltau, double deltav, float freq, long M, long N, int numvis);
 __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N);
-__host__ float calculateNoise(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding);
+__host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa);
+__host__ void calc_sBeam(std::vector<double> u, std::vector<double> v, std::vector<float> weight, float nu, double *s_uu, double *s_vv, double *s_uv);
 __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int num_gpus);
 __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHandle plan, int M, int N, int direction, bool shift);
 __host__ void clipping(cufftComplex *I, int iterations);

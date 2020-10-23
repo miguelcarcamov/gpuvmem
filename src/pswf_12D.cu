@@ -16,7 +16,7 @@ __host__ __device__ void PSWF_12D::buildKernel(float amp, float x0, float y0, fl
 
 };
 
-__device__ float PSWF_12D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
+__device__ float PSWF_12D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
 {
         float val = pswf_12D(amp, x, y, x0, y0, sigma_x, sigma_y, w);
         return 1.0f/val;

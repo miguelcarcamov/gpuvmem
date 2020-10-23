@@ -126,6 +126,7 @@ __host__ int main(int argc, char **argv) {
         enum {MS}; // Io
         enum {SecondDerivative}; // Error calculation
         enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D, pswf_02D, pswf_12D}; // CKernels for gridding
+        enum {natural, uniform, briggs, radial}; // Weighting Schemes
 
         Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
         Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
@@ -139,8 +140,10 @@ __host__ int main(int argc, char **argv) {
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
         ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
         Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
+        WeightingScheme *scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(briggs);
         sy->setIoHandler(ioms);
         sy->setOrder(&optimizationOrder);
+        sy->setWeightingScheme(scheme);
         sy->setGriddingKernel(sc);
         sy->configure(argc, argv);
         cg->setObjectiveFunction(of);
@@ -152,14 +155,17 @@ __host__ int main(int argc, char **argv) {
         sy->setDevice(); // This routine sends the data to GPU memory
         Fi *chi2 = Singleton<FiFactory>::Instance().CreateFi(Chi2);
         Fi *e = Singleton<FiFactory>::Instance().CreateFi(Entropy);
-        Fi *l = Singleton<FiFactory>::Instance().CreateFi(Laplacian);
+        Fi *l1 = Singleton<FiFactory>::Instance().CreateFi(L1Norm);
+        Fi *tsqv = Singleton<FiFactory>::Instance().CreateFi(TotalSquaredVariation);
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
-        l->configure(1, 0, 0);
+        l1->configure(1, 0, 0);
+        tsqv->configure(2, 0, 0);
         //e->setPenalizationFactor(0.01); // If not used -Z (Fi.configure(-1,x,x))
         of->addFi(chi2);
         of->addFi(e);
-        of->addFi(l);
+        of->addFi(l1);
+        of->addFi(tsqv);
         //sy->getImage()->getFunctionMapping()[i].evaluateXt = particularEvaluateXt;
         //sy->getImage()->getFunctionMapping()[i].newP = particularNewP;
         //if the nopositivity flag is on  all images will run with no posivity,
