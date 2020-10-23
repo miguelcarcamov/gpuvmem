@@ -157,7 +157,7 @@ __host__ int main(int argc, char **argv) {
         Fi *e = Singleton<FiFactory>::Instance().CreateFi(Entropy);
         Fi *l1 = Singleton<FiFactory>::Instance().CreateFi(L1Norm);
         Fi *tsqv = Singleton<FiFactory>::Instance().CreateFi(TotalSquaredVariation);
-        Fi *lap = Singleton<FiFactory>::Instance().CreateFi(Laplacian;
+        Fi *lap = Singleton<FiFactory>::Instance().CreateFi(Laplacian);
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
         l1->configure(1, 0, 0);
