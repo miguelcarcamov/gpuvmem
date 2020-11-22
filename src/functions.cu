@@ -1544,8 +1544,8 @@ __global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g
    int k, j;
    if(i < visibilities)
    {
-    j = roundf(uvw[i].x / fabs(deltau) + M/2);
-    k = roundf(uvw[i].y / fabs(deltav) + N/2);
+    j = round(uvw[i].x / fabs(deltau) + M/2);
+    k = round(uvw[i].y / fabs(deltav) + N/2);
 
     if (k < M && j < N)
     {
@@ -1569,8 +1569,8 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
   if(i < visibilities)
   {
 
-    j = roundf(uvw[i].x / fabs(deltau) + M/2);
-    k = roundf(uvw[i].y / fabs(deltav) + N/2);
+    j = round(uvw[i].x / fabs(deltau) + M/2);
+    k = round(uvw[i].y / fabs(deltav) + N/2);
 
     for(int m=-supportY; m<=supportY; m++){
       for(int n=-supportX; n<=supportX; n++){
