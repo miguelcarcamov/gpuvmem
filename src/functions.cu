@@ -1591,8 +1591,8 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
       }
     }
     if(i==0){
-      printf("Real - Degrid value: %f\n", degrid_val.x)
-      printf("Imag - Degrid value: %f\n", degrid_val.y)
+      printf("Real - Degrid value: %f\n", degrid_val.x);
+      printf("Imag - Degrid value: %f\n", degrid_val.y);
     }
     Vm[i] = degrid_val;
   }
