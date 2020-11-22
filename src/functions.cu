@@ -1538,14 +1538,14 @@ __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHa
 
 }
 
-__global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, float deltau, float deltav, int visibilities, int M, int N)
+__global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, double deltau, double deltav, int visibilities, int M, int N)
 {
    int i = blockDim.x * blockIdx.x + threadIdx.x;
    int k, j;
    if(i < visibilities)
    {
-    j = roundf(uvw[i].x / deltau + M/2);
-    k = roundf(uvw[i].y / deltav + N/2);
+    j = roundf(uvw[i].x / fabsf(deltau) + M/2);
+    k = roundf(uvw[i].y / fabsf(deltav) + N/2);
 
     if (k < M && j < N)
     {
@@ -1557,7 +1557,7 @@ __global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g
    }
 }
 
-__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, float deltau, float deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY)
+__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, double deltau, double deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY)
 {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int k, j;
@@ -1569,8 +1569,8 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
   if(i < visibilities)
   {
 
-    j = roundf(uvw[i].x / fabsf(deltau) + M/2);
-    k = roundf(uvw[i].y / fabsf(deltav) + N/2);
+    j = roundf(uvw[i].x / fabs(deltau) + M/2);
+    k = roundf(uvw[i].y / fabs(deltav) + N/2);
 
     for(int m=-supportY; m<=supportY; m++){
       for(int n=-supportX; n<=supportX; n++){

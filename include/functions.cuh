@@ -131,7 +131,8 @@ __global__ void updateQ (float *d_q, float alpha, float *d_y, int k, int M, int 
 __global__ void getDot_LBFGS_ff(float *aux_vector, float *vec_1, float *vec_2, int k, int h, int M, int N, int image);
 __global__ void searchDirection_LBFGS(float *xi, long N, long M, int image);
 __global__ void fftshift_2D(cufftComplex *data, int N1, int N2);
-__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, float deltau, float deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY);
+__global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, double deltau, double deltav, int visibilities, int M, int N);
+__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, double deltau, double deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY);
 
 
 #endif
