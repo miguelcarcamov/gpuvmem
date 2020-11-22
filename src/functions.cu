@@ -1564,13 +1564,13 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
   int shifted_k, shifted_j;
   int kernel_i, kernel_j;
   cufftComplex degrid_val = complexZero<cufftComplex>();
-
+  float ckernel_result;
 
   if(i < visibilities)
   {
 
-    j = roundf(uvw[i].x / deltau + M/2);
-    k = roundf(uvw[i].y / deltav + N/2);
+    j = roundf(uvw[i].x / fabsf(deltau) + M/2);
+    k = roundf(uvw[i].y / fabsf(deltav) + N/2);
 
     for(int m=-supportY; m<=supportY; m++){
       for(int n=-supportX; n<=supportX; n++){
@@ -1580,19 +1580,11 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
         kernel_i = m + supportY;
         if (shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N)
         {
-          if(i==0){
-            printf("id: [%d,%d] - [%d,%d] = %f\n", kernel_i, kernel_j, m, n, kernel[kernel_n*kernel_i+kernel_j]);
-            printf("Real - k: %d, j:%d, Vm_g[%d,%d] = %f\n", k, j, shifted_k, shifted_j, Vm_g[N*shifted_k+shifted_j].x);
-            printf("Imag - k: %d, j:%d, Vm_g[%d,%d] = %f\n", k, j, shifted_k, shifted_j, Vm_g[N*shifted_k+shifted_j].y);
-          }
-          degrid_val.x += kernel[kernel_n*kernel_i+kernel_j] * Vm_g[N*shifted_k+shifted_j].x;
-          degrid_val.y += kernel[kernel_n*kernel_i+kernel_j] * Vm_g[N*shifted_k+shifted_j].y;
+          ckernel_result = kernel[kernel_n*kernel_i+kernel_j];
+          degrid_val.x += ckernel_result * Vm_g[N*shifted_k+shifted_j].x;
+          degrid_val.y += ckernel_result * Vm_g[N*shifted_k+shifted_j].y;
         }
       }
-    }
-    if(i==0){
-      printf("Real - Degrid value: %f\n", degrid_val.x);
-      printf("Imag - Degrid value: %f\n", degrid_val.y);
     }
     Vm[i] = degrid_val;
   }
