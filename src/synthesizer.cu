@@ -423,8 +423,8 @@ void MFS::configure(int argc, char **argv)
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
-                ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
-                printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
+                this->ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
+                printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
         }
@@ -957,7 +957,7 @@ void MFS::writeResiduals()
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
                 // In the de-gridding procedure weights are also restored to the original
                 for(int d=0; d<nMeasurementSets; d++)
-                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N);
+                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel);
 
                 for(int d=0; d<nMeasurementSets; d++)
                         residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);

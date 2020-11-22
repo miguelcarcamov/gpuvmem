@@ -13,6 +13,7 @@ __host__ __device__ void PSWF_12D::buildKernel(float amp, float x0, float y0, fl
                         this->kernel[this->n * i + j] = val;
                 }
         }
+        this->copyKerneltoGPU();
 
 };
 

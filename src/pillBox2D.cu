@@ -14,6 +14,8 @@ __host__ void PillBox2D::buildKernel(float amp, float x0, float y0, float sigma_
                         this->kernel[this->n*i+j] = pillBox2D(amp, x, y, limit_x, limit_y);
                 }
         }
+
+        this->copyKerneltoGPU();
 };
 
 __device__ float PillBox2D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)

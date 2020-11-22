@@ -1319,7 +1319,7 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
         }
 }
 
-__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N)
+__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N, CKernel *ckernel)
 {
 
         long UVpow2;
@@ -1407,7 +1407,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         //(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
                                         degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N);
+                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                                         checkCudaErrors(cudaDeviceSynchronize());
                                 }
 
@@ -1498,7 +1498,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         //(fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
                                         degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N);
+                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                 }
@@ -1557,10 +1557,12 @@ __global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g
    }
 }
 
-__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float deltau, float deltav, int visibilities, int M, int N)
+__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, float deltau, float deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY)
 {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int k, j;
+  int shifted_k, shifted_j;
+  int kernel_i, kernel_j;
 
   if(i < visibilities)
   {
@@ -1568,9 +1570,18 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
     j = roundf(uvw[i].x / deltau + M/2);
     k = roundf(uvw[i].y / deltav + N/2);
 
-    if (k < M && j < N)
-    {
-      Vm[i] = Vm_g[N*k+j];
+    for(int m=-supportY; m<= supportY; m++){
+      for(int n=-supportX; n<=supportX; n++){
+        shifted_j = j + n;
+        shifted_k = k + m;
+        kernel_j = n + supportX;
+        kernel_i = m + supportY;
+        if (shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N)
+        {
+          Vm[i].x += kernel[kernel_n*kernel_i+kernel_j] * Vm_g[N*shifted_k+shifted_j].x;
+          Vm[i].y += kernel[kernel_n*kernel_i+kernel_j] * Vm_g[N*shifted_k+shifted_j].y;
+        }
+      }
     }
   }
 }

@@ -552,7 +552,10 @@ __host__ std::vector<float> getKernel()
 {
         return this->kernel;
 };
-
+__host__ float* getGPUKernel()
+{
+        return this->gpu_kernel;
+};
 __host__ __device__ void setmn(int m, int n){
         this->m = m; this->n = n;
         this->setm_times_n();
@@ -595,9 +598,16 @@ float w2;
 float alpha;
 float angle;
 std::vector<float> kernel;
+float *gpu_kernel;
 
 __host__ void setKernelMemory(){
         this->kernel.resize(this->m_times_n);
+        checkCudaErrors(cudaMalloc(&this->gpu_kernel, sizeof(float) * this->m_times_n));
+        checkCudaErrors(cudaMemset(this->gpu_kernel, 0, sizeof(float) * this->m_times_n));
+};
+
+__host__ void copyKerneltoGPU(){
+        checkCudaErrors(cudaMemcpy(this->gpu_kernel, this->kernel.data(), sizeof(float) * this->m_times_n, cudaMemcpyHostToDevice));
 };
 
 __host__ __device__ float gaussian1D(float amp, float x, float x0, float sigma, float w, float alpha)
