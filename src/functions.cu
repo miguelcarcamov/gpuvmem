@@ -1403,9 +1403,11 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                         // Interpolation / Degridding
-                                        vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        (fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        //vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                        //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                        //(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N);
                                         checkCudaErrors(cudaDeviceSynchronize());
                                 }
 
@@ -1492,9 +1494,11 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                         // Interpolation / Degridding
-                                        vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        (fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        //vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                        //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                        //(fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N);
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                 }
@@ -1534,49 +1538,43 @@ __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHa
 
 }
 
-/*__global__ void do_gridding(float *u, float *v, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, float deltau, float deltav, int visibilities, int M, int N)
-   {
+__global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, float deltau, float deltav, int visibilities, int M, int N)
+{
    int i = blockDim.x * blockIdx.x + threadIdx.x;
+   int k, j;
    if(i < visibilities)
    {
-    int k, j;
-    j = roundf(u[i]/deltau + M/2);
-    k = roundf(v[i]/deltav + N/2);
+    j = roundf(uvw[i].x / deltau + M/2);
+    k = roundf(uvw[i].y / deltav + N/2);
 
     if (k < M && j < N)
     {
 
-      atomicAdd(&Vo_g[N*k+j].x, Vo[i].x);
-      atomicAdd(&Vo_g[N*k+j].y, Vo[i].y);
+      atomicAdd(&Vo_g[N*k+j].x, w[i]*Vo[i].x);
+      atomicAdd(&Vo_g[N*k+j].y, w[i]*Vo[i].y);
       atomicAdd(&w_g[N*k+j], (1.0/w[i]));
-      atomicAdd(&count[N*k*j], 1);
     }
    }
-   }
+}
 
-   __global__ void calculateCoordinates(float *u_g, float *v_g, float deltau, float deltav, int M, int N)
-   {
-   int j = blockDim.x * blockIdx.x + threadIdx.x;
-   int i = blockDim.y * blockIdx.y + threadIdx.y;
+__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float deltau, float deltav, int visibilities, int M, int N)
+{
+  int i = blockDim.x * blockIdx.x + threadIdx.x;
+  int k, j;
 
-   u_g[N*i+j] = j*deltau - (N/2)*deltau;
-   v_g[N*i+j] = i*deltav - (N/2)*deltav;
-   }
+  if(i < visibilities)
+  {
 
-   __global__ void calculateAvgVar(cufftComplex *V_g, float *w_g, int *count, int M, int N)
-   {
-   int j = blockDim.x * blockIdx.x + threadIdx.x;
-   int i = blockDim.y * blockIdx.y + threadIdx.y;
+    j = roundf(uvw[i].x / deltau + M/2);
+    k = roundf(uvw[i].y / deltav + N/2);
 
-   int counter = count[N*i+j];
-   if(counter > 0){
-    V_g[N*i+j].x = V_g[N*i+j].x / counter;
-    V_g[N*i+j].y = V_g[N*i+j].y / counter;
-    w_g[N*i+j] = counter / w_g[N*i+j];
-   }else{
-    w_g[N*i+j] = 0.0;
-   }
-   }*/
+    if (k < M && j < N)
+    {
+      Vm[i] = Vm_g[N*k+j];
+    }
+  }
+}
+
 __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, int numVisibilities)
 {
         const int i = threadIdx.x + blockDim.x * blockIdx.x;

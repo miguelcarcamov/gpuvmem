@@ -45,6 +45,7 @@ __host__ void calc_sBeam(std::vector<double> u, std::vector<double> v, std::vect
 __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int num_gpus);
 __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHandle plan, int M, int N, int direction, bool shift);
 __host__ void clipping(cufftComplex *I, int iterations);
+__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float deltau, float deltav, int visibilities, int M, int N);
 template<class T>
 __host__ T reduceCPU(T *data, int size);
 template <class T>
