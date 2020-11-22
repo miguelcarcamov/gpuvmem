@@ -520,6 +520,12 @@ __host__ __device__ CKernel::CKernel(float w1, float w2, float alpha, float angl
         this->setm_times_n();
         this->setSupports();
 };
+
+~CKernel() {
+        this->kernel.clear();
+        this->freeGPUKernel();
+};
+
 __host__ __device__ int getm(){
         return this->m;
 };
@@ -587,6 +593,10 @@ __host__ __device__ void setSupports(){
         this->support_y = floor(this->m/2.0f);
 };
 
+__host__ void freeGPUKernel()
+{
+        cudaFree(this->gpu_kernel);
+};
 
 protected:
 int m; //size of the kernel
