@@ -1572,7 +1572,7 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
     j = roundf(uvw[i].x / deltau + M/2);
     k = roundf(uvw[i].y / deltav + N/2);
 
-    for(int m=-supportY; m<= supportY; m++){
+    for(int m=-supportY; m<=supportY; m++){
       for(int n=-supportX; n<=supportX; n++){
         shifted_j = j + n;
         shifted_k = k + m;
@@ -1589,6 +1589,10 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
           degrid_val.y += kernel[kernel_n*kernel_i+kernel_j] * Vm_g[N*shifted_k+shifted_j].y;
         }
       }
+    }
+    if(i==0){
+      printf("Real - Degrid value: %f\n", degrid_val.x)
+      printf("Imag - Degrid value: %f\n", degrid_val.y)
     }
     Vm[i] = degrid_val;
   }
