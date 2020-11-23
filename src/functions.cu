@@ -1581,8 +1581,8 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
         if (shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N)
         {
           ckernel_result = kernel[kernel_n*kernel_i+kernel_j];
-          degrid_val.x += ckernel_result * Vm_g[N*shifted_k+shifted_j].x;
-          degrid_val.y += ckernel_result * Vm_g[N*shifted_k+shifted_j].y;
+          degrid_val.x += Vm_g[N*shifted_k+shifted_j].x;
+          degrid_val.y += Vm_g[N*shifted_k+shifted_j].y;
         }
       }
     }
