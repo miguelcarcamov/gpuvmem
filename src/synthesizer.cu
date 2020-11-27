@@ -267,6 +267,7 @@ void MFS::configure(int argc, char **argv)
         float min_wlength = freq_to_wavelength(max_freq);
         float resolution_arcsec = (min_wlength/max_blength)/RPARCSEC;
         double max_uvmax_wavelength = *max_element(ms_uvmax_wavelength.begin(), ms_uvmax_wavelength.end()) + 1E-5;
+        printf("The maximum u,v in wavelength units is: %e\n", max_uvmax_wavelength);
         printf("The maximum theoretical resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec);
         printf("The oversampled (by a factor of 7) resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec/7.0f);
 
