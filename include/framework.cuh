@@ -31,6 +31,7 @@
 #include <filter.cuh>
 #include <ckernel.cuh>
 #include <synthesizer.cuh>
+#include <factory.cuh>
 
 extern long M, N;
 extern int image_count;
@@ -400,5 +401,15 @@ ObjectiveFunction* CreateObjectiveFunction()
 const int ObjectiveFunctionId = 0;
 const bool Registered = Singleton<ObjectiveFunctionFactory>::Instance().RegisterObjectiveFunction(ObjectiveFunctionId, CreateObjectiveFunction);
 };
+
+template<class T, class V>
+T* createObject(V value){
+    return Singleton<Factory<T,V>>::Instance().CreateObject(value);
+};
+
+template<class T, class V, class Creator = T* (*)()>
+bool registerCreationFunction(V value, Creator function){
+    return Singleton<Factory<T,V>>::Instance().Register(value, function);
+}
 
 #endif

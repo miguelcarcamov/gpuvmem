@@ -45,6 +45,6 @@ Fi* CreateEntropy()
 {
         return new Entropy;
 }
-const int EntropyId = 1;
-const bool RegisteredEntropy = Singleton<FiFactory>::Instance().RegisterFi(EntropyId, CreateEntropy);
+const std::string name = "Entropy";
+const bool RegisteredEntropy = registerCreationFunction<Fi, std::string>(name, CreateEntropy);
 };

@@ -154,7 +154,7 @@ __host__ int main(int argc, char **argv) {
 
         sy->setDevice(); // This routine sends the data to GPU memory
         Fi *chi2 = Singleton<FiFactory>::Instance().CreateFi(Chi2);
-        Fi *e = Singleton<FiFactory>::Instance().CreateFi(Entropy);
+        Fi *e = createObject<Fi,std::string>("Entropy");
         Fi *l1 = Singleton<FiFactory>::Instance().CreateFi(L1Norm);
         Fi *tsqv = Singleton<FiFactory>::Instance().CreateFi(TotalSquaredVariation);
         Fi *lap = Singleton<FiFactory>::Instance().CreateFi(Laplacian);
