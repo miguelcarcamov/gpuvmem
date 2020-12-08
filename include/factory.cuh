@@ -3,6 +3,22 @@
 
 #include <exception>
 
+template<class T>
+class Singleton
+{
+public:
+    static T& Instance()
+    {
+        static T instance;
+        return instance;
+    }
+private:
+    Singleton(){
+    };
+    Singleton(T const&)         = delete;
+    void operator=(T const&) = delete;
+};
+
 template <class IdentifierType, class ProductType>
 class DefaultFactoryError
 {
@@ -67,4 +83,14 @@ private:
             AssocMap;
     AssocMap associations_;
 };
+
+template<class T, class V>
+T* createObject(V value){
+    return Singleton<Factory<T,V>>::Instance().CreateObject(value);
+};
+
+template<class T, class V, class Creator = T* (*)()>
+bool registerCreationFunction(V value, Creator function){
+    return Singleton<Factory<T,V>>::Instance().Register(value, function);
+}
 #endif FACTORY_CUH
