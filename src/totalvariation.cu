@@ -45,6 +45,7 @@ Fi* CreateTVariation()
 {
         return new TVariation;
 }
-const int TVariationId = 4;
-const bool RegisteredTVariation = Singleton<FiFactory>::Instance().RegisterFi(TVariationId, CreateTVariation);
+
+const std::string name = "TotalVariation";
+const bool RegisteredTVariation = registerCreationFunction<Fi, std::string>(name, CreateTVariation);
 };

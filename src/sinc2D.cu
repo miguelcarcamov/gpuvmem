@@ -35,6 +35,7 @@ CKernel* CreateCKernel()
 {
         return new Sinc2D;
 }
-const int CKERNELID = 3;
-const bool RegisteredCKernel = Singleton<CKernelFactory>::Instance().RegisterCKernel(CKERNELID, CreateCKernel);
+
+const std::string name = "Sinc2D";
+const bool RegisteredSinc2D = registerCreationFunction<CKernel, std::string>(name, CreateCKernel);
 };

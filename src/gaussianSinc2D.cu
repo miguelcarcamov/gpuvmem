@@ -20,6 +20,7 @@ CKernel* CreateCKernel()
 {
         return new GaussianSinc2D;
 }
-const int CKERNELID = 4;
-const bool RegisteredCKernel = Singleton<CKernelFactory>::Instance().RegisterCKernel(CKERNELID, CreateCKernel);
+
+const std::string name = "GaussianSinc2D";
+const bool RegisteredGaussianSinc2D = registerCreationFunction<CKernel, std::string>(name, CreateCKernel);
 };

@@ -169,6 +169,7 @@ WeightingScheme* CreateWeightingScheme()
 {
         return new BriggsWeightingScheme;
 }
-const int BriggsWeightingSchemeId = 2;
-const bool RegisteredWeightingScheme = Singleton<WeightingSchemeFactory>::Instance().RegisterWeightingScheme(BriggsWeightingSchemeId, CreateWeightingScheme);
+
+const std::string name = "Briggs";
+const bool RegisteredBriggsWeighting = registerCreationFunction<WeightingScheme, std::string>(name, CreateWeightingScheme);
 };

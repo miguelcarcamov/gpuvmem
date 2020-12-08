@@ -49,6 +49,7 @@ Filter* CreateGridding()
 {
         return new Gridding;
 }
-const int GriddingId = 0;
-const bool RegisteredGridding = Singleton<FilterFactory>::Instance().RegisterFilter(GriddingId, CreateGridding);
+
+const std::string name = "Gridding";
+const bool RegisteredGridding = registerCreationFunction<Filter, std::string>(name, CreateGridding);
 };

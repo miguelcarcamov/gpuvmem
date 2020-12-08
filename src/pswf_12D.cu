@@ -29,6 +29,7 @@ CKernel* CreateCKernel()
 {
         return new PSWF_12D;
 }
-const int CKERNELID = 6;
-const bool RegisteredCKernel = Singleton<CKernelFactory>::Instance().RegisterCKernel(CKERNELID, CreateCKernel);
+
+const std::string name = "PSWF";
+const bool RegisteredPSWF = registerCreationFunction<CKernel, std::string>(name, CreateCKernel);
 };

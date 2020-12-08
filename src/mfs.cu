@@ -1092,6 +1092,6 @@ Synthesizer* CreateMFS()
 {
         return new MFS;
 }
-const int MFSID = 0;
-const bool RegisteredMFS = Singleton<SynthesizerFactory>::Instance().RegisterSynthesizer(MFSID, CreateMFS);
+const std::string name = "MFS";
+const bool RegisteredMFS = registerCreationFunction<Synthesizer, std::string>(name, CreateMFS);
 };

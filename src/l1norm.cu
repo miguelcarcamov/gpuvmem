@@ -45,6 +45,6 @@ Fi* CreateL1norm()
 {
         return new L1norm;
 }
-const int L1normId = 6;
-const bool RegisteredL1norm = Singleton<FiFactory>::Instance().RegisterFi(L1normId, CreateL1norm);
+const std::string name = "L1-Norm";
+const bool RegisteredL1norm = registerCreationFunction<Fi, std::string>(name, CreateL1norm);
 };

@@ -39,6 +39,7 @@ WeightingScheme* CreateWeightingScheme()
 {
         return new RadialWeightingScheme;
 }
-const int RadialWeightingSchemeId = 3;
-const bool RegisteredWeightingScheme = Singleton<WeightingSchemeFactory>::Instance().RegisterWeightingScheme(RadialWeightingSchemeId, CreateWeightingScheme);
+
+const std::string name = "Radial";
+const bool RegisteredRadialWeighting = registerCreationFunction<WeightingScheme, std::string>(name, CreateWeightingScheme);
 };

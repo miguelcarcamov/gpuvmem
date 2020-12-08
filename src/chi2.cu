@@ -70,6 +70,7 @@ Fi* CreateChi2()
 {
         return new Chi2;
 }
-const int Chi2Id = 0;
-const bool RegisteredChi2 = Singleton<FiFactory>::Instance().RegisterFi(Chi2Id, CreateChi2);
+
+const std::string name = "Chi2";
+const bool RegisteredChi2 = registerCreationFunction<Fi, std::string>(name, CreateChi2);
 };

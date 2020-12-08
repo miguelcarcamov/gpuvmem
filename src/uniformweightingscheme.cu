@@ -83,6 +83,6 @@ WeightingScheme* CreateWeightingScheme()
 {
         return new UniformWeightingScheme;
 }
-const int UniformWeightingSchemeId = 1;
-const bool RegisteredWeightingScheme = Singleton<WeightingSchemeFactory>::Instance().RegisterWeightingScheme(UniformWeightingSchemeId, CreateWeightingScheme);
+const std::string name = "Uniform";
+const bool RegisteredUniformWeighting = registerCreationFunction<WeightingScheme, std::string>(name, CreateWeightingScheme);
 };

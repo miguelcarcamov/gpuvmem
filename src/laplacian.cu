@@ -45,6 +45,6 @@ Fi* CreateLaplacian()
 {
         return new Laplacian;
 }
-const int LaplacianId = 2;
-const bool RegisteredLaplacian = Singleton<FiFactory>::Instance().RegisterFi(LaplacianId, CreateLaplacian);
+const std::string name = "Laplacian";
+const bool RegisteredLaplacian = registerCreationFunction<Fi, std::string>(name, CreateLaplacian);
 };

@@ -28,6 +28,7 @@ CKernel* CreateCKernel()
 {
         return new PillBox2D;
 }
-const int CKERNELID = 0;
-const bool RegisteredCKernel = Singleton<CKernelFactory>::Instance().RegisterCKernel(CKERNELID, CreateCKernel);
+
+const std::string name = "PillBox2D";
+const bool RegisteredPillbox = registerCreationFunction<CKernel, std::string>(name, CreateCKernel);
 };

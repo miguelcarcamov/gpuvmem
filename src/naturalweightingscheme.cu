@@ -9,6 +9,7 @@ WeightingScheme* CreateWeightingScheme()
 {
         return new NaturalWeightingScheme;
 }
-const int NaturalWeightingSchemeId = 0;
-const bool RegisteredWeightingScheme = Singleton<WeightingSchemeFactory>::Instance().RegisterWeightingScheme(NaturalWeightingSchemeId, CreateWeightingScheme);
+
+const std::string name = "Natural";
+const bool RegisteredNaturalWeighting = registerCreationFunction<WeightingScheme, std::string>(name, CreateWeightingScheme);
 };
