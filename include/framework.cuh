@@ -71,22 +71,6 @@ typedef struct variables {
         float threshold;
 } Vars;
 
-template<class T>
-class Singleton
-{
-public:
-static T& Instance()
-{
-        static T instance;
-        return instance;
-}
-private:
-Singleton(){
-};
-Singleton(T const&)         = delete;
-void operator=(T const&) = delete;
-};
-
 class SynthesizerFactory
 {
 public:
@@ -401,15 +385,5 @@ ObjectiveFunction* CreateObjectiveFunction()
 const int ObjectiveFunctionId = 0;
 const bool Registered = Singleton<ObjectiveFunctionFactory>::Instance().RegisterObjectiveFunction(ObjectiveFunctionId, CreateObjectiveFunction);
 };
-
-template<class T, class V>
-T* createObject(V value){
-    return Singleton<Factory<T,V>>::Instance().CreateObject(value);
-};
-
-template<class T, class V, class Creator = T* (*)()>
-bool registerCreationFunction(V value, Creator function){
-    return Singleton<Factory<T,V>>::Instance().Register(value, function);
-}
 
 #endif
