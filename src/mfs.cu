@@ -1,4 +1,4 @@
-#include "synthesizer.cuh"
+#include "mfs.cuh"
 #include "imageProcessor.cuh"
 
 
@@ -836,7 +836,7 @@ void MFS::clearRun()
 }
 void MFS::run()
 {
-        printf("\n\nStarting Optimizator\n");
+        printf("\n\nStarting optimizator\n");
         optimizator->getObjectiveFuntion()->setIo(iohandler);
         optimizator->getObjectiveFuntion()->setPrintImages(print_images);
 
