@@ -35,6 +35,7 @@ if(Boost_FOUND)
   ${CASACORE_INCLUDE_DIRS}
   ${CFITSIO_INCLUDE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
   ${Boost_INCLUDE_DIRS}
   ${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc
   )

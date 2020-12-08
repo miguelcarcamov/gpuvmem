@@ -9,7 +9,6 @@
 #include <string>
 #include <functional>
 #include <numeric>
-#include <cuda_runtime.h>
 #include "device_launch_parameters.h"
 #include <math_constants.h>
 #include <float.h>
@@ -18,9 +17,14 @@
 #include <fcntl.h>
 #include <omp.h>
 #include <sys/stat.h>
-#include "MSFITSIO.cuh"
 #include "copyrightwarranty.cuh"
 #include <cooperative_groups.h>
+#include <weightingscheme.cuh>
+#include <image.cuh>
+#include <visibilities.cuh>
+#include <error.cuh>
+#include <fi.cuh>
+#include <virtualimageprocessor.cuh>
 
 extern long M, N;
 extern int image_count;
@@ -60,28 +64,6 @@ typedef struct variables {
         float threshold;
 } Vars;
 
-typedef struct functionMap
-{
-        void (*newP)(float*, float*, float, int);
-        void (*evaluateXt)(float*, float*, float*, float, int);
-} imageMap;
-
-class VirtualImageProcessor
-{
-public:
-virtual void clip(float *I) = 0;
-virtual void clipWNoise(float *I) = 0;
-virtual void apply_beam(cufftComplex *image, float antenna_diameter, float pb_factor, float pb_cutoff, float xobs, float yobs, float freq, int primary_beam) = 0;
-virtual void calculateInu(cufftComplex *image, float *I, float freq) = 0;
-virtual void chainRule(float *I, float freq) = 0;
-virtual void configure(int I) = 0;
-protected:
-float *chain;
-cufftComplex *fg_image;
-int image_count;
-};
-
-
 template<class T>
 class Singleton
 {
@@ -96,194 +78,6 @@ Singleton(){
 };
 Singleton(T const&)         = delete;
 void operator=(T const&) = delete;
-};
-
-class Fi
-{
-public:
-virtual float calcFi(float *p) = 0;
-virtual void calcGi(float *p, float *xi) = 0;
-virtual void restartDGi() = 0;
-virtual void addToDphi(float *device_dphi) = 0;
-
-float get_fivalue(){
-        return this->fi_value;
-};
-float getPenalizationFactor(){
-        return this->penalization_factor;
-};
-void set_fivalue(float fi){
-        this->fi_value = fi;
-};
-void setPenalizationFactor(float p){
-        this->penalization_factor = p;
-};
-void setInu(cufftComplex *Inu){
-        this->Inu = Inu;
-}
-cufftComplex *getInu(){
-        return this->Inu;
-}
-void setS(float *S){
-        cudaFree(device_S); this->device_S = S;
-};
-void setDS(float *DS){
-        cudaFree(device_DS); this->device_DS = DS;
-};
-
-virtual float calculateSecondDerivate() = 0;
-virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd){
-        this->imageIndex = imageIndex;
-        this->order = order;
-        this->mod = mod;
-        this->imageToAdd = imageToAdd;
-
-        if(imageIndex > image_count -1 || imageToAdd > image_count -1)
-        {
-                printf("There is no image for the provided index %s\n", this->name);
-                exit(-1);
-        }
-
-        if(penalizatorIndex != -1)
-        {
-                if(penalizatorIndex < 0)
-                {
-                        printf("invalid index for penalizator (%s)\n", this->name);
-                        exit(-1);
-                }else if(penalizatorIndex > (nPenalizators - 1)) {
-                        this->penalization_factor = 0.0f;
-                }else{
-                        this->penalization_factor = penalizators[penalizatorIndex];
-                }
-        }
-
-        checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float)*M*N));
-        checkCudaErrors(cudaMemset(device_S, 0, sizeof(float)*M*N));
-
-        checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float)*M*N));
-        checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float)*M*N));
-};
-
-protected:
-float fi_value;
-float *device_S;
-float *device_DS;
-float penalization_factor = 1.0f;
-int imageIndex;
-int mod;
-int order;
-char *name = "default";
-cufftComplex * Inu = NULL;
-int imageToAdd;
-};
-
-
-class Image
-{
-public:
-Image(float *image, int image_count){
-        this->image = image; this->image_count = image_count;
-};
-int getImageCount(){
-        return image_count;
-};
-float *getImage(){
-        return image;
-};
-float *getErrorImage(){
-        return error_image;
-};
-imageMap *getFunctionMapping(){
-        return functionMapping;
-};
-void setImageCount(int i){
-        this->image_count = i;
-};
-void setErrorImage(float *f){
-        this->error_image = f;
-};
-void setImage(float *i){
-        this->image = i;
-};
-void setFunctionMapping(imageMap *f){
-        this->functionMapping = f;
-};
-private:
-int image_count;
-float *image;
-float *error_image;
-imageMap *functionMapping;
-};
-
-class WeightingScheme {
-public:
-virtual void apply(std::vector<MSDataset>& d) = 0;
-virtual void configure(void* params) = 0;
-
-void restoreWeights(std::vector<MSDataset>& d){
-        for(int j=0; j < d.size(); j++) {
-                for(int f=0; f < d[j].data.nfields; f++) {
-                        for(int i=0; i < d[j].data.total_frequencies; i++) {
-                                for(int s=0; s < d[j].data.nstokes; s++) {
-                                        d[j].fields[f].visibilities[i][s].weight.assign(d[j].fields[f].backup_visibilities[i][s].weight.begin(), d[j].fields[f].backup_visibilities[i][s].weight.end());
-                                }
-                        }
-                }
-        }
-};
-
-};
-
-
-class Visibilities
-{
-public:
-
-void setMSDataset(std::vector<MSDataset>& d){
-        this->datasets = d;
-};
-void setTotalVisibilities(int t){
-        this->total_visibilities = t;
-};
-
-void setNDatasets(int t){
-        this->ndatasets = t;
-};
-
-void setMaxNumberVis(int t){
-        this->max_number_vis = t;
-};
-
-std::vector<MSDataset> getMSDataset(){
-        return this->datasets;
-};
-int getTotalVisibilities(){
-        return this->total_visibilities;
-};
-
-int getMaxNumberVis(){
-        return this->max_number_vis;
-};
-
-int getNDatasets(){
-        return this->ndatasets;
-};
-
-void applyWeightingScheme(WeightingScheme *scheme){
-        scheme->apply(this->datasets);
-}
-
-private:
-std::vector<MSDataset> datasets;
-int ndatasets;
-int total_visibilities;
-int max_number_vis;
-};
-
-class Error
-{
-public:
-virtual void calculateErrorImage(Image *I, Visibilities *v) = 0;
 };
 
 class Io

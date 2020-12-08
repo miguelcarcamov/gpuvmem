@@ -1,3 +1,6 @@
+#ifndef MSFITSIO_CUH
+#define MSFITSIO_CUH
+
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -156,3 +159,5 @@ __host__ void closeCanvas(fitsfile *canvas);
 __host__ __device__ float freq_to_wavelength(float freq);
 __host__ __device__ double metres_to_lambda(double uvw_metres, float freq);
 __host__ __device__ float distance(float x, float y, float x0, float y0);
+
+#endif

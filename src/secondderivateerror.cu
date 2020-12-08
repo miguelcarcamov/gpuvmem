@@ -1,4 +1,5 @@
-#include "error.cuh"
+#include <secondderivateerror.cuh>
+#include <functions.cuh>
 
 extern long N, M;
 
