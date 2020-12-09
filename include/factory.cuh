@@ -91,7 +91,7 @@ T* createObject(V value){
     try {
         return Singleton<Factory<T,V>>::Instance().CreateObject(value);
     }catch (std::exception &e){
-        std::cerr << e.what() << "of class " << boost::typeindex::type_id<T>().pretty_name() << " and missing id: " << value << std::endl;
+        std::cerr << e.what() << " of class " << boost::typeindex::type_id<T>().pretty_name() << " and missing id: " << value << std::endl;
         exit(-1);
     }
 };
