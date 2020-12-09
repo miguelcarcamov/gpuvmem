@@ -1,6 +1,8 @@
 #ifndef OBJECTIVEFUNCTION_CUH
 #define OBJECTIVEFUNCTION_CUH
 
+#include <factory.cuh>
+
 class ObjectiveFunction
 {
 public:
@@ -105,6 +107,15 @@ private:
     int print_images = 0;
     void (*IoOrderIterations)(float *I, Io *io) = NULL;
     int image_count = 1;
+};
+
+namespace {
+    ObjectiveFunction* CreateObjectiveFunction()
+    {
+        return new ObjectiveFunction;
+    }
+    const std::string ObjectiveFunctionId = "ObjectiveFunction";
+    const bool RegisteredObjectiveFunction = registerCreationFunction<ObjectiveFunction, std::string>(ObjectiveFunctionId, CreateObjectiveFunction);
 };
 
 #endif //OBJECTIVEFUNCTION_CUH

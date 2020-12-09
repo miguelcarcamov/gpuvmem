@@ -49,7 +49,6 @@ Filter* CreateGridding()
 {
         return new Gridding;
 }
-
-const std::string name = "Gridding";
-const bool RegisteredGridding = registerCreationFunction<Filter, std::string>(name, CreateGridding);
+const std::string GriddingId = "Gridding";
+const bool RegisteredGridding = registerCreationFunction<Filter, std::string>(GriddingId, CreateGridding);
 };

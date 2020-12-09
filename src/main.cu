@@ -128,8 +128,8 @@ __host__ int main(int argc, char **argv) {
         enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D, pswf_02D, pswf_12D}; // CKernels for gridding
         enum {natural, uniform, briggs, radial}; // Weighting Schemes
 
-        Synthesizer * sy = createObject<Synthesizer,std::string>("MFS");
-        Optimizator * cg = createObject<Optimizator,std::string>("CG-FRPRMN");
+        Synthesizer * sy = createObject<Synthesizer, std::string>("MFS");
+        Optimizator * cg = createObject<Optimizator, std::string>("CG-FRPRMN");
         // Choose your antialiasing kernel!
         CKernel * sc = new PillBox2D();
         //CKernel *sc = new Gaussian2D(7,7);
@@ -138,9 +138,9 @@ __host__ int main(int argc, char **argv) {
         //CKernel * sc = new PSWF_12D(7,7);
         //sc->setW1(2.50f);
         //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
-        ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
-        Io *ioms = createObject<Io,std::string>("IoMS"); // This is the default Io Class
-        WeightingScheme *scheme = createObject<WeightingScheme,std::string>("Briggs");;
+        ObjectiveFunction *of = createObject<ObjectiveFunction, std::string>("ObjectiveFunction");
+        Io *ioms = createObject<Io, std::string>("IoMS"); // This is the default Io Class
+        WeightingScheme *scheme = createObject<WeightingScheme, std::string>("Briggs");
         sy->setIoHandler(ioms);
         sy->setOrder(&optimizationOrder);
         sy->setWeightingScheme(scheme);
@@ -154,9 +154,10 @@ __host__ int main(int argc, char **argv) {
 
         sy->setDevice(); // This routine sends the data to GPU memory
         Fi *chi2 = createObject<Fi,std::string>("Chi2");
-        Fi *e = createObject<Fi,std::string>("Entropy");
+        Fi *e = createObject<Fi>(0);
+        e = createObject<Fi>("Entropy");
         Fi *l1 = createObject<Fi,std::string>("L1-Norm");
-        Fi *tsqv = Singleton<FiFactory>::Instance().CreateFi(TotalSquaredVariation);
+        Fi *tsqv = createObject<Fi,std::string>("TotalSquaredVariation");
         Fi *lap = createObject<Fi,std::string>("Laplacian");
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);

@@ -67,7 +67,7 @@ void MFS::configure(int argc, char **argv)
 {
         if(iohandler == NULL)
         {
-                iohandler = Singleton<IoFactory>::Instance().CreateIo(0);
+                iohandler = createObject<Io, std::string>("IoMS");
         }
 
         variables = getOptions(argc, argv);
@@ -922,7 +922,7 @@ void MFS::writeImages()
         {
                 if(this->error == NULL)
                 {
-                        this->error = Singleton<ErrorFactory>::Instance().CreateError(0);
+                        this->error = createObject<Error, std::string>("SecondDerivateError");
                 }
                 /* code to calculate error */
                 /* make void * params */

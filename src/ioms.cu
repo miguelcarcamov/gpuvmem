@@ -76,6 +76,6 @@ Io* CreateIoMS()
 {
         return new IoMS;
 }
-const std::string name = "IoMS";
-const bool RegisteredIoMS = registerCreationFunction<Io, std::string>(name, CreateIoMS);
+const std::string IoMSId = "IoMS";
+const bool RegisteredIoMS = registerCreationFunction<Io, std::string>(IoMSId, CreateIoMS);
 };

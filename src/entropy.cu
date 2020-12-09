@@ -47,4 +47,5 @@ Fi* CreateEntropy()
 }
 const std::string name = "Entropy";
 const bool RegisteredEntropy = registerCreationFunction<Fi, std::string>(name, CreateEntropy);
+const bool RegisteredEntropyInt = registerCreationFunction<Fi, int>(0, CreateEntropy);
 };

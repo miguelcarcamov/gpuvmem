@@ -40,7 +40,7 @@ void TotalSquaredVariationP::setSandDs(float *S, float *Ds)
 };
 
 namespace {
-Fi* CreateTotalSquaredVariationP()
+Fi* CreateTotalSquaredVariation()
 {
         return new TotalSquaredVariationP;
 }

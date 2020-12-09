@@ -2,6 +2,7 @@
 #define FACTORY_CUH
 
 #include <exception>
+#include <iostream>
 
 template<class T>
 class Singleton
@@ -30,9 +31,9 @@ public:
                 : unknownId_(unknownId)
         {
         }
-        virtual const char* what()
+        virtual const char* what() const noexcept
         {
-            return "Unknown object type passed to Factory.";
+            return "Unknown object type passed to Factory";
         }
         const IdentifierType& GetId()
         {
@@ -86,7 +87,20 @@ private:
 
 template<class T, class V>
 T* createObject(V value){
-    return Singleton<Factory<T,V>>::Instance().CreateObject(value);
+    try {
+        return Singleton<Factory<T,V>>::Instance().CreateObject(value);
+    }catch (std::exception &e){
+        exit(-1);
+    }
+};
+template<class T>
+T* createObject(int value){
+    return createObject<T, int>(value);
+};
+
+template<class T>
+T* createObject(std::string value){
+    return createObject<T, std::string>(value);
 };
 
 template<class T, class V, class Creator = T* (*)()>
