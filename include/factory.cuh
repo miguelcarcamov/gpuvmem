@@ -3,6 +3,7 @@
 
 #include <exception>
 #include <iostream>
+#include <boost/type_index.hpp>
 
 template<class T>
 class Singleton
@@ -90,17 +91,9 @@ T* createObject(V value){
     try {
         return Singleton<Factory<T,V>>::Instance().CreateObject(value);
     }catch (std::exception &e){
+        std::cerr << e.what() << "of class " << boost::typeindex::type_id<T>().pretty_name() << " and missing id: " << value << std::endl;
         exit(-1);
     }
-};
-template<class T>
-T* createObject(int value){
-    return createObject<T, int>(value);
-};
-
-template<class T>
-T* createObject(std::string value){
-    return createObject<T, std::string>(value);
 };
 
 template<class T, class V, class Creator = T* (*)()>

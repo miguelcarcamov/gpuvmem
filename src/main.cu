@@ -154,7 +154,7 @@ __host__ int main(int argc, char **argv) {
 
         sy->setDevice(); // This routine sends the data to GPU memory
         Fi *chi2 = createObject<Fi,std::string>("Chi2");
-        Fi *e = createObject<Fi>("Entropy");
+        Fi *e = createObject<Fi,std::string>("Entropy");
         Fi *l1 = createObject<Fi,std::string>("L1-Norm");
         Fi *tsqv = createObject<Fi,std::string>("TotalSquaredVariation");
         Fi *lap = createObject<Fi,std::string>("Laplacian");
