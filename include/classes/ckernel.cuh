@@ -1,5 +1,8 @@
 #ifndef CKERNEL_CUH
 #define CKERNEL_CUH
+#include <MSFITSIO.cuh>
+extern fitsfile *mod_in;
+extern char *mempath;
 class CKernel
 {
 public:
@@ -111,6 +114,10 @@ public:
     {
         return this->kernel;
     };
+    __host__ float* getKernelPointer()
+    {
+        return this->kernel.data();
+    };
     __host__ float* getGPUKernel()
     {
         return this->gpu_kernel;
@@ -133,6 +140,13 @@ public:
     __host__ __device__ void setAngle(float angle){
         this->angle = angle;
     };
+    __host__ void printCKernel(){
+        OFITS(this->getKernelPointer(), mod_in, mempath, "ckernel.fits", "", 0, 0, 1.0, this->getm(), this->getn(), false);
+    }
+
+    __host__ void printGPUCKernel(){
+        OFITS(this->getGPUKernel(), mod_in, mempath, "ckernel_gpu.fits", "", 0, 0, 1.0, this->getm(), this->getn(), true);
+    }
 
 private:
     int m_times_n;
@@ -310,11 +324,14 @@ protected:
         float radius = distance(x, 0.0f, x0, 0.0f);
 
         nu =  radius/(w*sigma);
-        pswf = pswf_11D_func(nu);
-        nu_sq = nu * nu;
-        val = amp*(1.0f-nu_sq)*pswf;
+        if(nu==0.0f){
+          val = 1.0f;
+        }else{
+          pswf = pswf_11D_func(nu);
+          nu_sq = nu * nu;
+          val = amp*(1.0f-nu_sq)*pswf;
+        }
         return val;
-
     };
 
     __host__ __device__ float pswf_12D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)

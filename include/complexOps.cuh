@@ -1,12 +1,28 @@
 #ifndef COMPLEXOPS_CUH
 #define COMPLEXOPS_CUH
 #include <cufft.h>
+#include <math_constants.h>
 
 template <class T>
 __host__ __device__ T complexZero()
 {
         T zero = make_cuComplex(0.0, 0.0);
         return zero;
+}
+
+
+template <class T, class R>
+__host__ __device__ R amplitude(T c)
+{
+    R amp = sqrt((c.x * c.x) + (c.y * c.y));
+    return amp;
+}
+
+template <class T, class R>
+__host__ __device__ R phaseDegrees(T c)
+{
+    R phase = atan2(c.y/c.x) * 180.0 / CUDART_PI;
+    return phase;
 }
 
 template <class T, class R>

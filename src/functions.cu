@@ -1009,6 +1009,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         double3 uvw;
         float w;
         cufftComplex Vo;
+        int herm_j, herm_k;
         int shifted_j, shifted_k;
         int kernel_i, kernel_j;
         int visCounterPerFreq = 0;
@@ -1019,7 +1020,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         for(int s=0; s< data->nstokes; s++) {
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
+                                #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                 {
 
@@ -1058,12 +1059,21 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                         {
                                                         #pragma omp critical
                                                                 {
-                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N) {
+                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N) {
                                                                                 ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
-                                                                                g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
-                                                                                g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
-                                                                                g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
-                                                                                g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                                if(shifted_j >= N/2){
+                                                                                  g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
+                                                                                  g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
+                                                                                  g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
+                                                                                  g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                                }else{
+                                                                                  herm_j = N-shifted_j;
+                                                                                  herm_k = M-shifted_k;
+                                                                                  g_Vo[N * herm_k + herm_j].x += w * Vo.x * ckernel_result;
+                                                                                  g_Vo[N * herm_k + herm_j].y -= w * Vo.y * ckernel_result;
+                                                                                  g_weights[N * herm_k + herm_j] += w * ckernel_result;
+                                                                                  g_weights_aux[N * herm_k + herm_j] += w * ckernel_result * ckernel_result;
+                                                                                }
                                                                         }
                                                                 }
                                                         }
@@ -1324,7 +1334,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
 
         long UVpow2;
 
-        residualsToHost(fields, data, num_gpus, firstgpu);
+        modelToHost(fields, data, num_gpus, firstgpu);
 
         std::vector<std::vector<cufftComplex> > gridded_visibilities(num_gpus, std::vector<cufftComplex> (M*N));
 
@@ -1402,6 +1412,8 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         checkCudaErrors(cudaDeviceSynchronize());
 
+
+                                        fitsOutputCufftComplex(vars_gpu[0].device_V, mod_in, "amp.fits", "./", 0, 1.0, M, N, 0, true);
                                         // Interpolation / Degridding
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
@@ -1552,7 +1564,7 @@ __global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g
 
       atomicAdd(&Vo_g[N*k+j].x, w[i]*Vo[i].x);
       atomicAdd(&Vo_g[N*k+j].y, w[i]*Vo[i].y);
-      atomicAdd(&w_g[N*k+j], (1.0/w[i]));
+      atomicAdd(&w_g[N*k+j], w[i]);
     }
    }
 }
@@ -1563,14 +1575,15 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
   int k, j;
   int shifted_k, shifted_j;
   int kernel_i, kernel_j;
+  int herm_j, herm_k;
   cufftComplex degrid_val = complexZero<cufftComplex>();
   float ckernel_result;
 
   if(i < visibilities)
   {
 
-    j = round(uvw[i].x / fabs(deltau) + M/2);
-    k = round(uvw[i].y / fabs(deltav) + N/2);
+    j = round(uvw[i].x / fabs(deltau) + N/2);
+    k = round(uvw[i].y / fabs(deltav) + M/2);
 
     for(int m=-supportY; m<=supportY; m++){
       for(int n=-supportX; n<=supportX; n++){
@@ -1578,15 +1591,23 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
         shifted_k = k + m;
         kernel_j = n + supportX;
         kernel_i = m + supportY;
-        ckernel_result = kernel[kernel_n*kernel_i+kernel_j];
-        if (shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N)
+        if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N)
         {
-          degrid_val.x += ckernel_result * Vm_g[N*shifted_k+shifted_j].x;
-          degrid_val.y += ckernel_result * Vm_g[N*shifted_k+shifted_j].y;
+          ckernel_result = kernel[kernel_n*kernel_i+kernel_j];
+          if(shifted_j >= N/2){
+            degrid_val.x += ckernel_result * Vm_g[N*shifted_k+shifted_j].x;
+            degrid_val.y += ckernel_result * Vm_g[N*shifted_k+shifted_j].y;
+          }else{
+            herm_j = N-shifted_j;
+            herm_k = M-shifted_k;
+            degrid_val.x += ckernel_result * Vm_g[N*herm_k+herm_j].x;
+            degrid_val.y -= ckernel_result * Vm_g[N*herm_k+herm_j].y;
+          }
         }
       }
     }
-    Vm[i] = degrid_val;
+    Vm[i].x = degrid_val.x;
+    Vm[i].y = degrid_val.y;
   }
 }
 

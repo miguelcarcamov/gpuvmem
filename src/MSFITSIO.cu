@@ -439,7 +439,7 @@ __host__ void MScopy(char const *in_dir, char const *in_dir_dest)
 
 
 
-__host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu)
+__host__ void modelToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu)
 {
 
         if(num_gpus == 1) {
@@ -448,10 +448,6 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                                 for(int s=0; s<data.nstokes; s++) {
                                         checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm,
                                                                    sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                                                                   cudaMemcpyDeviceToHost));
-                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].weight.data(),
-                                                                   fields[f].device_visibilities[i][s].weight,
-                                                                   sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
                                                                    cudaMemcpyDeviceToHost));
                                 }
                         }
@@ -462,7 +458,6 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                                 cudaSetDevice((i%num_gpus) + firstgpu);
                                 for(int s=0; s<data.nstokes; s++) {
                                         checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm, sizeof(cufftComplex)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
-                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].weight.data(), fields[f].device_visibilities[i][s].weight, sizeof(float)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
                                 }
                         }
                 }
@@ -473,7 +468,7 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                         for(int s=0; s<data.nstokes; s++) {
                                 for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
                                         if (fields[f].visibilities[i][s].uvw[j].x < 0) {
-                                                fields[f].visibilities[i][s].Vm[j].y *= -1;
+                                                fields[f].visibilities[i][s].Vm[j].y *= -1.0f;
                                         }
                                 }
                         }
@@ -642,9 +637,9 @@ __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *ou
         for(int i=0; i < M; i++) {
                 for(int j=0; j < N; j++) {
                         /*Absolute*/
-                        //image2D[N*i+j] = sqrt(host_IFITS[N*i+j].x * host_IFITS[N*i+j].x + host_IFITS[N*i+j].y * host_IFITS[N*i+j].y)* fg_scale;
+                        image2D[N*i+j] = sqrt(host_IFITS[N*i+j].x * host_IFITS[N*i+j].x + host_IFITS[N*i+j].y * host_IFITS[N*i+j].y)* fg_scale;
                         /*Real part*/
-                        image2D[N*i+j] = host_IFITS[N*i+j].x;
+                        //image2D[N*i+j] = host_IFITS[N*i+j].x;
                         /*Imaginary part*/
                         //image2D[N*i+j] = host_IFITS[N*i+j].y;
                 }
@@ -695,7 +690,8 @@ __host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, ch
 
         fits_update_key(fpointer, TSTRING, "BUNIT", units, "Unit of measurement", &status);
         fits_update_key(fpointer, TINT, "NITER", &iteration, "Number of iteration in gpuvmem software", &status);
-
+        fits_update_key(fpointer, TINT, "NAXIS1", &M, "", &status);
+        fits_update_key(fpointer, TINT, "NAXIS2", &N, "", &status);
         float *host_IFITS = (float*)malloc(M*N*sizeof(float));
 
         //unsigned int offset = M*N*index*sizeof(float);

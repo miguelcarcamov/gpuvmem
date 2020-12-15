@@ -131,13 +131,13 @@ __host__ int main(int argc, char **argv) {
         Synthesizer * sy = createObject<Synthesizer, std::string>("MFS");
         Optimizator * cg = createObject<Optimizator, std::string>("CG-FRPRMN");
         // Choose your antialiasing kernel!
-        CKernel * sc = new PillBox2D();
+        //CKernel * sc = new PillBox2D();
         //CKernel *sc = new Gaussian2D(7,7);
         //CKernel *sc = new Sinc2D(7,7);
         //CKernel * sc = new GaussianSinc2D(7, 7);
-        //CKernel * sc = new PSWF_12D(7,7);
-        //sc->setW1(2.50f);
-        //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
+        CKernel * sc = new PSWF_12D(9,9);
+        sc->setW1(2.50f);
+        //CKernel * sc = createObject<CKernel, std::string>("GaussianSinc2D");
         ObjectiveFunction *of = createObject<ObjectiveFunction, std::string>("ObjectiveFunction");
         Io *ioms = createObject<Io, std::string>("IoMS"); // This is the default Io Class
         WeightingScheme *scheme = createObject<WeightingScheme, std::string>("Briggs");

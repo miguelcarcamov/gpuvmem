@@ -425,6 +425,8 @@ void MFS::configure(int argc, char **argv)
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
                 this->ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabs(deltau), fabs(deltav));
+                if(print_images)
+                  ckernel->printCKernel();
                 printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
@@ -940,14 +942,14 @@ void MFS::writeImages()
 
 void MFS::writeResiduals()
 {
+        //Restoring the weights to the original
         printf("Transferring residuals to host memory\n");
         if(!gridding)
         {
-                //Restoring the weights to the original
                 this->scheme->restoreWeights(datasets);
                 //Saving residuals to disk
                 for(int d=0; d<nMeasurementSets; d++) {
-                        residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
+                        modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
                 }
         }else{
                 double deltax = RPDEG_D*DELTAX; //radians
@@ -961,7 +963,7 @@ void MFS::writeResiduals()
                         degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel);
 
                 for(int d=0; d<nMeasurementSets; d++)
-                        residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
+                        modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
 
         }
 
