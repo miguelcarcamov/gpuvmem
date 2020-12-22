@@ -7,45 +7,45 @@ class Visibilities
 {
 public:
 
-    void setMSDataset(std::vector<MSDataset>& d){
+void setMSDataset(std::vector<MSDataset>& d){
         this->datasets = d;
-    };
-    void setTotalVisibilities(int t){
+};
+void setTotalVisibilities(int t){
         this->total_visibilities = t;
-    };
+};
 
-    void setNDatasets(int t){
+void setNDatasets(int t){
         this->ndatasets = t;
-    };
+};
 
-    void setMaxNumberVis(int t){
+void setMaxNumberVis(int t){
         this->max_number_vis = t;
-    };
+};
 
-    std::vector<MSDataset> getMSDataset(){
+std::vector<MSDataset> getMSDataset(){
         return this->datasets;
-    };
-    int getTotalVisibilities(){
+};
+int getTotalVisibilities(){
         return this->total_visibilities;
-    };
+};
 
-    int getMaxNumberVis(){
+int getMaxNumberVis(){
         return this->max_number_vis;
-    };
+};
 
-    int getNDatasets(){
+int getNDatasets(){
         return this->ndatasets;
-    };
+};
 
-    void applyWeightingScheme(WeightingScheme *scheme){
+void applyWeightingScheme(WeightingScheme *scheme){
         scheme->apply(this->datasets);
-    }
+}
 
 private:
-    std::vector<MSDataset> datasets;
-    int ndatasets;
-    int total_visibilities;
-    int max_number_vis;
+std::vector<MSDataset> datasets;
+int ndatasets;
+int total_visibilities;
+int max_number_vis;
 };
 
 #endif

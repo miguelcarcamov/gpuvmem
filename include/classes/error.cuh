@@ -7,7 +7,7 @@
 class Error
 {
 public:
-    virtual void calculateErrorImage(Image *I, Visibilities *v) = 0;
+virtual void calculateErrorImage(Image *I, Visibilities *v) = 0;
 };
 
 #endif //ERROR_CUH
