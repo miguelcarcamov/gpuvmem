@@ -11,6 +11,7 @@ __host__ void GaussianSinc2D::buildKernel(float amp, float x0, float y0, float s
                         this->kernel[this->n*i+j] = gaussianSinc2D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w1, this->w2, this->alpha);
                 }
         }
+        this->copyKerneltoGPU();
 
 };
 
@@ -19,6 +20,7 @@ CKernel* CreateCKernel()
 {
         return new GaussianSinc2D;
 }
-const int CKERNELID = 4;
-const bool RegisteredCKernel = Singleton<CKernelFactory>::Instance().RegisterCKernel(CKERNELID, CreateCKernel);
+
+const std::string name = "GaussianSinc2D";
+const bool RegisteredGaussianSinc2D = registerCreationFunction<CKernel, std::string>(name, CreateCKernel);
 };

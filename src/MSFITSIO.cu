@@ -183,16 +183,16 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         std::string maxmin_baseline_query = "select GMAX(B_LENGTH) AS MAX_BLENGTH, GMIN(B_LENGTH) AS MIN_BLENGTH \
         FROM (select sqrt(sumsqr(UVW[:2])) as B_LENGTH FROM "+dir+" GROUPBY ANTENNA1,ANTENNA2)";
         std::string freq_query = "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, GMEDIAN(CHAN_FREQ) as REF_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
-        std::string maxuv_wavelength_query = "select MAX(GMAX(mscal.uvwwvls()[0,0]),GMAX(mscal.uvwwvls()[0,1])) as MAXUV_WV FROM "+dir;
+        std::string maxuv_metres_query = "select MAX(GMAX(UVW[0]),GMAX(UVW[1])) as MAXUV FROM "+dir;
 
         casacore::Table antenna_tab(casacore::tableCommand(antenna_tab_query.c_str()));
         casacore::Table maxmin_baseline_tab(casacore::tableCommand(maxmin_baseline_query.c_str()));
         casacore::Table freq_tab(casacore::tableCommand(freq_query.c_str()));
-        casacore::Table maxuv_wavelength_tab(casacore::tableCommand(maxuv_wavelength_query.c_str()));
+        casacore::Table maxuv_metres_tab(casacore::tableCommand(maxuv_metres_query.c_str()));
 
         casacore::ROScalarColumn<casacore::Double> max_blength_col(maxmin_baseline_tab,"MAX_BLENGTH");
         casacore::ROScalarColumn<casacore::Double> min_blength_col(maxmin_baseline_tab,"MIN_BLENGTH");
-        casacore::ROScalarColumn<casacore::Double> maxuv_wavelength_col(maxuv_wavelength_tab,"MAXUV_WV");
+        casacore::ROScalarColumn<casacore::Double> maxuv_metres_col(maxuv_metres_tab,"MAXUV");
 
         casacore::ROScalarColumn<casacore::Double> min_freq_col(freq_tab,"MIN_FREQ");
         casacore::ROScalarColumn<casacore::Double> max_freq_col(freq_tab,"MAX_FREQ");
@@ -205,7 +205,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
         data->max_freq = max_freq_col(0);
         data->max_blength = max_blength_col(0);
         data->min_blength = min_blength_col(0);
-        data->uvmax_wavelength = maxuv_wavelength_col(0);
+        data->uvmax_wavelength = maxuv_metres_col(0) * data->max_freq / LIGHTSPEED;
 
         float max_wavelength = freq_to_wavelength(data->min_freq);
 
@@ -314,8 +314,8 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
                 fields[f].device_visibilities.resize(data->total_frequencies, std::vector<DVis>(data->nstokes, DVis()));
                 fields[f].numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
                 fields[f].numVisibilitiesPerFreq.resize(data->total_frequencies,0);
+                fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                 if(gridding) {
-                        fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
                         fields[f].backup_numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
                         fields[f].backup_numVisibilitiesPerFreq.resize(data->total_frequencies,0);
                 }
@@ -439,7 +439,7 @@ __host__ void MScopy(char const *in_dir, char const *in_dir_dest)
 
 
 
-__host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu)
+__host__ void modelToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu)
 {
 
         if(num_gpus == 1) {
@@ -448,10 +448,6 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                                 for(int s=0; s<data.nstokes; s++) {
                                         checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm,
                                                                    sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                                                                   cudaMemcpyDeviceToHost));
-                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].weight.data(),
-                                                                   fields[f].device_visibilities[i][s].weight,
-                                                                   sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s],
                                                                    cudaMemcpyDeviceToHost));
                                 }
                         }
@@ -462,7 +458,6 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                                 cudaSetDevice((i%num_gpus) + firstgpu);
                                 for(int s=0; s<data.nstokes; s++) {
                                         checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm, sizeof(cufftComplex)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
-                                        checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].weight.data(), fields[f].device_visibilities[i][s].weight, sizeof(float)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
                                 }
                         }
                 }
@@ -473,7 +468,7 @@ __host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_g
                         for(int s=0; s<data.nstokes; s++) {
                                 for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
                                         if (fields[f].visibilities[i][s].uvw[j].x < 0) {
-                                                fields[f].visibilities[i][s].Vm[j].y *= -1;
+                                                fields[f].visibilities[i][s].Vm[j].y *= -1.0f;
                                         }
                                 }
                         }
@@ -642,9 +637,9 @@ __host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *ou
         for(int i=0; i < M; i++) {
                 for(int j=0; j < N; j++) {
                         /*Absolute*/
-                        //image2D[N*i+j] = sqrt(host_IFITS[N*i+j].x * host_IFITS[N*i+j].x + host_IFITS[N*i+j].y * host_IFITS[N*i+j].y)* fg_scale;
+                        image2D[N*i+j] = sqrt(host_IFITS[N*i+j].x * host_IFITS[N*i+j].x + host_IFITS[N*i+j].y * host_IFITS[N*i+j].y)* fg_scale;
                         /*Real part*/
-                        image2D[N*i+j] = host_IFITS[N*i+j].x;
+                        //image2D[N*i+j] = host_IFITS[N*i+j].x;
                         /*Imaginary part*/
                         //image2D[N*i+j] = host_IFITS[N*i+j].y;
                 }
@@ -695,7 +690,8 @@ __host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, ch
 
         fits_update_key(fpointer, TSTRING, "BUNIT", units, "Unit of measurement", &status);
         fits_update_key(fpointer, TINT, "NITER", &iteration, "Number of iteration in gpuvmem software", &status);
-
+        fits_update_key(fpointer, TINT, "NAXIS1", &M, "", &status);
+        fits_update_key(fpointer, TINT, "NAXIS2", &N, "", &status);
         float *host_IFITS = (float*)malloc(M*N*sizeof(float));
 
         //unsigned int offset = M*N*index*sizeof(float);

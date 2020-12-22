@@ -296,6 +296,7 @@ Optimizator *CreateLbfgs()
 {
         return new LBFGS;
 };
-const int LbfgsId = 1;
-const bool RegisteredLbgs = Singleton<OptimizatorFactory>::Instance().RegisterOptimizator(LbfgsId, CreateLbfgs);
+
+const std::string name = "CG-LBFGS";
+const bool RegisteredLbgs = registerCreationFunction<Optimizator, std::string>(name, CreateLbfgs);
 };

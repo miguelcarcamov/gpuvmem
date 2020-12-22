@@ -126,21 +126,24 @@ __host__ int main(int argc, char **argv) {
         enum {MS}; // Io
         enum {SecondDerivative}; // Error calculation
         enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D, pswf_02D, pswf_12D}; // CKernels for gridding
+        enum {natural, uniform, briggs, radial}; // Weighting Schemes
 
-        Synthesizer * sy = Singleton<SynthesizerFactory>::Instance().CreateSynthesizer(MFS);
-        Optimizator * cg = Singleton<OptimizatorFactory>::Instance().CreateOptimizator(CG);
+        Synthesizer * sy = createObject<Synthesizer, std::string>("MFS");
+        Optimizator * cg = createObject<Optimizator, std::string>("CG-FRPRMN");
         // Choose your antialiasing kernel!
-        CKernel * sc = new PillBox2D();
+        //CKernel * sc = new PillBox2D();
         //CKernel *sc = new Gaussian2D(7,7);
         //CKernel *sc = new Sinc2D(7,7);
         //CKernel * sc = new GaussianSinc2D(7, 7);
-        //CKernel * sc = new PSWF_12D(7,7);
-        //sc->setW1(2.50f);
-        //CKernel * sc = Singleton<CKernelFactory>::Instance().CreateCKernel(gaussianSinc2D);
-        ObjectiveFunction *of = Singleton<ObjectiveFunctionFactory>::Instance().CreateObjectiveFunction(DefaultObjectiveFunction);
-        Io *ioms = Singleton<IoFactory>::Instance().CreateIo(MS); // This is the default Io Class
+        CKernel * sc = new PSWF_12D(9,9);
+        sc->setW1(2.50f);
+        //CKernel * sc = createObject<CKernel, std::string>("GaussianSinc2D");
+        ObjectiveFunction *of = createObject<ObjectiveFunction, std::string>("ObjectiveFunction");
+        Io *ioms = createObject<Io, std::string>("IoMS"); // This is the default Io Class
+        WeightingScheme *scheme = createObject<WeightingScheme, std::string>("Briggs");
         sy->setIoHandler(ioms);
         sy->setOrder(&optimizationOrder);
+        sy->setWeightingScheme(scheme);
         sy->setGriddingKernel(sc);
         sy->configure(argc, argv);
         cg->setObjectiveFunction(of);
@@ -150,19 +153,22 @@ __host__ int main(int argc, char **argv) {
         //sy->applyFilter(g); // delete this line for no gridding
 
         sy->setDevice(); // This routine sends the data to GPU memory
-        Fi *chi2 = Singleton<FiFactory>::Instance().CreateFi(Chi2);
-        Fi *e = Singleton<FiFactory>::Instance().CreateFi(Entropy);
-        Fi *l1 = Singleton<FiFactory>::Instance().CreateFi(L1Norm);
-        Fi *tsqv = Singleton<FiFactory>::Instance().CreateFi(TotalSquaredVariation);
+        Fi *chi2 = createObject<Fi,std::string>("Chi2");
+        Fi *e = createObject<Fi,std::string>("Entropy");
+        Fi *l1 = createObject<Fi,std::string>("L1-Norm");
+        Fi *tsqv = createObject<Fi,std::string>("TotalSquaredVariation");
+        Fi *lap = createObject<Fi,std::string>("Laplacian");
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
         l1->configure(1, 0, 0);
         tsqv->configure(2, 0, 0);
+        lap->configure(3, 0, 0);
         //e->setPenalizationFactor(0.01); // If not used -Z (Fi.configure(-1,x,x))
         of->addFi(chi2);
         of->addFi(e);
         of->addFi(l1);
         of->addFi(tsqv);
+        of->addFi(lap);
         //sy->getImage()->getFunctionMapping()[i].evaluateXt = particularEvaluateXt;
         //sy->getImage()->getFunctionMapping()[i].newP = particularNewP;
         //if the nopositivity flag is on  all images will run with no posivity,

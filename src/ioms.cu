@@ -76,6 +76,6 @@ Io* CreateIoMS()
 {
         return new IoMS;
 }
-const int IoMSId = 0;
-const bool RegisteredIoMS = Singleton<IoFactory>::Instance().RegisterIo(IoMSId, CreateIoMS);
+const std::string IoMSId = "IoMS";
+const bool RegisteredIoMS = registerCreationFunction<Io, std::string>(IoMSId, CreateIoMS);
 };

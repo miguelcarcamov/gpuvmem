@@ -4,7 +4,8 @@
 
 # Papers and documentation
 
--   <https://doi.org/10.1016/j.ascom.2017.11.003>
+-   Paper: <https://doi.org/10.1016/j.ascom.2017.11.003>
+-   Wiki: <https://github.com/miguelcarcamov/gpuvmem/wiki>
 
 
 # Citing
@@ -31,9 +32,9 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 
   a. `sudo apt-get install git-lfs`
 
-2.  Install casacore latest stable version v3.1.2
+2.  Install casacore latest stable version v3.2.1
 
-  a. `git clone --single-branch --branch v3.1.2 https://github.com/casacore/casacore.git`
+  a. `git clone --single-branch --branch v3.2.1 https://github.com/casacore/casacore.git`
 
   b. `sudo apt-get install -y build-essential cmake gfortran g++ libncurses5-dev libreadline-dev flex bison libblas-dev liblapacke-dev libcfitsio-dev wcslib-dev libhdf5-serial-dev libfftw3-dev python-numpy libboost-python-dev libpython2.7-dev`
 

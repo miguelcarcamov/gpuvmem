@@ -1,8 +1,7 @@
-#ifndef ERROR_CUH
-#define ERROR_CUH
+#ifndef SECOND_DERIVATE_ERROR_CUH
+#define SECOND_DERIVATE_ERROR_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
 
 class SecondDerivateError : public Error
 {

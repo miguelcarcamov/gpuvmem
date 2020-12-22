@@ -984,7 +984,7 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
         }
 }
 
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel, int gridding)
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, CKernel *ckernel, int gridding)
 {
         std::vector<float> g_weights(M*N);
         std::vector<float> g_weights_aux(M*N);
@@ -1009,6 +1009,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         double3 uvw;
         float w;
         cufftComplex Vo;
+        int herm_j, herm_k;
         int shifted_j, shifted_k;
         int kernel_i, kernel_j;
         int visCounterPerFreq = 0;
@@ -1018,9 +1019,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                         visCounterPerFreq = 0;
                         for(int s=0; s< data->nstokes; s++) {
                                 fields[f].backup_visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                fields[f].backup_visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                 fields[f].backup_visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result) ordered
+                                #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, g_weights_aux, g_Vo) private(j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
                                 for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                 {
 
@@ -1031,19 +1031,18 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         //Backing up original visibilities and (u,v) positions
                                         fields[f].backup_visibilities[i][s].uvw[z] = uvw;
                                         fields[f].backup_visibilities[i][s].Vo[z] = Vo;
-                                        fields[f].backup_visibilities[i][s].weight[z] = w;
 
                                         // Visibilities from metres to klambda
                                         uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
                                         uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
                                         uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
+
                                         //Apply hermitian symmetry (it will be applied afterwards)
                                         if (uvw.x < 0.0) {
                                                 uvw.x *= -1.0;
                                                 uvw.y *= -1.0;
                                                 Vo.y *= -1.0;
                                         }
-
 
                                         grid_pos_x = uvw.x / fabs(deltau);
                                         grid_pos_y = uvw.y / fabs(deltav);
@@ -1060,12 +1059,21 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                         {
                                                         #pragma omp critical
                                                                 {
-                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= (N/2) && shifted_j < N) {
+                                                                        if(shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N) {
                                                                                 ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
-                                                                                g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
-                                                                                g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
-                                                                                g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
-                                                                                g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                                if(shifted_j >= N/2){
+                                                                                  g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
+                                                                                  g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
+                                                                                  g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
+                                                                                  g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                                }else{
+                                                                                  herm_j = N-shifted_j;
+                                                                                  herm_k = M-shifted_k;
+                                                                                  g_Vo[N * herm_k + herm_j].x += w * Vo.x * ckernel_result;
+                                                                                  g_Vo[N * herm_k + herm_j].y -= w * Vo.y * ckernel_result;
+                                                                                  g_weights[N * herm_k + herm_j] += w * ckernel_result;
+                                                                                  g_weights_aux[N * herm_k + herm_j] += w * ckernel_result * ckernel_result;
+                                                                                }
                                                                         }
                                                                 }
                                                         }
@@ -1107,39 +1115,19 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 //fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
                                 //OFITS(g_weights.data(), mod_in, "./", "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
 
-                                int visCounter = 0;
-                                float gridWeightSum = 0.0f;
-
                                 // We already know that in quadrants < N/2 there are only zeros
                                 // Therefore, we start j from N/2
-                                #pragma omp parallel for shared(g_weights) reduction(+: gridWeightSum, visCounter)
+                                int visCounter = 0;
+                                #pragma omp parallel for shared(g_weights) reduction(+: visCounter)
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
                                                 float weight = g_weights[N * k + j];
                                                 if (weight > 0.0f) {
-                                                        gridWeightSum += weight;
                                                         visCounter++;
                                                 }
                                         }
                                 }
 
-                                // Briggs/Robust formula
-                                pow2_factor = pow(10.0, -2.0 * robust);
-                                w_avg = gridWeightSum / visCounter;
-                                S2 = 5.0f * 5.0f * pow2_factor / w_avg;
-
-                                float weight;
-                                #pragma omp parallel for schedule(static, 1) shared(g_weights) private(weight)
-                                for (int k = 0; k < M; k++) {
-                                        for (int j = N/2; j < N; j++) {
-                                                weight = g_weights[N * k + j];
-                                                if (weight > 0.0f) {
-                                                        g_weights[N * k + j] /= (1.0f + weight * S2);
-                                                } else {
-                                                        g_weights[N * k + j] = 0.0f;
-                                                }
-                                        }
-                                }
 
                                 fields[f].visibilities[i][s].uvw.resize(visCounter);
                                 fields[f].visibilities[i][s].Vo.resize(visCounter);
@@ -1150,6 +1138,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                 fields[f].visibilities[i][s].weight.resize(visCounter);
 
                                 int l = 0;
+                                float weight;
                                 for (int k = 0; k < M; k++) {
                                         for (int j = N/2; j < N; j++) {
                                                 weight = g_weights[N * k + j];
@@ -1296,20 +1285,15 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
 
         // We have calculate the running means so we divide by the sum of the weights
 
-        s_uu_parallel /= sum_weights;
-        s_vv_parallel /= sum_weights;
-        s_uv_parallel /= sum_weights;
+        s_uu /= sum_weights;
+        s_vv /= sum_weights;
+        s_uv /= sum_weights;
 
-        s_uu_crossed /= sum_weights;
-        s_vv_crossed /= sum_weights;
-        s_uv_crossed /= sum_weights;
+        double3 beam_size_rad = calc_beamSize(s_uu, s_vv, s_uv);
 
-        beam_size_rad_parallel = calc_beamSize(s_uu_parallel, s_vv_parallel, s_uv_parallel)
-        beam_size_rad_crossed = calc_beamSize(s_uu_crossed, s_vv_crossed, s_uv_crossed)
-
-        *bmaj = beam_size_rad_parallel / RPDEG_D; // Major axis to degrees
-        *bmin = beam_size_rad_parallel / RPDEG_D; // Minor axis to degrees
-        *bpa = beam_size_rad_parallel / RPDEG_D; // Angle to degrees
+        *bmaj = beam_size_rad.x / RPDEG_D; // Major axis to degrees
+        *bmin = beam_size_rad.y / RPDEG_D; // Minor axis to degrees
+        *bpa = beam_size_rad.z / RPDEG_D; // Angle to degrees
 
         if(sum_weights > 0.0f)
                 variance = 1.0f/sum_weights_parallel;
@@ -1357,12 +1341,12 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
         }
 }
 
-__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N)
+__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N, CKernel *ckernel)
 {
 
         long UVpow2;
 
-        residualsToHost(fields, data, num_gpus, firstgpu);
+        modelToHost(fields, data, num_gpus, firstgpu);
 
         std::vector<std::vector<cufftComplex> > gridded_visibilities(num_gpus, std::vector<cufftComplex> (M*N));
 
@@ -1389,7 +1373,6 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         fields[f].visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-
                                         checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
                                                                    sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                         checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
@@ -1441,10 +1424,14 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         checkCudaErrors(cudaDeviceSynchronize());
 
+
+                                        fitsOutputCufftComplex(vars_gpu[0].device_V, mod_in, "amp.fits", "./", 0, 1.0, M, N, 0, true);
                                         // Interpolation / Degridding
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        //degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                        //            fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                                         checkCudaErrors(cudaDeviceSynchronize());
                                 }
 
@@ -1512,9 +1499,18 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
                                                                    sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
 
-                                        UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                        fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                        if(blockSizeV == -1) {
+                                                int threads1D, blocks1D;
+                                                int threadsV, blocksV;
+                                                threads1D = 512;
+                                                blocks1D = iDivUp(UVpow2, threads1D);
+                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+                                        }else{
+                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                                                fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+                                        }
 
                                         hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
@@ -1525,6 +1521,8 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
                                         (fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        //degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                        //            fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                 }
@@ -1564,49 +1562,67 @@ __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHa
 
 }
 
-/*__global__ void do_gridding(float *u, float *v, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, float deltau, float deltav, int visibilities, int M, int N)
-   {
+__global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, double deltau, double deltav, int visibilities, int M, int N)
+{
    int i = blockDim.x * blockIdx.x + threadIdx.x;
+   int k, j;
    if(i < visibilities)
    {
-    int k, j;
-    j = roundf(u[i]/deltau + M/2);
-    k = roundf(v[i]/deltav + N/2);
+    j = round(uvw[i].x / fabs(deltau) + M/2);
+    k = round(uvw[i].y / fabs(deltav) + N/2);
 
     if (k < M && j < N)
     {
 
-      atomicAdd(&Vo_g[N*k+j].x, Vo[i].x);
-      atomicAdd(&Vo_g[N*k+j].y, Vo[i].y);
-      atomicAdd(&w_g[N*k+j], (1.0/w[i]));
-      atomicAdd(&count[N*k*j], 1);
+      atomicAdd(&Vo_g[N*k+j].x, w[i]*Vo[i].x);
+      atomicAdd(&Vo_g[N*k+j].y, w[i]*Vo[i].y);
+      atomicAdd(&w_g[N*k+j], w[i]);
     }
    }
-   }
+}
 
-   __global__ void calculateCoordinates(float *u_g, float *v_g, float deltau, float deltav, int M, int N)
-   {
-   int j = blockDim.x * blockIdx.x + threadIdx.x;
-   int i = blockDim.y * blockIdx.y + threadIdx.y;
+__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, double deltau, double deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY)
+{
+  int i = blockDim.x * blockIdx.x + threadIdx.x;
+  int k, j;
+  int shifted_k, shifted_j;
+  int kernel_i, kernel_j;
+  int herm_j, herm_k;
+  cufftComplex degrid_val = complexZero<cufftComplex>();
+  float ckernel_result;
 
-   u_g[N*i+j] = j*deltau - (N/2)*deltau;
-   v_g[N*i+j] = i*deltav - (N/2)*deltav;
-   }
+  if(i < visibilities)
+  {
 
-   __global__ void calculateAvgVar(cufftComplex *V_g, float *w_g, int *count, int M, int N)
-   {
-   int j = blockDim.x * blockIdx.x + threadIdx.x;
-   int i = blockDim.y * blockIdx.y + threadIdx.y;
+    j = round(uvw[i].x / fabs(deltau) + N/2);
+    k = round(uvw[i].y / fabs(deltav) + M/2);
 
-   int counter = count[N*i+j];
-   if(counter > 0){
-    V_g[N*i+j].x = V_g[N*i+j].x / counter;
-    V_g[N*i+j].y = V_g[N*i+j].y / counter;
-    w_g[N*i+j] = counter / w_g[N*i+j];
-   }else{
-    w_g[N*i+j] = 0.0;
-   }
-   }*/
+    for(int m=-supportY; m<=supportY; m++){
+      for(int n=-supportX; n<=supportX; n++){
+        shifted_j = j + n;
+        shifted_k = k + m;
+        kernel_j = n + supportX;
+        kernel_i = m + supportY;
+        if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N)
+        {
+          ckernel_result = kernel[kernel_n*kernel_i+kernel_j];
+          if(shifted_j >= N/2){
+            degrid_val.x += ckernel_result * Vm_g[N*shifted_k+shifted_j].x;
+            degrid_val.y += ckernel_result * Vm_g[N*shifted_k+shifted_j].y;
+          }else{
+            herm_j = N-shifted_j;
+            herm_k = M-shifted_k;
+            degrid_val.x += ckernel_result * Vm_g[N*herm_k+herm_j].x;
+            degrid_val.y -= ckernel_result * Vm_g[N*herm_k+herm_j].y;
+          }
+        }
+      }
+    }
+    Vm[i].x = degrid_val.x;
+    Vm[i].y = degrid_val.y;
+  }
+}
+
 __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, int numVisibilities)
 {
         const int i = threadIdx.x + blockDim.x * blockIdx.x;

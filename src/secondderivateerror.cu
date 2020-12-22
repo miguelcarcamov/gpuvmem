@@ -1,4 +1,5 @@
-#include "error.cuh"
+#include <secondderivateerror.cuh>
+#include <functions.cuh>
 
 extern long N, M;
 
@@ -13,6 +14,6 @@ Error* CreateSecondDerivateError()
 {
         return new SecondDerivateError;
 }
-const int SecondDerivateErrorID = 0;
-const bool RegisteredSecondDerivateError = Singleton<ErrorFactory>::Instance().RegisterError(SecondDerivateErrorID, CreateSecondDerivateError);
+const std::string SecondDerivateErrorID = "SecondDerivateError";
+const bool RegisteredSecondDerivateError = registerCreationFunction<Error, std::string>(SecondDerivateErrorID, CreateSecondDerivateError);
 };

@@ -24,7 +24,7 @@ pix_size = str(cdelta['value']) + "arcsec"
 
 
 tclean(vis=residual_ms, imagename=residual_image, specmode='mfs', deconvolver='hogbom', niter=0,
-       stokes=polarization, weighting='briggs', nterms=1, robust=robust, imsize=[pix_num, pix_num], cell=pix_size, datacolumn='DATA')
+       stokes=polarization, weighting='briggs', nterms=1, robust=robust, imsize=[pix_num, pix_num], cell=pix_size, datacolumn='data')
 
 exportfits(imagename=residual_image + ".image",
            fitsimage=residual_image + ".image.fits", overwrite=True, history=False)

@@ -44,6 +44,7 @@ Fi* CreateQuadraticP()
 {
         return new QuadraticP;
 }
-const int QuadraticPId = 3;
-const bool RegisteredQuadraticP = Singleton<FiFactory>::Instance().RegisterFi(QuadraticPId, CreateQuadraticP);
+
+const std::string name = "Quadratic";
+const bool RegisteredQuadraticP = registerCreationFunction<Fi, std::string>(name, CreateQuadraticP);
 };

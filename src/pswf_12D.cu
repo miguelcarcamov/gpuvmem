@@ -1,6 +1,6 @@
 #include "pswf_12D.cuh"
 
-__host__ void PSWF_12D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
+__host__ __device__ void PSWF_12D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
 {
         this->setKernelMemory();
         float x, y;
@@ -13,6 +13,7 @@ __host__ void PSWF_12D::buildKernel(float amp, float x0, float y0, float sigma_x
                         this->kernel[this->n * i + j] = val;
                 }
         }
+        this->copyKerneltoGPU();
 
 };
 
@@ -28,6 +29,7 @@ CKernel* CreateCKernel()
 {
         return new PSWF_12D;
 }
-const int CKERNELID = 6;
-const bool RegisteredCKernel = Singleton<CKernelFactory>::Instance().RegisterCKernel(CKERNELID, CreateCKernel);
+
+const std::string name = "PSWF";
+const bool RegisteredPSWF = registerCreationFunction<CKernel, std::string>(name, CreateCKernel);
 };

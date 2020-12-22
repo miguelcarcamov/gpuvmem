@@ -165,6 +165,7 @@ Optimizator *CreateFrprmn()
 {
         return new ConjugateGradient;
 };
-const int FrprmnId = 0;
-const bool RegisteredConjugateGradient = Singleton<OptimizatorFactory>::Instance().RegisterOptimizator(FrprmnId, CreateFrprmn);
+
+const std::string name = "CG-FRPRMN";
+const bool RegisteredFrprmn = registerCreationFunction<Optimizator, std::string>(name, CreateFrprmn);
 };

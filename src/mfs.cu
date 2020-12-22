@@ -1,4 +1,4 @@
-#include "synthesizer.cuh"
+#include "mfs.cuh"
 #include "imageProcessor.cuh"
 
 
@@ -67,7 +67,7 @@ void MFS::configure(int argc, char **argv)
 {
         if(iohandler == NULL)
         {
-                iohandler = Singleton<IoFactory>::Instance().CreateIo(0);
+                iohandler = createObject<Io, std::string>("IoMS");
         }
 
         variables = getOptions(argc, argv);
@@ -139,8 +139,13 @@ void MFS::configure(int argc, char **argv)
                 exit(-1);
         }
 
-        for(int i=0; i< image_count; i++)
-                initial_values.push_back(atof(string_values[i].c_str()));
+        for(int i=0; i< image_count; i++) {
+                if(i==0) {
+                        initial_values.push_back(atof(string_values[i].c_str()) * -1.0f * eta);
+                }else{
+                        initial_values.push_back(atof(string_values[i].c_str()));
+                }
+        }
 
         string_values.clear();
 
@@ -256,6 +261,7 @@ void MFS::configure(int argc, char **argv)
         float min_wlength = freq_to_wavelength(max_freq);
         float resolution_arcsec = (min_wlength/max_blength)/RPARCSEC;
         double max_uvmax_wavelength = *max_element(ms_uvmax_wavelength.begin(), ms_uvmax_wavelength.end()) + 1E-5;
+        printf("The maximum u,v in wavelength units is: %e\n", max_uvmax_wavelength);
         printf("The maximum theoretical resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec);
         printf("The oversampled (by a factor of 7) resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec/7.0f);
 
@@ -403,14 +409,21 @@ void MFS::configure(int argc, char **argv)
         double deltay = RPDEG_D*DELTAY; //radians
         deltau = 1.0 / (M * deltax);
         deltav = 1.0 / (N * deltay);
+        if(NULL == this->scheme) {
+                this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
+        }
 
+        this->scheme->configure(&robust_param);
+        this->scheme->apply(datasets);
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
-                ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabsf(deltau), fabsf(deltav));
-                printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
+                this->ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabs(deltau), fabs(deltav));
+                if(print_images)
+                  ckernel->printCKernel();
+                printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
-                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, robust_param, this->ckernel, gridding);
+                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
         }
 }
 
@@ -819,7 +832,7 @@ void MFS::clearRun()
 }
 void MFS::run()
 {
-        printf("\n\nStarting Optimizator\n");
+        printf("\n\nStarting optimizator\n");
         optimizator->getObjectiveFuntion()->setIo(iohandler);
         optimizator->getObjectiveFuntion()->setPrintImages(print_images);
 
@@ -905,7 +918,7 @@ void MFS::writeImages()
         {
                 if(this->error == NULL)
                 {
-                        this->error = Singleton<ErrorFactory>::Instance().CreateError(0);
+                        this->error = createObject<Error, std::string>("SecondDerivateError");
                 }
                 /* code to calculate error */
                 /* make void * params */
@@ -923,12 +936,14 @@ void MFS::writeImages()
 
 void MFS::writeResiduals()
 {
+        //Restoring the weights to the original
         printf("Transferring residuals to host memory\n");
         if(!gridding)
         {
+                this->scheme->restoreWeights(datasets);
                 //Saving residuals to disk
                 for(int d=0; d<nMeasurementSets; d++) {
-                        residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
+                        modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
                 }
         }else{
                 double deltax = RPDEG_D*DELTAX; //radians
@@ -937,11 +952,12 @@ void MFS::writeResiduals()
                 deltav = 1.0 / (N * deltay);
 
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
+                // In the de-gridding procedure weights are also restored to the original
                 for(int d=0; d<nMeasurementSets; d++)
-                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N);
+                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel);
 
                 for(int d=0; d<nMeasurementSets; d++)
-                        residualsToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
+                        modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
 
         }
 
@@ -1072,6 +1088,6 @@ Synthesizer* CreateMFS()
 {
         return new MFS;
 }
-const int MFSID = 0;
-const bool RegisteredMFS = Singleton<SynthesizerFactory>::Instance().RegisterSynthesizer(MFSID, CreateMFS);
+const std::string name = "MFS";
+const bool RegisteredMFS = registerCreationFunction<Synthesizer, std::string>(name, CreateMFS);
 };

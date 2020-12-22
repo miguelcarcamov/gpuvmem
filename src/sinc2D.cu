@@ -11,6 +11,7 @@ __host__ void Sinc2D::buildKernel(float amp, float x0, float y0, float sigma_x, 
                         this->kernel[this->n*i+j] = sinc2D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w1);
                 }
         }
+        this->copyKerneltoGPU();
 
 };
 
@@ -34,6 +35,7 @@ CKernel* CreateCKernel()
 {
         return new Sinc2D;
 }
-const int CKERNELID = 3;
-const bool RegisteredCKernel = Singleton<CKernelFactory>::Instance().RegisterCKernel(CKERNELID, CreateCKernel);
+
+const std::string name = "Sinc2D";
+const bool RegisteredSinc2D = registerCreationFunction<CKernel, std::string>(name, CreateCKernel);
 };

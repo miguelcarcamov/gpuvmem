@@ -1,3 +1,6 @@
+#ifndef MSFITSIO_CUH
+#define MSFITSIO_CUH
+
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -144,7 +147,7 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
 __host__ void MScopy(char const *in_dir, char const *in_dir_dest);
 
-__host__ void residualsToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu);
+__host__ void modelToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu);
 __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag);
 
 __host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU);
@@ -156,3 +159,5 @@ __host__ void closeCanvas(fitsfile *canvas);
 __host__ __device__ float freq_to_wavelength(float freq);
 __host__ __device__ double metres_to_lambda(double uvw_metres, float freq);
 __host__ __device__ float distance(float x, float y, float x0, float y0);
+
+#endif

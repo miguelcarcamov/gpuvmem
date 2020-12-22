@@ -40,10 +40,11 @@ void TotalSquaredVariationP::setSandDs(float *S, float *Ds)
 };
 
 namespace {
-Fi* CreateTotalSquaredVariationP()
+Fi* CreateTotalSquaredVariation()
 {
         return new TotalSquaredVariationP;
 }
-const int TotalSquaredVariationPId = 5;
-const bool RegisteredTotalSquaredVariationP = Singleton<FiFactory>::Instance().RegisterFi(TotalSquaredVariationPId, CreateTotalSquaredVariationP);
+
+const std::string name = "TotalSquaredVariation";
+const bool RegisteredTotalSquaredVariation = registerCreationFunction<Fi, std::string>(name, CreateTotalSquaredVariation);
 };

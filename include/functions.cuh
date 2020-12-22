@@ -37,9 +37,9 @@ __host__ void getNumBlocksAndThreads(int n, int maxBlocks, int maxThreads, int &
 __host__ Vars getOptions(int argc, char **argv);
 __host__ float chiCuadrado(float *I);
 __host__ void dchiCuadrado(float *I, float *dxi2);
-__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, float robust, CKernel *ckernel, int gridding);
+__host__ void do_gridding(std::vector<Field>& fields, MSData *data, double deltau, double deltav, int M, int N, CKernel *ckernel, int gridding);
 __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<cufftComplex> Vm_gridded_sp, std::vector<double3> uvw_gridded_sp, double deltau, double deltav, float freq, long M, long N, int numvis);
-__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N);
+__host__ void degridding(std::vector<Field>& fields, MSData data, double deltau, double deltav, int num_gpus, int firstgpu, int blockSizeV, long M, long N, CKernel *ckernel);
 __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa);
 __host__ void calc_sBeam(std::vector<double> u, std::vector<double> v, std::vector<float> weight, float nu, double *s_uu, double *s_vv, double *s_uv);
 __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int num_gpus);
@@ -131,6 +131,8 @@ __global__ void updateQ (float *d_q, float alpha, float *d_y, int k, int M, int 
 __global__ void getDot_LBFGS_ff(float *aux_vector, float *vec_1, float *vec_2, int k, int h, int M, int N, int image);
 __global__ void searchDirection_LBFGS(float *xi, long N, long M, int image);
 __global__ void fftshift_2D(cufftComplex *data, int N1, int N2);
+__global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, double deltau, double deltav, int visibilities, int M, int N);
+__global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, double deltau, double deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY);
 
 
 #endif
