@@ -7,13 +7,18 @@
 
 class L1norm : public Fi
 {
+private:
+float epsilon = 1E-12;
 public:
 L1norm();
+L1norm(float epsilon);
+float getEpsilon();
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();
 void addToDphi(float *device_dphi);
 void setSandDs(float *S, float *Ds);
+void setEpsilon(float epsilon);
 float calculateSecondDerivate(){
 };
 };

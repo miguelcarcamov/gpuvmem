@@ -9,18 +9,26 @@ L1norm::L1norm(){
         this->name = "L1 Norm";
 };
 
+L1norm::L1norm(float epsilon){
+        this->name = "L1 Norm";
+        this->epsilon = epsilon;
+};
+
+float L1norm::getEpsilon(){
+        return this->epsilon;
+};
+
 float L1norm::calcFi(float *p)
 {
         float result = 0.0;
-        this->set_fivalue(L1Norm(p, device_S, penalization_factor, mod, order, imageIndex));
+        this->set_fivalue(L1Norm(p, device_S, penalization_factor, this->epsilon, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 }
 void L1norm::calcGi(float *p, float *xi)
 {
-        DL1Norm(p, device_DS, penalization_factor, mod, order, imageIndex);
+        DL1Norm(p, device_DS, penalization_factor, this->epsilon, mod, order, imageIndex);
 };
-
 
 void L1norm::restartDGi()
 {
@@ -38,6 +46,11 @@ void L1norm::setSandDs(float *S, float *Ds)
         cudaFree(this->device_DS);
         this->device_S = S;
         this->device_DS = Ds;
+};
+
+void L1norm::setEpsilon(float epsilon)
+{
+        this->epsilon = epsilon;
 };
 
 namespace {

@@ -305,6 +305,7 @@ void MFS::configure(int argc, char **argv)
         }else if(count_gpus == 1) {
                 multigpu = 0;
                 selected = atoi(string_values[0].c_str());
+                firstgpu = selected;
         }else{
                 multigpu = count_gpus;
                 firstgpu = atoi(string_values[0].c_str());
@@ -333,7 +334,6 @@ void MFS::configure(int argc, char **argv)
         }else{
                 if(multigpu == 0) {
                         num_gpus = 1;
-                        firstgpu = selected;
                 }else{
                         for(int d=0; d<nMeasurementSets; d++) {
                                 if(datasets[d].data.total_frequencies > max_nfreq)
@@ -426,7 +426,7 @@ void MFS::configure(int argc, char **argv)
                 printf("Building Antialiasing Kernel\n");
                 this->ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabs(deltau), fabs(deltav));
                 if(print_images)
-                  ckernel->printCKernel();
+                        ckernel->printCKernel();
                 printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
@@ -459,8 +459,12 @@ void MFS::setDevice()
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         if(num_gpus == 1) {
-                                cudaSetDevice(selected);
+                                cudaSetDevice(firstgpu);
+                                checkCudaErrors(cudaMalloc((void**)&datasets[d].fields[f].atten_image, sizeof(float)*M*N));
+                                checkCudaErrors(cudaMemset(datasets[d].fields[f].atten_image, 0, sizeof(float)*M*N));
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
+                                        if(num_gpus > 1)
+                                                cudaSetDevice((i % num_gpus) + firstgpu);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].uvw,
                                                                            sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
@@ -492,36 +496,6 @@ void MFS::setDevice()
                                         }
                                 }
 
-                                checkCudaErrors(cudaMalloc((void**)&datasets[d].fields[f].atten_image, sizeof(float)*M*N));
-                                checkCudaErrors(cudaMemset(datasets[d].fields[f].atten_image, 0, sizeof(float)*M*N));
-
-                        }else{
-                                cudaSetDevice(firstgpu);
-                                checkCudaErrors(cudaMalloc((void**)&datasets[d].fields[f].atten_image, sizeof(float)*M*N));
-                                checkCudaErrors(cudaMemset(datasets[d].fields[f].atten_image, 0, sizeof(float)*M*N));
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        cudaSetDevice((i % num_gpus) + firstgpu);
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].uvw,
-                                                                           sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vo,
-                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].weight,
-                                                                           sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vm,
-                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].Vr,
-                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].uvw,datasets[d].fields[f].visibilities[i][s].uvw.data(),
-                                                                           sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
-                                                checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].weight,datasets[d].fields[f].visibilities[i][s].weight.data(),
-                                                                           sizeof(float) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
-                                                checkCudaErrors(cudaMemcpy(datasets[d].fields[f].device_visibilities[i][s].Vo,datasets[d].fields[f].visibilities[i][s].Vo.data(),
-                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],cudaMemcpyHostToDevice));
-                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0, sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        }
-                                }
                         }
                 }
         }
@@ -692,41 +666,36 @@ void MFS::setDevice()
         start = omp_get_wtime();
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f < datasets[d].data.nfields; f++) {
-                        if(num_gpus == 1) {
-                                cudaSetDevice(selected);
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                        hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
-                                                        (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
-                                                }
-                                        }
-                                }
+                        #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
+                        for (int i = 0; i < datasets[d].data.total_frequencies; i++)
+                        {
+                                unsigned int j = omp_get_thread_num();
+                                unsigned int num_cpu_threads = omp_get_num_threads();
+                                int gpu_idx;
 
-                        }else{
-                            #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
-                                for (int i = 0; i < datasets[d].data.total_frequencies; i++)
-                                {
-                                        unsigned int j = omp_get_thread_num();
-                                        //unsigned int num_cpu_threads = omp_get_num_threads();
+                                if(num_cpu_threads > 1) {
                                         // set and check the CUDA device for this CPU thread
                                         int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
+                                        cudaSetDevice((i%num_gpus) + firstgpu);             // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                        hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
-                                                        (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                        checkCudaErrors(cudaDeviceSynchronize());
-                                                }
+                                        gpu_idx = i%num_gpus;
+                                }else{
+                                        int gpu_id = -1;
+                                        cudaSetDevice(selected);
+                                        cudaGetDevice(&gpu_id);
+                                        gpu_idx = 0;
+                                }
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                        if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >> >
+                                                (datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].nu[i], datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                checkCudaErrors(cudaDeviceSynchronize());
                                         }
                                 }
-
-
                         }
+
+
                 }
 
 
@@ -802,40 +771,34 @@ void MFS::clearRun()
 {
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-                        if(num_gpus == 1) {
-                                cudaSetDevice(selected);
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0,
-                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,
-                                                                           sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        }
-                                }
-
-                        }else{
-                                cudaSetDevice(firstgpu);
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
+                        for(int i=0; i<datasets[d].data.total_frequencies; i++) {
+                                if(num_gpus > 1)
+                                        cudaSetDevice(selected);
+                                else
                                         cudaSetDevice((i % num_gpus) + firstgpu);
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0, sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                                checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        }
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                        checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0,
+                                                                   sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+                                        checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vm, 0,
+                                                                   sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                 }
                         }
+
                 }
         }
 
+
         for(int g=0; g<num_gpus; g++) {
                 cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N));
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N*image_count));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N*image_count));
 
         }
 
         checkCudaErrors(cudaMemcpy(device_Image, host_I, sizeof(float)*N*M*image_count, cudaMemcpyHostToDevice));
 
-}
+};
+
 void MFS::run()
 {
         printf("\n\nStarting optimizator\n");
@@ -987,11 +950,7 @@ void MFS::unSetDevice()
 {
         //Free device and host memory
         printf("Freeing device memory\n");
-        if(num_gpus == 1) {
-                cudaSetDevice(selected);
-        }else{
-                cudaSetDevice(firstgpu);
-        }
+        cudaSetDevice(firstgpu);
 
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {

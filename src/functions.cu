@@ -1061,18 +1061,18 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                                 {
                                                                         if(shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N) {
                                                                                 ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
-                                                                                if(shifted_j >= N/2){
-                                                                                  g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
-                                                                                  g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
-                                                                                  g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
-                                                                                  g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
+                                                                                if(shifted_j >= N/2) {
+                                                                                        g_Vo[N * shifted_k + shifted_j].x += w * Vo.x * ckernel_result;
+                                                                                        g_Vo[N * shifted_k + shifted_j].y += w * Vo.y * ckernel_result;
+                                                                                        g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
+                                                                                        g_weights_aux[N * shifted_k + shifted_j] += w * ckernel_result * ckernel_result;
                                                                                 }else{
-                                                                                  herm_j = N-shifted_j;
-                                                                                  herm_k = M-shifted_k;
-                                                                                  g_Vo[N * herm_k + herm_j].x += w * Vo.x * ckernel_result;
-                                                                                  g_Vo[N * herm_k + herm_j].y -= w * Vo.y * ckernel_result;
-                                                                                  g_weights[N * herm_k + herm_j] += w * ckernel_result;
-                                                                                  g_weights_aux[N * herm_k + herm_j] += w * ckernel_result * ckernel_result;
+                                                                                        herm_j = N-shifted_j;
+                                                                                        herm_k = M-shifted_k;
+                                                                                        g_Vo[N * herm_k + herm_j].x += w * Vo.x * ckernel_result;
+                                                                                        g_Vo[N * herm_k + herm_j].y -= w * Vo.y * ckernel_result;
+                                                                                        g_weights[N * herm_k + herm_j] += w * ckernel_result;
+                                                                                        g_weights_aux[N * herm_k + herm_j] += w * ckernel_result * ckernel_result;
                                                                                 }
                                                                         }
                                                                 }
@@ -1552,63 +1552,63 @@ __host__ void FFT2D(cufftComplex *output_data, cufftComplex *input_data, cufftHa
 
 __global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, double deltau, double deltav, int visibilities, int M, int N)
 {
-   int i = blockDim.x * blockIdx.x + threadIdx.x;
-   int k, j;
-   if(i < visibilities)
-   {
-    j = round(uvw[i].x / fabs(deltau) + M/2);
-    k = round(uvw[i].y / fabs(deltav) + N/2);
+        int i = blockDim.x * blockIdx.x + threadIdx.x;
+        int k, j;
+        if(i < visibilities)
+        {
+                j = round(uvw[i].x / fabs(deltau) + M/2);
+                k = round(uvw[i].y / fabs(deltav) + N/2);
 
-    if (k < M && j < N)
-    {
+                if (k < M && j < N)
+                {
 
-      atomicAdd(&Vo_g[N*k+j].x, w[i]*Vo[i].x);
-      atomicAdd(&Vo_g[N*k+j].y, w[i]*Vo[i].y);
-      atomicAdd(&w_g[N*k+j], w[i]);
-    }
-   }
+                        atomicAdd(&Vo_g[N*k+j].x, w[i]*Vo[i].x);
+                        atomicAdd(&Vo_g[N*k+j].y, w[i]*Vo[i].y);
+                        atomicAdd(&w_g[N*k+j], w[i]);
+                }
+        }
 }
 
 __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g, float *kernel, double deltau, double deltav, int visibilities, int M, int N, int kernel_m, int kernel_n, int supportX, int supportY)
 {
-  int i = blockDim.x * blockIdx.x + threadIdx.x;
-  int k, j;
-  int shifted_k, shifted_j;
-  int kernel_i, kernel_j;
-  int herm_j, herm_k;
-  cufftComplex degrid_val = complexZero<cufftComplex>();
-  float ckernel_result;
+        int i = blockDim.x * blockIdx.x + threadIdx.x;
+        int k, j;
+        int shifted_k, shifted_j;
+        int kernel_i, kernel_j;
+        int herm_j, herm_k;
+        cufftComplex degrid_val = complexZero<cufftComplex>();
+        float ckernel_result;
 
-  if(i < visibilities)
-  {
-
-    j = round(uvw[i].x / fabs(deltau) + N/2);
-    k = round(uvw[i].y / fabs(deltav) + M/2);
-
-    for(int m=-supportY; m<=supportY; m++){
-      for(int n=-supportX; n<=supportX; n++){
-        shifted_j = j + n;
-        shifted_k = k + m;
-        kernel_j = n + supportX;
-        kernel_i = m + supportY;
-        if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N)
+        if(i < visibilities)
         {
-          ckernel_result = kernel[kernel_n*kernel_i+kernel_j];
-          if(shifted_j >= N/2){
-            degrid_val.x += ckernel_result * Vm_g[N*shifted_k+shifted_j].x;
-            degrid_val.y += ckernel_result * Vm_g[N*shifted_k+shifted_j].y;
-          }else{
-            herm_j = N-shifted_j;
-            herm_k = M-shifted_k;
-            degrid_val.x += ckernel_result * Vm_g[N*herm_k+herm_j].x;
-            degrid_val.y -= ckernel_result * Vm_g[N*herm_k+herm_j].y;
-          }
+
+                j = round(uvw[i].x / fabs(deltau) + N/2);
+                k = round(uvw[i].y / fabs(deltav) + M/2);
+
+                for(int m=-supportY; m<=supportY; m++) {
+                        for(int n=-supportX; n<=supportX; n++) {
+                                shifted_j = j + n;
+                                shifted_k = k + m;
+                                kernel_j = n + supportX;
+                                kernel_i = m + supportY;
+                                if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 && shifted_j < N)
+                                {
+                                        ckernel_result = kernel[kernel_n*kernel_i+kernel_j];
+                                        if(shifted_j >= N/2) {
+                                                degrid_val.x += ckernel_result * Vm_g[N*shifted_k+shifted_j].x;
+                                                degrid_val.y += ckernel_result * Vm_g[N*shifted_k+shifted_j].y;
+                                        }else{
+                                                herm_j = N-shifted_j;
+                                                herm_k = M-shifted_k;
+                                                degrid_val.x += ckernel_result * Vm_g[N*herm_k+herm_j].x;
+                                                degrid_val.y -= ckernel_result * Vm_g[N*herm_k+herm_j].y;
+                                        }
+                                }
+                        }
+                }
+                Vm[i].x = degrid_val.x;
+                Vm[i].y = degrid_val.y;
         }
-      }
-    }
-    Vm[i].x = degrid_val.x;
-    Vm[i].y = degrid_val.y;
-  }
 }
 
 __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, int numVisibilities)
@@ -2092,7 +2092,11 @@ __global__ void chi2Vector(float *chi2, cufftComplex *Vr, float *w, long numVisi
 
 }
 
-__device__ float calculateL1norm(float *I, float noise, float noise_cut, int index, int M, int N)
+__host__ __device__ float approxAbs(float val, float epsilon){
+        return sqrtf(val*val + epsilon);
+}
+
+__device__ float calculateL1norm(float *I, float epsilon, float noise, float noise_cut, int index, int M, int N)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -2101,18 +2105,41 @@ __device__ float calculateL1norm(float *I, float noise, float noise_cut, int ind
         float l1 = 0.0f;
 
         if(noise < noise_cut) {
-                l1 = fabsf(c);
+                l1 = approxAbs(c, epsilon);
         }
 
         return l1;
 }
 
-__global__ void L1Vector(float *L1, float *noise, float *I, long N, long M, float noise_cut, int index)
+__global__ void L1Vector(float *L1, float *noise, float *I, long N, long M, float epsilon, float noise_cut, int index)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        L1[N*i+j] = calculateL1norm(I, noise[N*i+j], noise_cut, index, M, N);
+        L1[N*i+j] = calculateL1norm(I, epsilon, noise[N*i+j], noise_cut, index, M, N);
+}
+
+__device__ float calculateDNormL1(float *I, float lambda, float noise, float epsilon, float noise_cut, int index, int M, int N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        float den;
+        float dL1 = 0.0f;
+        float c = I[N*M*index+N*i+j];
+
+        if(noise < noise_cut)
+                dL1 = c/approxAbs(c, epsilon);
+
+        dL1 *= lambda;
+        return dL1;
+}
+
+__global__ void DL1NormK(float *dL1, float *I, float *noise, float epsilon, float noise_cut, float lambda, long N, long M, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        dL1[N*i+j]  = calculateDNormL1(I, lambda, noise[N*i+j], epsilon, noise_cut, index, M, N);
 }
 
 __device__ float calculateS(float *I, float G, float eta, float noise, float noise_cut, int index, int M, int N)
@@ -2135,6 +2162,31 @@ __global__ void SVector(float *S, float *noise, float *I, long N, long M, float 
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         S[N*i+j] = calculateS(I, MINPIX, eta, noise[N*i+j], noise_cut, index, M, N);
+}
+
+
+__device__ float calculateDS(float *I, float G, float eta, float lambda, float noise, float noise_cut, int index, int M, int N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        float dS = 0.0f;
+
+        float c = I[N*M*index+N*i+j];
+        if(noise < noise_cut) {
+                dS = logf((c / G) + (eta+1.0)) + 1.0/(1.0 + (((eta+1.0)*G) / c));
+        }
+
+        dS *= lambda;
+        return dS;
+}
+
+__global__ void DS(float *dS, float *I, float *noise, float noise_cut, float lambda, float MINPIX, float eta, long N, long M, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        dS[N*i+j]  = calculateDS(I, MINPIX, eta, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __device__ float calculateQP(float *I, float noise, float noise_cut, int index, int M, int N)
@@ -2174,6 +2226,45 @@ __global__ void QPVector(float *Q, float *noise, float *I, long N, long M, float
         Q[N*i+j] = calculateQP(I, noise[N*i+j], noise_cut, index, M, N);
 }
 
+__device__ float calculateDQ(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        float dQ = 0.0f;
+        float c, d, u, r, l;
+
+        c = I[N*M*index+N*i+j];
+
+        if(noise < noise_cut)
+        {
+                if((i>0 && i<N-1) && (j>0 && j<N-1)) {
+                        d = I[N*M*index+N*(i+1)+j];
+                        u = I[N*M*index+N*(i-1)+j];
+                        r = I[N*M*index+N*i+(j+1)];
+                        l = I[N*M*index+N*i+(j-1)];
+
+                        dQ = 2 * (4 * c - d + u + r + l);
+                }else{
+                        dQ = c;
+                }
+        }
+
+        dQ *= lambda;
+
+        return dQ;
+}
+
+__global__ void DQ(float *dQ, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+
+        dQ[N*i+j] = calculateDQ(I, lambda, noise[N*i+j], noise_cut, index, M, N);
+
+}
+
 __device__ float calculateTV(float *I, float noise, float noise_cut, int index, int M, int N)
 {
 
@@ -2211,6 +2302,70 @@ __global__ void TVVector(float *TV, float *noise, float *I, long N, long M, floa
 
 }
 
+__device__ float calculateDTV(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
+{
+
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        float c, d, u, r, l, dl_corner, ru_corner;
+
+        float num0, num1, num2;
+        float den0[2], den1[2], den2[2];
+        float norm0, norm1, norm2;
+        float dtv = 0.0f;
+
+        c = I[N*M*index+N*i+j];
+        if(noise < noise_cut) {
+                if((i>0 && i<N-1) && (j>0 && j<N-1)) {
+                        d = I[N*M*index+N*(i+1)+j];
+                        u = I[N*M*index+N*(i-1)+j];
+                        r = I[N*M*index+N*i+(j+1)];
+                        l = I[N*M*index+N*i+(j-1)];
+                        dl_corner = I[N*M*index+N*(i+1)+(j-1)];
+                        ru_corner = I[N*M*index+N*(i-1)+(j+1)];
+
+                        num0 = 2 * c - r - d;
+                        num1 = c - l;
+                        num2 = c - u;
+
+                        den0[0] = c - r;
+                        den0[1] = c - d;
+
+                        den1[0] = l - c;
+                        den1[1] = l - dl_corner;
+
+                        den2[0] = u - ru_corner;
+                        den2[1] = u - c;
+
+                        norm0 = normf(2, den0);
+                        norm1 = normf(2, den1);
+                        norm2 = normf(2, den2);
+
+                        if(norm0 == 0.0f || norm1 == 0.0f || norm2 == 0.0f) {
+                                dtv = c;
+                        }else{
+                                dtv = num0/norm0 + num1/norm1 + num2/norm2;
+                        }
+                }else{
+                        dtv = c;
+                }
+        }
+
+        dtv *= lambda;
+
+        return dtv;
+
+}
+__global__ void DTV(float *dTV, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        float center, down, up, right, left, dl_corner, ru_corner;
+
+
+        dTV[N*i+j] = calculateDTV(I, lambda, noise[N*i+j], noise_cut, index, M, N);
+}
+
 __device__ float calculateTSV(float *I, float noise, float noise_cut, int index, int M, int N)
 {
 
@@ -2244,6 +2399,46 @@ __global__ void TSVVector(float *STV, float *noise, float *I, long N, long M, fl
 
         STV[N*i+j] = calculateTSV(I, noise[N*i+j], noise_cut, index, M, N);
 
+}
+
+
+__device__ float calculateDTSV(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
+{
+
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        float c, d, u, r, l, dl_corner, ru_corner;
+
+        float dstv = 0.0f;
+
+        c = I[N*M*index+N*i+j];
+        if(noise < noise_cut) {
+                if((i>0 && i<N-1) && (j>0 && j<N-1)) {
+                        d = I[N*M*index+N*(i+1)+j];
+                        u = I[N*M*index+N*(i-1)+j];
+                        r = I[N*M*index+N*i+(j+1)];
+                        l = I[N*M*index+N*i+(j-1)];
+
+                        dstv = 8.0f*c - 2.0f*(u + l + d + r);
+                }else{
+                        dstv = c;
+                }
+        }
+
+        dstv *= lambda;
+
+        return dstv;
+
+}
+
+__global__ void DTSV(float *dSTV, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        float center, down, up, right, left, dl_corner, ru_corner;
+
+
+        dSTV[N*i+j] = calculateDTSV(I, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __device__ float calculateL(float *I, float noise, float noise_cut, int index, int M, int N)
@@ -2281,6 +2476,56 @@ __global__ void LVector(float *L, float *noise, float *I, long N, long M, float 
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         L[N*i+j] = calculateL(I, noise[N*i+j], noise_cut, index, M, N);
+}
+
+
+__device__ float calculateDL(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        float c, d, u, r, l, dl_corner, dr_corner, lu_corner, ru_corner, d2, u2, l2, r2;
+
+        float dL = 0.0f;
+
+        c = I[N*M*index+N*i+j];
+
+        if(noise < noise_cut)
+        {
+                if((i>1 && i<N-2) && (j>1 && j<N-2)) {
+                        d = I[N*M*index+N*(i+1)+j];
+                        u = I[N*M*index+N*(i-1)+j];
+                        r = I[N*M*index+N*i+(j+1)];
+                        l = I[N*M*index+N*i+(j-1)];
+                        dl_corner = I[N*M*index+N*(i+1)+(j-1)];
+                        dr_corner = I[N*M*index+N*(i+1)+(j+1)];
+                        lu_corner = I[N*M*index+N*(i-1)+(j-1)];
+                        ru_corner = I[N*M*index+N*(i-1)+(j+1)];
+                        d2 = I[N*M*index+N*(i+2)+j];
+                        u2 = I[N*M*index+N*(i-2)+j];
+                        l2 = I[N*M*index+N*i+(j-2)];
+                        r2 = I[N*M*index+N*i+(j+2)];
+
+                        dL = 20 * c -
+                             8 * (d - r - u - l) +
+                             2 * (dl_corner + dr_corner + lu_corner + ru_corner) +
+                             d2 + r2 + u2 + l2;
+                }else
+                        dL = 0.0f;
+
+        }
+
+        dL *= lambda;
+
+        return dL;
+}
+
+__global__ void DL(float *dL, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        dL[N*i+j] = calculateDL(I, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __global__ void searchDirection(float *g, float *xi, float *h, long N)
@@ -2373,248 +2618,6 @@ __global__ void restartDPhi(float *dphi, float *dChi2, float *dH, long N)
         dH[N*i+j] = 0.0;
 
 }
-
-
-__device__ float calculateDNormL1(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        float dL1 = 0.0f;
-
-        float c = I[N*M*index+N*i+j];
-        float sign = copysignf(1.0f, c);
-        if(noise < noise_cut)
-                dL1 = sign;
-
-
-        dL1 *= lambda;
-        return dL1;
-}
-
-__global__ void DL1NormK(float *dL1, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        dL1[N*i+j]  = calculateDNormL1(I, lambda, noise[N*i+j], noise_cut, index, M, N);
-}
-
-__device__ float calculateDS(float *I, float G, float eta, float lambda, float noise, float noise_cut, int index, int M, int N)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        float dS = 0.0f;
-
-        float c = I[N*M*index+N*i+j];
-        if(noise < noise_cut) {
-                dS = logf((c / G) + (eta+1.0)) + 1.0/(1.0 + (((eta+1.0)*G) / c));
-        }
-
-        dS *= lambda;
-        return dS;
-}
-
-__global__ void DS(float *dS, float *I, float *noise, float noise_cut, float lambda, float MINPIX, float eta, long N, long M, int index)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        dS[N*i+j]  = calculateDS(I, MINPIX, eta, lambda, noise[N*i+j], noise_cut, index, M, N);
-}
-
-__device__ float calculateDQ(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        float dQ = 0.0f;
-        float c, d, u, r, l;
-
-        c = I[N*M*index+N*i+j];
-
-        if(noise < noise_cut)
-        {
-                if((i>0 && i<N-1) && (j>0 && j<N-1)) {
-                        d = I[N*M*index+N*(i+1)+j];
-                        u = I[N*M*index+N*(i-1)+j];
-                        r = I[N*M*index+N*i+(j+1)];
-                        l = I[N*M*index+N*i+(j-1)];
-
-                        dQ = 2 * (4 * c - d + u + r + l);
-                }else{
-                        dQ = c;
-                }
-        }
-
-        dQ *= lambda;
-
-        return dQ;
-}
-
-__global__ void DQ(float *dQ, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-
-        dQ[N*i+j] = calculateDQ(I, lambda, noise[N*i+j], noise_cut, index, M, N);
-
-}
-
-__device__ float calculateDTV(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
-{
-
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-        float c, d, u, r, l, dl_corner, ru_corner;
-
-        float num0, num1, num2;
-        float den0[2], den1[2], den2[2];
-        float norm0, norm1, norm2;
-        float dtv = 0.0f;
-
-        c = I[N*M*index+N*i+j];
-        if(noise < noise_cut) {
-                if((i>0 && i<N-1) && (j>0 && j<N-1)) {
-                        d = I[N*M*index+N*(i+1)+j];
-                        u = I[N*M*index+N*(i-1)+j];
-                        r = I[N*M*index+N*i+(j+1)];
-                        l = I[N*M*index+N*i+(j-1)];
-                        dl_corner = I[N*M*index+N*(i+1)+(j-1)];
-                        ru_corner = I[N*M*index+N*(i-1)+(j+1)];
-
-                        num0 = 2 * c - r - d;
-                        num1 = c - l;
-                        num2 = c - u;
-
-                        den0[0] = c - r;
-                        den0[1] = c - d;
-
-                        den1[0] = l - c;
-                        den1[1] = l - dl_corner;
-
-                        den2[0] = u - ru_corner;
-                        den2[1] = u - c;
-
-                        norm0 = normf(2, den0);
-                        norm1 = normf(2, den1);
-                        norm2 = normf(2, den2);
-
-                        if(norm0 == 0.0f || norm1 == 0.0f || norm2 == 0.0f) {
-                                dtv = c;
-                        }else{
-                                dtv = num0/norm0 + num1/norm1 + num2/norm2;
-                        }
-                }else{
-                        dtv = c;
-                }
-        }
-
-        dtv *= lambda;
-
-        return dtv;
-
-}
-__global__ void DTV(float *dTV, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-        float center, down, up, right, left, dl_corner, ru_corner;
-
-
-        dTV[N*i+j] = calculateDTV(I, lambda, noise[N*i+j], noise_cut, index, M, N);
-}
-
-__device__ float calculateDTSV(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
-{
-
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-        float c, d, u, r, l, dl_corner, ru_corner;
-
-        float dstv = 0.0f;
-
-        c = I[N*M*index+N*i+j];
-        if(noise < noise_cut) {
-                if((i>0 && i<N-1) && (j>0 && j<N-1)) {
-                        d = I[N*M*index+N*(i+1)+j];
-                        u = I[N*M*index+N*(i-1)+j];
-                        r = I[N*M*index+N*i+(j+1)];
-                        l = I[N*M*index+N*i+(j-1)];
-
-                        dstv = 8.0f*c - 2.0f*(u + l + d + r);
-                }else{
-                        dstv = c;
-                }
-        }
-
-        dstv *= lambda;
-
-        return dstv;
-
-}
-
-__global__ void DTSV(float *dSTV, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-        float center, down, up, right, left, dl_corner, ru_corner;
-
-
-        dSTV[N*i+j] = calculateDTSV(I, lambda, noise[N*i+j], noise_cut, index, M, N);
-}
-
-__device__ float calculateDL(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        float c, d, u, r, l, dl_corner, dr_corner, lu_corner, ru_corner, d2, u2, l2, r2;
-
-        float dL = 0.0f;
-
-        c = I[N*M*index+N*i+j];
-
-        if(noise < noise_cut)
-        {
-                if((i>1 && i<N-2) && (j>1 && j<N-2)) {
-                        d = I[N*M*index+N*(i+1)+j];
-                        u = I[N*M*index+N*(i-1)+j];
-                        r = I[N*M*index+N*i+(j+1)];
-                        l = I[N*M*index+N*i+(j-1)];
-                        dl_corner = I[N*M*index+N*(i+1)+(j-1)];
-                        dr_corner = I[N*M*index+N*(i+1)+(j+1)];
-                        lu_corner = I[N*M*index+N*(i-1)+(j-1)];
-                        ru_corner = I[N*M*index+N*(i-1)+(j+1)];
-                        d2 = I[N*M*index+N*(i+2)+j];
-                        u2 = I[N*M*index+N*(i-2)+j];
-                        l2 = I[N*M*index+N*i+(j-2)];
-                        r2 = I[N*M*index+N*i+(j+2)];
-
-                        dL = 20 * c -
-                             8 * (d - r - u - l) +
-                             2 * (dl_corner + dr_corner + lu_corner + ru_corner) +
-                             d2 + r2 + u2 + l2;
-                }else
-                        dL = 0.0f;
-
-        }
-
-        dL *= lambda;
-
-        return dL;
-}
-
-__global__ void DL(float *dL, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        dL[N*i+j] = calculateDL(I, lambda, noise[N*i+j], noise_cut, index, M, N);
-}
-
 
 __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, int primary_beam)
 {
@@ -2973,112 +2976,66 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-                        if(num_gpus == 1) {
-                                cudaSetDevice(selected);
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
 
-                                        ip->calculateInu(vars_gpu[0].device_I_nu, I, datasets[d].fields[f].nu[i]);
+                        #pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
+                        for (int i = 0; i < datasets[d].data.total_frequencies; i++)
+                        {
+                                float result = 0.0;
+                                unsigned int j = omp_get_thread_num();
+                                unsigned int num_cpu_threads = omp_get_num_threads();
+                                int gpu_idx;
 
-                                        ip->apply_beam(vars_gpu[0].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
-
-                                        //FFT 2D
-                                        FFT2D(vars_gpu[0].device_V, vars_gpu[0].device_I_nu, vars_gpu[0].plan, M, N, CUFFT_FORWARD, false);
-
-                                        // PHASE_ROTATE
-                                        phase_rotate <<< numBlocksNN, threadsPerBlockNN >>>
-                                        (vars_gpu[0].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
-                                        checkCudaErrors(cudaDeviceSynchronize());
-
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY)
-                                                {
-                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-
-                                                                checkCudaErrors(cudaMemset(vars_gpu[0].device_chi2, 0, sizeof(float) * max_number_vis));
-
-                                                                // BILINEAR INTERPOLATION
-                                                                vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                                (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
-
-                                                                //DFT 2D
-                                                                /*DFT2D <<<fields[f].visibilities[i][s].numBlocksUV,
-                                                                   fields[f].visibilities[i][s].threadsPerBlockUV>>>(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_I_nu, fields[f].device_visibilities[i][s].uvw, device_noise_image, noise_cut, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, M, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                                   checkCudaErrors(cudaDeviceSynchronize());*/
-
-                                                                // RESIDUAL CALCULATION
-                                                                residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                                (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
-
-                                                                ////chi 2 VECTOR
-                                                                chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                                (vars_gpu[0].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
-
-                                                                //REDUCTIONS
-                                                                //chi2
-                                                                resultchi2 += deviceReduce<float>(vars_gpu[0].device_chi2,
-                                                                                                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
-                                                        }
-                                                }
-                                        }
-                                }
-                        }else{
-                              #pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
-                                for (int i = 0; i < datasets[d].data.total_frequencies; i++)
-                                {
-                                        float result = 0.0;
-                                        unsigned int j = omp_get_thread_num();
-                                        //unsigned int num_cpu_threads = omp_get_num_threads();
+                                if(num_cpu_threads > 1) {
                                         // set and check the CUDA device for this CPU thread
                                         int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
+                                        cudaSetDevice((i%num_gpus) + firstgpu);           // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
-                                        ip->calculateInu(vars_gpu[i % num_gpus].device_I_nu, I, datasets[d].fields[f].nu[i]);
+                                        gpu_idx = i%num_gpus;
+                                }else{
+                                        int gpu_id = -1;
+                                        cudaSetDevice(selected);
+                                        cudaGetDevice(&gpu_id);
+                                        gpu_idx = 0;
+                                }
 
-                                        ip->apply_beam(vars_gpu[i % num_gpus].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs,
-                                                       datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
+                                ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I, datasets[d].fields[f].nu[i]);
 
-                                        //FFT 2D
-                                        FFT2D(vars_gpu[i % num_gpus].device_V, vars_gpu[i % num_gpus].device_I_nu, vars_gpu[i % num_gpus].plan, M, N, CUFFT_FORWARD, false);
+                                ip->apply_beam(vars_gpu[gpu_idx].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs,
+                                               datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
 
-                                        //PHASE_ROTATE
-                                        phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[i % num_gpus].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
-                                        checkCudaErrors(cudaDeviceSynchronize());
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
-                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                //FFT 2D
+                                FFT2D(vars_gpu[i % num_gpus].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[i % num_gpus].plan, M, N, CUFFT_FORWARD, false);
 
-                                                                checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_chi2, 0, sizeof(float)*max_number_vis));
-                                                                // BILINEAR INTERPOLATION
-                                                                vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                                (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                //PHASE_ROTATE
+                                phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
+                                checkCudaErrors(cudaDeviceSynchronize());
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
 
-                                                                // RESIDUAL CALCULATION
-                                                                residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                                (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0, sizeof(float)*max_number_vis));
+                                                // BILINEAR INTERPOLATION
+                                                vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                checkCudaErrors(cudaDeviceSynchronize());
 
-                                                                ////chi2 VECTOR
-                                                                chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>> (vars_gpu[i % num_gpus].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                // RESIDUAL CALCULATION
+                                                residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                checkCudaErrors(cudaDeviceSynchronize());
+
+                                                ////chi2 VECTOR
+                                                chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>> (vars_gpu[gpu_idx].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                checkCudaErrors(cudaDeviceSynchronize());
 
 
-                                                                result = deviceReduce<float>(vars_gpu[i % num_gpus].device_chi2,
-                                                                                             datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
-                                                                //REDUCTIONS
-                                                                //chi2
-                                                                resultchi2 += result;
-                                                        }
-                                                }
+                                                result = deviceReduce<float>(vars_gpu[gpu_idx].device_chi2,
+                                                                             datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                                //REDUCTIONS
+                                                //chi2
+                                                resultchi2 += result;
                                         }
                                 }
                         }
@@ -3104,69 +3061,49 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
 
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-                        if(num_gpus == 1) {
-                                cudaSetDevice(selected);
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        for(int s=0; s < datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
-                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                                checkCudaErrors(cudaMemset(vars_gpu[0].device_dchi2, 0, sizeof(float) *
-                                                                                           M*N));
-                                                                //size_t shared_memory;
-                                                                //shared_memory = 3*fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(double) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(float) + fields[f].numVisibilitiesPerFreqPerStoke[i][s]*sizeof(cufftComplex);
-                                                                DChi2 <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                (device_noise_image, vars_gpu[0].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
-                                                                //DChi2_SharedMemory<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[0].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
+                        #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
+                        for (int i = 0; i < datasets[d].data.total_frequencies; i++)
+                        {
+                                unsigned int j = omp_get_thread_num();
+                                unsigned int num_cpu_threads = omp_get_num_threads();
+                                int gpu_idx;
 
-
-                                                                if (flag_opt % 2 == 0)
-                                                                        DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                        (device_noise_image, result_dchi2, vars_gpu[0].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                                else
-                                                                        DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                        (device_noise_image, result_dchi2, vars_gpu[0].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
-
-                                                        }
-                                                }
-                                        }
-                                }
-                        }else{
-                          #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
-                                for (int i = 0; i < datasets[d].data.total_frequencies; i++)
-                                {
-                                        unsigned int j = omp_get_thread_num();
-                                        //unsigned int num_cpu_threads = omp_get_num_threads();
+                                if(num_cpu_threads > 1) {
                                         // set and check the CUDA device for this CPU thread
                                         int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
+                                        cudaSetDevice((i%num_gpus) + firstgpu);   // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
-                                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                                checkCudaErrors(cudaMemset(vars_gpu[i % num_gpus].device_dchi2, 0, sizeof(float) *
-                                                                                           M*N));
-                                                                //size_t shared_memory;
-                                                                //shared_memory = 3*fields[f].numVisibilitiesPerFreq[i]*sizeof(float) + fields[f].numVisibilitiesPerFreq[i]*sizeof(cufftComplex);
-                                                                DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[i % num_gpus].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
-                                                                //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[i%num_gpus].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                        gpu_idx = i%num_gpus;
+                                }else{
+                                        int gpu_id = -1;
+                                        cudaSetDevice(selected);
+                                        cudaGetDevice(&gpu_id);
+                                        gpu_idx = 0;
+                                }
+
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                        if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                                        checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_dchi2, 0, sizeof(float) *M*N));
+                                                        //size_t shared_memory;
+                                                        //shared_memory = 3*fields[f].numVisibilitiesPerFreq[i]*sizeof(float) + fields[f].numVisibilitiesPerFreq[i]*sizeof(cufftComplex);
+                                                        DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[gpu_idx].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
+                                                        //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[i%num_gpus].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
+                                                        checkCudaErrors(cudaDeviceSynchronize());
 
 
                                                                 #pragma omp critical
-                                                                {
-                                                                        if (flag_opt % 2 == 0)
-                                                                                DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                                (device_noise_image, result_dchi2, vars_gpu[i % num_gpus].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                                        else
-                                                                                DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                                (device_noise_image, result_dchi2, vars_gpu[i % num_gpus].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
-                                                                        checkCudaErrors(cudaDeviceSynchronize());
-                                                                }
+                                                        {
+                                                                if (flag_opt % 2 == 0)
+                                                                        DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                        (device_noise_image, result_dchi2, vars_gpu[gpu_idx].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
+                                                                else
+                                                                        DChi2_total_alpha <<< numBlocksNN, threadsPerBlockNN >>>
+                                                                        (device_noise_image, result_dchi2, vars_gpu[gpu_idx].device_dchi2, I, datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale, threshold, N, M);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
                                                         }
-
                                                 }
+
                                         }
                                 }
                         }
@@ -3235,14 +3172,14 @@ __host__ void linkChain2I(float *chain, float freq, float *I)
         checkCudaErrors(cudaDeviceSynchronize());
 };
 
-__host__ float L1Norm(float *I, float * ds, float penalization_factor, int mod, int order, int index)
+__host__ float L1Norm(float *I, float * ds, float penalization_factor, float epsilon, int mod, int order, int index)
 {
         cudaSetDevice(firstgpu);
 
         float resultL1norm = 0.0f;
         if(iter > 0 && penalization_factor)
         {
-                L1Vector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
+                L1Vector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, epsilon, noise_cut, index);
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultL1norm  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
@@ -3250,14 +3187,14 @@ __host__ float L1Norm(float *I, float * ds, float penalization_factor, int mod, 
         return resultL1norm;
 };
 
-__host__ void DL1Norm(float *I, float *dgi, float penalization_factor, int mod, int order, int index)
+__host__ void DL1Norm(float *I, float *dgi, float penalization_factor, float epsilon, int mod, int order, int index)
 {
         cudaSetDevice(firstgpu);
 
         if(iter > 0 && penalization_factor)
         {
                 if(flag_opt%2 == index) {
-                        DL1NormK<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, N, M, index);
+                        DL1NormK<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, epsilon, noise_cut, penalization_factor, N, M, index);
                         checkCudaErrors(cudaDeviceSynchronize());
                 }
         }
@@ -3415,47 +3352,39 @@ __host__ void calculateErrors(Image *image){
         float sum_weights;
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-                        if(num_gpus == 1) {
-                                cudaSetDevice(selected);
-                                for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
-                                                        if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                                sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
-                                                                I_nu_0_Noise <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
-                                                                alpha_Noise <<< numBlocksNN, threadsPerBlockNN >>>
-                                                                (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
-                                                                checkCudaErrors(cudaDeviceSynchronize());
-                                                        }
-                                                }
-                                        }
-                                }
-                        }else{
+
                           #pragma omp parallel for private(sum_weights) num_threads(num_gpus) schedule(static,1)
-                                for (int i = 0; i < datasets[d].data.total_frequencies; i++)
-                                {
-                                        unsigned int j = omp_get_thread_num();
-                                        //unsigned int num_cpu_threads = omp_get_num_threads();
+                        for (int i = 0; i < datasets[d].data.total_frequencies; i++)
+                        {
+                                unsigned int j = omp_get_thread_num();
+                                unsigned int num_cpu_threads = omp_get_num_threads();
+                                int gpu_idx;
+
+                                if(num_cpu_threads > 1) {
                                         // set and check the CUDA device for this CPU thread
                                         int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
+                                        cudaSetDevice((i%num_gpus) + firstgpu);         // "% num_gpus" allows more CPU threads than GPU devices
                                         cudaGetDevice(&gpu_id);
-                                        for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                                if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
-                                                        if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
-                                                                sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                        gpu_idx = i%num_gpus;
+                                }else{
+                                        int gpu_id = -1;
+                                        cudaSetDevice(selected);
+                                        cudaGetDevice(&gpu_id);
+                                        gpu_idx = 0;
+                                }
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                        if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
+                                                if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {
+                                                        sum_weights = deviceReduce<float>(datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
 
                                                                 #pragma omp critical
-                                                                {
-                                                                        I_nu_0_Noise << < numBlocksNN, threadsPerBlockNN >> >
-                                                                        (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
-                                                                        checkCudaErrors(cudaDeviceSynchronize());
-                                                                        alpha_Noise << < numBlocksNN, threadsPerBlockNN >> >
-                                                                        (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
-                                                                        checkCudaErrors(cudaDeviceSynchronize());
-                                                                }
+                                                        {
+                                                                I_nu_0_Noise << < numBlocksNN, threadsPerBlockNN >> >
+                                                                (errors, image->getImage(), device_noise_image, noise_cut, datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, DELTAX, DELTAY, sum_weights, N, M, datasets[d].antennas[0].primary_beam);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                                alpha_Noise << < numBlocksNN, threadsPerBlockNN >> >
+                                                                (errors, image->getImage(), datasets[d].fields[f].nu[i], nu_0, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].Vr, device_noise_image, noise_cut, DELTAX, DELTAY, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, fg_scale, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N, M, datasets[d].antennas[0].primary_beam);
+                                                                checkCudaErrors(cudaDeviceSynchronize());
                                                         }
                                                 }
                                         }
