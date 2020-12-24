@@ -8,7 +8,7 @@
 class L1norm : public Fi
 {
 private:
-float epsilon = 1E-12;
+float epsilon;
 public:
 L1norm();
 L1norm(float epsilon);

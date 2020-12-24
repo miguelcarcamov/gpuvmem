@@ -7,6 +7,7 @@ extern int nPenalizators;
 
 L1norm::L1norm(){
         this->name = "L1 Norm";
+        this->epsilon = 1E-12;
 };
 
 L1norm::L1norm(float epsilon){

@@ -7,8 +7,13 @@
 
 class Entropy : public Fi
 {
+private:
+float prior_value;
 public:
 Entropy();
+Entropy(float prior_value);
+float getPrior();
+void setPrior(float prior_value);
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();

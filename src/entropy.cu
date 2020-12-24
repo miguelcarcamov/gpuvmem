@@ -7,6 +7,20 @@ extern int nPenalizators;
 
 Entropy::Entropy(){
         this->name = "Entropy";
+        this->prior_value = 1.0;
+};
+
+Entropy::Entropy(float prior_value){
+        this->name = "Entropy";
+        this->prior_value = 1.0;
+};
+
+float Entropy::getPrior(){
+        return this->prior_value;
+};
+
+void Entropy::setPrior(float prior_value){
+        this->prior_value = prior_value;
 };
 
 float Entropy::calcFi(float *p)
