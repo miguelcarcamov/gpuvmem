@@ -63,6 +63,7 @@ __host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float
 __host__ void linkClipWNoise2I(float *I);
 __host__ void linkCalculateInu2I(cufftComplex *image, float *I, float freq);
 __host__ void linkChain2I(float *chain, float freq, float *I);
+__host__ void normalizeImage(float *image, float normalization_factor);
 __host__ void linkClip(float *I);
 __host__ void DEntropy(float *I, float *dgi, float penalization_factor, int mod, int order, int index);
 __host__ float SEntropy(float *I, float * ds, float penalization_factor, int mod, int order, int index);

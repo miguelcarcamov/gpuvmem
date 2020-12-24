@@ -2546,6 +2546,14 @@ __global__ void DL(float *dL, float *I, float *noise, float noise_cut, float lam
         dL[N*i+j] = calculateDL(I, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
+__global__ void normalizeImageKernel(float *image, float normalization_factor, long N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        image[N*i+j] /= normalization_factor;
+}
+
 __global__ void searchDirection(float *g, float *xi, float *h, long N)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -3190,6 +3198,11 @@ __host__ void linkChain2I(float *chain, float freq, float *I)
         checkCudaErrors(cudaDeviceSynchronize());
 };
 
+__host__ void normalizeImage(float *image, float normalization_factor)
+{
+        normalizeImageKernel<<<numBlocksNN, threadsPerBlockNN>>>(image, normalization_factor, N);
+        checkCudaErrors(cudaDeviceSynchronize());
+};
 __host__ float L1Norm(float *I, float * ds, float penalization_factor, float epsilon, int mod, int order, int index)
 {
         cudaSetDevice(firstgpu);
