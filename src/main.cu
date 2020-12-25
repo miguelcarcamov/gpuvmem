@@ -158,6 +158,10 @@ __host__ int main(int argc, char **argv) {
         Fi *l1 = createObject<Fi,std::string>("L1-Norm");
         Fi *tsqv = createObject<Fi,std::string>("TotalSquaredVariation");
         Fi *lap = createObject<Fi,std::string>("Laplacian");
+        Fi *gen = createObject<Fi, std::string>("GEntropy");
+        float p = 1.0;
+        void * param = &p;
+        gen->setParams(param);
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
         l1->configure(1, 0, 0);
