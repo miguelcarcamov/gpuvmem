@@ -47,6 +47,10 @@ float GEntropy::getNormalizationFactor(){
         return this->normalization_factor;
 };
 
+void GEntropy::setParams(void *params) {
+    printf("pointer value in set params of gentropy: %f", *(static_cast<float *>(params)));
+};
+
 void GEntropy::setNormalizationFactor(float normalization_factor){
         this->normalization_factor = normalization_factor;
 };

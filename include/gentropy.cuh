@@ -25,6 +25,7 @@ void calcGi(float *p, float *xi);
 void restartDGi();
 void addToDphi(float *device_dphi);
 void setSandDs(float *S, float *Ds);
+void setParams(void *params) override;
 float calculateSecondDerivate(){
 };
 void normalizePrior();
