@@ -2283,7 +2283,7 @@ __global__ void DQ(float *dQ, float *I, float *noise, float noise_cut, float lam
 
 }
 
-__device__ float calculateTV(float *I, float noise, float noise_cut, int index, int M, int N)
+__device__ float calculateTV(float *I, float epsilon, float noise, float noise_cut, int index, int M, int N)
 {
 
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2291,7 +2291,7 @@ __device__ float calculateTV(float *I, float noise, float noise_cut, int index, 
 
         float c, r, d;
         float tv = 0.0f;
-        float dxy[2];
+        float dxy0, dxy1;
 
         c = I[N*M*index+N*i+j];
         if(noise < noise_cut) {
@@ -2300,9 +2300,9 @@ __device__ float calculateTV(float *I, float noise, float noise_cut, int index, 
                         d = I[N*M*index+N*(i+1)+j];
 
 
-                        dxy[0] = r - c;
-                        dxy[1] = d - c;
-                        tv = normf(2, dxy);
+                        dxy0 = (r - c)*(r - c);
+                        dxy1 = (d - c)*(d - c);
+                        tv = sqrtf(dxy0 + dxy1 + epsilon);
                 }else{
                         tv = c;
                 }
@@ -2311,16 +2311,16 @@ __device__ float calculateTV(float *I, float noise, float noise_cut, int index, 
         return tv;
 }
 
-__global__ void TVVector(float *TV, float *noise, float *I, long N, long M, float noise_cut, int index)
+__global__ void TVVector(float *TV, float *noise, float *I, float epsilon, long N, long M, float noise_cut, int index)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        TV[N*i+j] = calculateTV(I, noise[N*i+j], noise_cut, index, M, N);
+        TV[N*i+j] = calculateTV(I, epsilon, noise[N*i+j], noise_cut, index, M, N);
 
 }
 
-__device__ float calculateDTV(float *I, float lambda, float noise, float noise_cut, int index, int M, int N)
+__device__ float calculateDTV(float *I, float epsilon, float lambda, float noise, float noise_cut, int index, int M, int N)
 {
 
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2328,8 +2328,8 @@ __device__ float calculateDTV(float *I, float lambda, float noise, float noise_c
         float c, d, u, r, l, dl_corner, ru_corner;
 
         float num0, num1, num2;
-        float den0[2], den1[2], den2[2];
-        float norm0, norm1, norm2;
+        float den0, den1, den2;
+        float den_arg0, den_arg1, den_arg2;
         float dtv = 0.0f;
 
         c = I[N*M*index+N*i+j];
@@ -2346,24 +2346,17 @@ __device__ float calculateDTV(float *I, float lambda, float noise, float noise_c
                         num1 = c - l;
                         num2 = c - u;
 
-                        den0[0] = c - r;
-                        den0[1] = c - d;
+                        den_arg0 = (c - r)*(c - r) + (c - d)*(c - d) + epsilon;
 
-                        den1[0] = l - c;
-                        den1[1] = l - dl_corner;
+                        den_arg1 = (l - c)*(l - c) + (l - dl_corner)*(l - dl_corner) + epsilon;
 
-                        den2[0] = u - ru_corner;
-                        den2[1] = u - c;
+                        den_arg2 = (u - ru_corner)*(u - ru_corner) + (u - c)*(u - c) + epsilon;
 
-                        norm0 = normf(2, den0);
-                        norm1 = normf(2, den1);
-                        norm2 = normf(2, den2);
+                        den0 = sqrtf(den_arg0);
+                        den1 = sqrtf(den_arg1);
+                        den2 = sqrtf(den_arg2);
 
-                        if(norm0 == 0.0f || norm1 == 0.0f || norm2 == 0.0f) {
-                                dtv = c;
-                        }else{
-                                dtv = num0/norm0 + num1/norm1 + num2/norm2;
-                        }
+                        dtv = num0/den0 + num1/den1 + num2/den2;
                 }else{
                         dtv = c;
                 }
@@ -2374,14 +2367,12 @@ __device__ float calculateDTV(float *I, float lambda, float noise, float noise_c
         return dtv;
 
 }
-__global__ void DTV(float *dTV, float *I, float *noise, float noise_cut, float lambda, long N, long M, int index)
+__global__ void DTV(float *dTV, float *I, float *noise, float epsilon, float noise_cut, float lambda, long N, long M, int index)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
-        float center, down, up, right, left, dl_corner, ru_corner;
 
-
-        dTV[N*i+j] = calculateDTV(I, lambda, noise[N*i+j], noise_cut, index, M, N);
+        dTV[N*i+j] = calculateDTV(I, epsilon, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __device__ float calculateTSV(float *I, float noise, float noise_cut, int index, int M, int N)
@@ -3343,14 +3334,14 @@ __host__ void DQuadraticP(float *I, float *dgi, float penalization_factor, int m
         }
 };
 
-__host__ float totalvariation(float *I, float * ds, float penalization_factor, int mod, int order, int index)
+__host__ float totalvariation(float *I, float * ds, float epsilon, float penalization_factor, int mod, int order, int index)
 {
         cudaSetDevice(firstgpu);
 
         float resultS = 0.0f;
         if(iter > 0 && penalization_factor)
         {
-                TVVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, index);
+                TVVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, epsilon, N, M, noise_cut, index);
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
@@ -3358,14 +3349,14 @@ __host__ float totalvariation(float *I, float * ds, float penalization_factor, i
         return resultS;
 };
 
-__host__ void DTVariation(float *I, float *dgi, float penalization_factor, int mod, int order, int index)
+__host__ void DTVariation(float *I, float *dgi, float epsilon, float penalization_factor, int mod, int order, int index)
 {
         cudaSetDevice(firstgpu);
 
         if(iter > 0 && penalization_factor)
         {
                 if(flag_opt%2 == index) {
-                        DTV<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, N, M, index);
+                        DTV<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, epsilon, noise_cut, penalization_factor, N, M, index);
                         checkCudaErrors(cudaDeviceSynchronize());
                 }
         }

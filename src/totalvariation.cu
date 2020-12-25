@@ -7,18 +7,33 @@ extern int nPenalizators;
 
 TVariation::TVariation(){
         this->name = "Total Variation";
+        this->epsilon = 1E-12;
+};
+
+TVariation::TVariation(float epsilon){
+        this->name = "Total Variation";
+        this->epsilon = epsilon;
+};
+
+float TVariation::getEpsilon(){
+        return this->epsilon;
+};
+
+void TVariation::setEpsilon(float epsilon){
+        this->epsilon = epsilon;
 };
 
 float TVariation::calcFi(float *p)
 {
         float result = 0.0;
-        this->set_fivalue(totalvariation(p, device_S, penalization_factor, mod, order, imageIndex));
+        this->set_fivalue(totalvariation(p, device_S, this->epsilon, penalization_factor, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
-}
+};
+
 void TVariation::calcGi(float *p, float *xi)
 {
-        DTVariation(p, device_DS, penalization_factor, mod, order, imageIndex);
+        DTVariation(p, device_DS, this->epsilon, penalization_factor, mod, order, imageIndex);
 };
 
 

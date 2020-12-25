@@ -7,8 +7,13 @@
 
 class TVariation : public Fi
 {
+private:
+float epsilon;
 public:
 TVariation();
+TVariation(float epsilon);
+float getEpsilon();
+void setEpsilon(float epsilon);
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();

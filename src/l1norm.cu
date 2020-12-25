@@ -19,6 +19,10 @@ float L1norm::getEpsilon(){
         return this->epsilon;
 };
 
+void L1norm::setEpsilon(float epsilon){
+        this->epsilon = epsilon;
+};
+
 float L1norm::calcFi(float *p)
 {
         float result = 0.0;
@@ -47,11 +51,6 @@ void L1norm::setSandDs(float *S, float *Ds)
         cudaFree(this->device_DS);
         this->device_S = S;
         this->device_DS = Ds;
-};
-
-void L1norm::setEpsilon(float epsilon)
-{
-        this->epsilon = epsilon;
 };
 
 namespace {

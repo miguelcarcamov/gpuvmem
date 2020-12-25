@@ -69,8 +69,8 @@ __host__ void DEntropy(float *I, float *dgi, float penalization_factor, int mod,
 __host__ float SEntropy(float *I, float * ds, float penalization_factor, int mod, int order, int index);
 __host__ float SGEntropy(float *I, float * ds, float *prior, float penalization_factor, int mod, int order, int index);
 __host__ void DGEntropy(float *I, float *dgi, float *prior, float penalization_factor, int mod, int order, int index);
-__host__ void DTVariation(float *I, float *dgi, float penalization_factor, int mod, int order, int index);
-__host__ float totalvariation(float *I, float * ds, float penalization_factor, int mod, int order, int index);
+__host__ void DTVariation(float *I, float *dgi, float epsilon, float penalization_factor, int mod, int order, int index);
+__host__ float totalvariation(float *I, float * ds, float epsilon, float penalization_factor, int mod, int order, int index);
 __host__ void DQuadraticP(float *I, float *dgi, float penalization_factor, int mod, int order, int index);
 __host__ float quadraticP(float *I, float * ds, float penalization_factor, int mod, int order, int index);
 __host__ float TotalSquaredVariation(float *I, float * ds, float penalization_factor, int mod, int order, int index);
