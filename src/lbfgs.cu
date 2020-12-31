@@ -96,7 +96,7 @@ __host__ void LBFGS::optimize()
         if(verbose_flag) {
                 printf("Starting function value = %f\n", fp);
         }
-        of->calcGradient(image->getImage(),xi);
+        of->calcGradient(image->getImage(),xi, 0);
 
 
         //checkCudaErrors(cudaMemcpy(p_old, image->getImage(), sizeof(float)*M*N*image->getImageCount(), cudaMemcpyDeviceToDevice));
@@ -148,7 +148,7 @@ __host__ void LBFGS::optimize()
                 if(verbose_flag) {
                         printf("Function value = %f\n", fp);
                 }
-                of->calcGradient(image->getImage(),xi);
+                of->calcGradient(image->getImage(),xi, i);
 
                 for(int i=0; i < image->getImageCount(); i++)
                 {

@@ -91,7 +91,7 @@ __host__ void ConjugateGradient::optimize()
         if(verbose_flag) {
                 printf("Starting function value = %f\n", fp);
         }
-        of->calcGradient(image->getImage(),xi);
+        of->calcGradient(image->getImage(),xi,0);
         //g=-xi
         //xi=h=g
 
@@ -119,7 +119,7 @@ __host__ void ConjugateGradient::optimize()
                 if(verbose_flag) {
                         printf("Function value = %f\n", fp);
                 }
-                of->calcGradient(image->getImage(),xi);
+                of->calcGradient(image->getImage(),xi, i);
                 dgg = gg = 0.0;
                 ////gg = g*g
                 ////dgg = (xi+g)*xi

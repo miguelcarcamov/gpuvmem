@@ -1413,7 +1413,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaDeviceSynchronize());
 
 
-                                        fitsOutputCufftComplex(vars_gpu[0].device_V, mod_in, "amp.fits", "./", 0, 1.0, M, N, 0, true);
+                                        //fitsOutputCufftComplex(vars_gpu[0].device_V, mod_in, "amp.fits", "./", 0, 1.0, M, N, 0, true);
                                         // Interpolation / Degridding
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>

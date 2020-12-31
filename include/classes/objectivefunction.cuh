@@ -29,12 +29,12 @@ float calcFunction(float *p)
         return value;
 };
 
-void calcGradient(float *p, float *xi)
+void calcGradient(float *p, float *xi, int iter)
 {
         if(print_images) {
                 if(IoOrderIterations == NULL) {
-                        io->IoPrintOptImageIteration(p,"I_nu_0","JY/PIXEL",0, true);
-                        io->IoPrintOptImageIteration(p,"alpha","",1, true);
+                        io->IoPrintOptImageIteration(p, "I_nu_0","JY/PIXEL", 0, iter, true);
+                        io->IoPrintOptImageIteration(p, "alpha", "", 1, iter, true);
                 }else{
                         (IoOrderIterations)(p, io);
                 }

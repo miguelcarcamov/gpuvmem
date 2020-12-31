@@ -23,8 +23,6 @@ extern int num_gpus;
 
 double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
 
-fitsfile *mod_in;
-
 std::vector<float> initial_values;
 std::vector<MSDataset> datasets;
 
@@ -75,8 +73,10 @@ void MFS::configure(int argc, char **argv)
         msoutput = variables.output;
         inputdat = variables.inputdat;
         modinput = variables.modin;
+        iohandler->setOriginal_FITS_name(modinput);
         out_image = variables.output_image;
         mempath = variables.path;
+        iohandler->setFitsPath(mempath);
         it_maximum = variables.it_max;
         total_visibilities = 0;
         b_noise_aux = variables.noise;
@@ -167,7 +167,7 @@ void MFS::configure(int argc, char **argv)
            Read input.dat file and FITS header
          */
         readInputDat(inputdat);
-        canvasVariables canvas_vars = iohandler->IoreadCanvas(modinput, mod_in, b_noise_aux, status_mod_in, verbose_flag);
+        headerValues canvas_vars = iohandler->IoreadCanvas(modinput);
 
         M = canvas_vars.M;
         N = canvas_vars.N;
@@ -425,8 +425,8 @@ void MFS::configure(int argc, char **argv)
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
                 this->ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabs(deltau), fabs(deltav));
-                if(print_images)
-                        ckernel->printCKernel();
+                //if(print_images)
+                //        ckernel->printCKernel();
                 printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
@@ -708,7 +708,7 @@ void MFS::setDevice()
 
                         if(print_images) {
                                 std::string atten_name =  "dataset_" + std::to_string(d) + "_atten";
-                                iohandler->IoPrintImageIteration(datasets[d].fields[f].atten_image, mod_in, mempath, atten_name.c_str(), "", f, 0, 1.0, M, N, true);
+                                iohandler->IoPrintImageIteration(datasets[d].fields[f].atten_image, atten_name.c_str(), "", f, 0, 1.0, M, N, true);
                         }
                 }
 
@@ -737,9 +737,9 @@ void MFS::setDevice()
         noise_image<<<numBlocksNN, threadsPerBlockNN>>>(device_noise_image, device_weight_image, max_weight, noise_jypix, N);
         checkCudaErrors(cudaDeviceSynchronize());
         if(print_images) {
-                iohandler->IoPrintImage(device_noise_image, mod_in, mempath, "noise.fits", "", 0, 0, 1.0, M, N, true);
+                iohandler->IoPrintImage(device_noise_image, "noise.fits", "", 0, 0, 1.0, M, N, true);
                 if(radius_mask)
-                        iohandler->IoPrintImage(device_distance_image, mod_in, mempath, "distance.fits", "", 0, 0, 1.0, M, N, true);
+                        iohandler->IoPrintImage(device_distance_image, "distance.fits", "", 0, 0, 1.0, M, N, true);
         }
 
         float *host_noise_image = (float*)malloc(M*N*sizeof(float));
@@ -877,8 +877,8 @@ void MFS::writeImages()
 {
         printf("Saving final image to disk\n");
         if(IoOrderEnd == NULL) {
-                iohandler->IoPrintImage(image->getImage(), mod_in, "", out_image, "JY/PIXEL", iter, 0, fg_scale, M, N, true);
-                iohandler->IoPrintImage(image->getImage(), mod_in, "", "alpha.fits", "", iter, 1, 1.0, M, N, true);
+                iohandler->IoPrintImage(image->getImage(), "", out_image, "JY/PIXEL", iter, 0, fg_scale, M, N, true);
+                iohandler->IoPrintImage(image->getImage(), "", "alpha.fits", "", iter, 1, 1.0, M, N, true);
         }else{
                 (IoOrderEnd)(image->getImage(), iohandler);
         }
@@ -894,8 +894,8 @@ void MFS::writeImages()
                 printf("Calculating Error Images\n");
                 this->error->calculateErrorImage(this->image, this->visibilities);
                 if(IoOrderError == NULL) {
-                        iohandler->IoPrintImage(image->getErrorImage(), mod_in, "", "error_Inu_0.fits", "JY/PIXEL", iter, 0, 1.0, M, N, true);
-                        iohandler->IoPrintImage(image->getErrorImage(), mod_in, "", "error_alpha.fits", "", iter, 1, 1.0, M, N, true);
+                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_Inu_0.fits", "JY/PIXEL", iter, 0, 1.0, M, N, true);
+                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_alpha.fits", "", iter, 1, 1.0, M, N, true);
                 }else{
                         (IoOrderError)(image->getErrorImage(), iohandler);
                 }
@@ -1044,8 +1044,6 @@ void MFS::unSetDevice()
                 free(datasets[i].name);
                 free(datasets[i].oname);
         }
-
-        iohandler->IocloseCanvas(mod_in);
 };
 
 namespace {
