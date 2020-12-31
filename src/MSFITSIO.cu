@@ -53,252 +53,66 @@ __host__ __device__ float distance(float x, float y, float x0, float y0)
         return distance;
 }
 
-
-__host__ fitsfile *openFITS(char *filename)
+__host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag)
 {
-        fitsfile *hdu;
-        int status = 0;
-        fits_open_file(&hdu, filename, 0, &status);
-        if (status) {
-                fits_report_error(stderr, status); /* print error message */
-                exit(0);
-        }
-        return hdu;
-}
-
-__host__ fitsfile *createFITS(char *filename)
-{
-        fitsfile *fpointer;
-        int status = 0;
-        fits_create_file(&fpointer, filename, &status);
-        if(status) {
-                fits_report_error(stderr, status); /* print error message */
-                exit(-1);
-        }
-        return fpointer;
-}
-
-__host__ void copyHeader(fitsfile *original, fitsfile *output)
-{
-        int status = 0;
-        fits_copy_header(original, output, &status);
-        if (status) {
-                fits_report_error(stderr, status); /* print error message */
-                exit(-1);
-        }
-}
-
-__host__ void closeFITS(fitsfile *canvas)
-{
-        int status = 0;
-        fits_close_file(canvas, &status);
-        if(status) {
-                fits_report_error(stderr, status);
-                exit(-1);
-        }
-}
-
-__host__ void OCopyFITS(float *I, char *original_filename, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
-{
-        int status = 0;
-        long fpixel = 1;
-        long elements = M*N;
-        size_t needed;
-        long naxes[2]={M,N};
-        long naxis = 2;
-        char *full_name;
-
-        needed = snprintf(NULL, 0, "!%s%s", path, name_image) + 1;
-        full_name = (char*)malloc(needed*sizeof(char));
-        snprintf(full_name, needed*sizeof(char), "!%s%s", path, name_image);
-
-        fitsfile *fpointer = createFITS(full_name);
-        fitsfile *original_hdu = openFITS(original_filename);
-        copyHeader(original_hdu, fpointer);
-
-        fits_update_key(fpointer, TSTRING, "BUNIT", units, "Unit of measurement", &status);
-        fits_update_key(fpointer, TINT, "NITER", &iteration, "Number of iteration in gpuvmem software", &status);
-        fits_update_key(fpointer, TINT, "NAXIS1", &M, "", &status);
-        fits_update_key(fpointer, TINT, "NAXIS2", &N, "", &status);
-        float *host_IFITS = (float*)malloc(M*N*sizeof(float));
-
-        //unsigned int offset = M*N*index*sizeof(float);
-        int offset = M*N*index;
-
-        if(isInGPU) {
-                checkCudaErrors(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
-        }else{
-                memcpy(host_IFITS, &I[offset], M*N*sizeof(float));
-        }
-
-
-        for(int i=0; i<M; i++) {
-                for(int j=0; j<N; j++) {
-                        host_IFITS[N*i+j] *= fg_scale;
-                }
-        }
-
-        fits_write_img(fpointer, TFLOAT, fpixel, elements, host_IFITS, &status);
-        if (status) {
-                fits_report_error(stderr, status); /* print error message */
-                exit(-1);
-        }
-
-        closeFITS(original_hdu);
-        closeFITS(fpointer);
-
-        free(host_IFITS);
-}
-
-__host__ void OCopyFITSCufftComplex(cufftComplex *I, char *original_filename, char *path, char *out_image, int iteration, float fg_scale, long M, long N, int option, bool isInGPU)
-{
-        int status = 0;
-        long fpixel = 1;
-        long elements = M*N;
-        size_t needed;
-        char *name;
-        long naxes[2]={M,N};
-        long naxis = 2;
-        char *unit = "JY/PIXEL";
-
-        switch(option) {
-        case 0:
-                needed = snprintf(NULL, 0, "!%s", out_image) + 1;
-                name = (char*)malloc(needed*sizeof(char));
-                snprintf(name, needed*sizeof(char), "!%s", out_image);
-                break;
-        case 1:
-                needed = snprintf(NULL, 0, "!%sMEM_%d.fits", path, iteration) + 1;
-                name = (char*)malloc(needed*sizeof(char));
-                snprintf(name, needed*sizeof(char), "!%sMEM_%d.fits", path, iteration);
-                break;
-        case -1:
-                break;
-        default:
-                printf("Invalid case to FITS\n");
-                exit(-1);
-        }
-
-        fitsfile *fpointer = createFITS(name);
-        fitsfile *original_hdu = openFITS(original_filename);
-        copyHeader(original_hdu, fpointer);
-
-        fits_update_key(fpointer, TSTRING, "BUNIT", unit, "Unit of measurement", &status);
-        fits_update_key(fpointer, TINT, "NITER", &iteration, "Number of iteration in gpuvmem software", &status);
-
-        cufftComplex *host_IFITS;
-        host_IFITS = (cufftComplex*)malloc(M*N*sizeof(cufftComplex));
-        float *image2D = (float*) malloc(M*N*sizeof(float));
-        if(isInGPU) {
-                checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
-        }else{
-                memcpy(host_IFITS, I, M*N*sizeof(cufftComplex));
-        }
-
-
-        for(int i=0; i < M; i++) {
-                for(int j=0; j < N; j++) {
-                        /*Amplitude*/
-                        image2D[N*i+j] = amplitude<cufftComplex, float>(host_IFITS[N*i+j]);
-                        /* Phase in degrees */
-                        //image2D[N*i+j] = phaseDegrees<cufftComplex, float>(host_IFITS[N*i+j]);
-                        /*Real part*/
-                        //image2D[N*i+j] = host_IFITS[N*i+j].x;
-                        /*Imaginary part*/
-                        //image2D[N*i+j] = host_IFITS[N*i+j].y;
-                }
-        }
-
-        fits_write_img(fpointer, TFLOAT, fpixel, elements, image2D, &status);
-        if (status) {
-                fits_report_error(stderr, status); /* print error message */
-                exit(-1);
-        }
-
-        closeFITS(original_hdu);
-        closeFITS(fpointer);
-
-        free(host_IFITS);
-        free(image2D);
-        free(name);
-}
-
-__host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
-{
-        int status_header = 0;
+        status_canvas = 0;
         int status_noise = 0;
 
-        headerValues h_values;
-        int bitpix;
+        canvasVariables c_vars;
 
-        fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CDELT2", &h_values.DELTAY, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRVAL1", &h_values.ra, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRVAL2", &h_values.dec, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRPIX1", &h_values.crpix1, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRPIX2", &h_values.crpix2, NULL, &status_header);
-        fits_read_key(hdu_in, TLONG, "NAXIS1", &h_values.M, NULL, &status_header);
-        fits_read_key(hdu_in, TLONG, "NAXIS2", &h_values.N, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BMAJ", &h_values.beam_bmaj, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BMIN", &h_values.beam_bmin, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL, &status_header);
-        //fits_read_key(header, TFLOAT, "NOISE", &c_vars.beam_noise, NULL, &status_noise);
-        h_values.type = fits_get_img_type(hdu_in, &bitpix, &status_header);
-        h_values.bitpix = bitpix;
-
-
-        if (status_header) {
-                fits_report_error(stderr, status_header); /* print error message */
+        fits_open_file(&canvas, canvas_name, 0, &status_canvas);
+        if (status_canvas) {
+                fits_report_error(stderr, status_canvas); /* print error message */
                 exit(0);
         }
 
-        //if(status_noise) {
-        //        c_vars.beam_noise = b_noise_aux;
-        //}
+        fits_read_key(canvas, TDOUBLE, "CDELT1", &c_vars.DELTAX, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "CDELT2", &c_vars.DELTAY, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "CRVAL1", &c_vars.ra, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "CRVAL2", &c_vars.dec, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "CRPIX1", &c_vars.crpix1, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "CRPIX2", &c_vars.crpix2, NULL, &status_canvas);
+        fits_read_key(canvas, TLONG, "NAXIS1", &c_vars.M, NULL, &status_canvas);
+        fits_read_key(canvas, TLONG, "NAXIS2", &c_vars.N, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BMAJ", &c_vars.beam_bmaj, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BMIN", &c_vars.beam_bmin, NULL, &status_canvas);
+        fits_read_key(canvas, TDOUBLE, "BPA", &c_vars.beam_bpa, NULL, &status_canvas);
+        fits_read_key(canvas, TFLOAT, "NOISE", &c_vars.beam_noise, NULL, &status_noise);
 
-        h_values.DELTAX = fabs(h_values.DELTAX);
-        h_values.DELTAY *= -1.0;
 
-        if(close_fits)
-                closeFITS(hdu_in);
+        if (status_canvas) {
+                fits_report_error(stderr, status_canvas); /* print error message */
+                exit(0);
+        }
 
-        return h_values;
+        if(status_noise) {
+                c_vars.beam_noise = b_noise_aux;
+        }
+
+        c_vars.beam_bmaj = c_vars.beam_bmaj;
+        c_vars.beam_bmin = c_vars.beam_bmin;
+        c_vars.DELTAX = fabs(c_vars.DELTAX);
+        c_vars.DELTAY *= -1.0;
+
+        if(verbose_flag) {
+                printf("FITS Files READ\n");
+        }
+
+        return c_vars;
 }
 
-__host__ headerValues readFITSHeader(char *filename)
+__host__ void readFITSImageValues(char *imageName, fitsfile *file, float *&values, int status, long M, long N)
 {
-        int status_header = 0;
 
-        headerValues h_values;
-        int bitpix;
+        int anynull;
+        long fpixel = 1;
+        float null = 0.;
+        long elementsImage = M*N;
 
-        fitsfile *hdu_in = openFITS(filename);
+        values = (float*)malloc(M*N*sizeof(float));
+        fits_open_file(&file, imageName, 0, &status);
+        fits_read_img(file, TFLOAT, fpixel, elementsImage, &null, values, &anynull, &status);
 
-        fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CDELT2", &h_values.DELTAY, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRVAL1", &h_values.ra, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRVAL2", &h_values.dec, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRPIX1", &h_values.crpix1, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "CRPIX2", &h_values.crpix2, NULL, &status_header);
-        fits_read_key(hdu_in, TLONG, "NAXIS1", &h_values.M, NULL, &status_header);
-        fits_read_key(hdu_in, TLONG, "NAXIS2", &h_values.N, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BMAJ", &h_values.beam_bmaj, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BMIN", &h_values.beam_bmin, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL, &status_header);
-        h_values.type = fits_get_img_type(hdu_in, &bitpix, &status_header);
-        h_values.bitpix = bitpix;
-
-
-        if (status_header) {
-                fits_report_error(stderr, status_header); /* print error message */
-                exit(0);
-        }
-
-        h_values.DELTAX = fabs(h_values.DELTAX);
-        h_values.DELTAY *= -1.0;
-
-        closeFITS(hdu_in);
-        return h_values;
 }
 
 __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
@@ -762,4 +576,429 @@ __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Fiel
         main_tab.flush();
 
 
+}
+
+__host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option, bool isInGPU)
+{
+        fitsfile *fpointer;
+        int status = 0;
+        long fpixel = 1;
+        long elements = M*N;
+        size_t needed;
+        char *name;
+        long naxes[2]={M,N};
+        long naxis = 2;
+        char *unit = "JY/PIXEL";
+
+        switch(option) {
+        case 0:
+                needed = snprintf(NULL, 0, "!%s", out_image) + 1;
+                name = (char*)malloc(needed*sizeof(char));
+                snprintf(name, needed*sizeof(char), "!%s", out_image);
+                break;
+        case 1:
+                needed = snprintf(NULL, 0, "!%sMEM_%d.fits", mempath, iteration) + 1;
+                name = (char*)malloc(needed*sizeof(char));
+                snprintf(name, needed*sizeof(char), "!%sMEM_%d.fits", mempath, iteration);
+                break;
+        case -1:
+                break;
+        default:
+                printf("Invalid case to FITS\n");
+                exit(-1);
+        }
+
+        fits_create_file(&fpointer, name, &status);
+        if (status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+        fits_copy_header(canvas, fpointer, &status);
+        if (status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+
+        fits_update_key(fpointer, TSTRING, "BUNIT", unit, "Unit of measurement", &status);
+        fits_update_key(fpointer, TINT, "NITER", &iteration, "Number of iteration in gpuvmem software", &status);
+
+
+
+        cufftComplex *host_IFITS;
+        host_IFITS = (cufftComplex*)malloc(M*N*sizeof(cufftComplex));
+        float *image2D = (float*) malloc(M*N*sizeof(float));
+        if(isInGPU) {
+                checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I, sizeof(cufftComplex), sizeof(cufftComplex), M*N, cudaMemcpyDeviceToHost));
+        }else{
+                memcpy(host_IFITS, I, M*N*sizeof(cufftComplex));
+        }
+
+
+        for(int i=0; i < M; i++) {
+                for(int j=0; j < N; j++) {
+                        /*Absolute*/
+                        image2D[N*i+j] = sqrt(host_IFITS[N*i+j].x * host_IFITS[N*i+j].x + host_IFITS[N*i+j].y * host_IFITS[N*i+j].y)* fg_scale;
+                        /*Real part*/
+                        //image2D[N*i+j] = host_IFITS[N*i+j].x;
+                        /*Imaginary part*/
+                        //image2D[N*i+j] = host_IFITS[N*i+j].y;
+                }
+        }
+
+        fits_write_img(fpointer, TFLOAT, fpixel, elements, image2D, &status);
+        if (status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+        fits_close_file(fpointer, &status);
+        if (status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+
+        free(host_IFITS);
+        free(image2D);
+        free(name);
+}
+
+__host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
+{
+        fitsfile *fpointer;
+        int status = 0;
+        long fpixel = 1;
+        long elements = M*N;
+        size_t needed;
+        long naxes[2]={M,N};
+        long naxis = 2;
+        char *full_name;
+
+        needed = snprintf(NULL, 0, "!%s%s", path, name_image) + 1;
+        full_name = (char*)malloc(needed*sizeof(char));
+        snprintf(full_name, needed*sizeof(char), "!%s%s", path, name_image);
+
+        fits_create_file(&fpointer, full_name, &status);
+        if(status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+
+        fits_copy_header(canvas, fpointer, &status);
+        if (status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+
+        fits_update_key(fpointer, TSTRING, "BUNIT", units, "Unit of measurement", &status);
+        fits_update_key(fpointer, TINT, "NITER", &iteration, "Number of iteration in gpuvmem software", &status);
+        fits_update_key(fpointer, TINT, "NAXIS1", &M, "", &status);
+        fits_update_key(fpointer, TINT, "NAXIS2", &N, "", &status);
+        float *host_IFITS = (float*)malloc(M*N*sizeof(float));
+
+        //unsigned int offset = M*N*index*sizeof(float);
+        int offset = M*N*index;
+
+        if(isInGPU) {
+                checkCudaErrors(cudaMemcpy(host_IFITS, &I[offset], sizeof(float)*M*N, cudaMemcpyDeviceToHost));
+        }else{
+                memcpy(host_IFITS, &I[offset], M*N*sizeof(float));
+        }
+
+
+        for(int i=0; i<M; i++) {
+                for(int j=0; j<N; j++) {
+                        host_IFITS[N*i+j] *= fg_scale;
+                }
+        }
+
+        fits_write_img(fpointer, TFLOAT, fpixel, elements, host_IFITS, &status);
+        if (status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+        fits_close_file(fpointer, &status);
+        if (status) {
+                fits_report_error(stderr, status); /* print error message */
+                exit(-1);
+        }
+
+        free(host_IFITS);
+}
+
+__host__ void float2toImage(float *I, fitsfile *canvas, char *out_image, char*mempath, int iteration, float fg_scale, long M, long N, int option)
+{
+        fitsfile *fpointerI_nu_0, *fpointeralpha, *fpointer;
+        int statusI_nu_0 = 0, statusalpha = 0;
+        long fpixel = 1;
+        long elements = M*N;
+        char *Inu_0_name;
+        char *alphaname;
+        size_t needed_I_nu_0;
+        size_t needed_alpha;
+        long naxes[2]={M,N};
+        long naxis = 2;
+        char *alphaunit = "";
+        char *I_unit = "JY/PIXEL";
+
+        float *host_2Iout = (float*)malloc(M*N*sizeof(float)*2);
+
+        checkCudaErrors(cudaMemcpy(host_2Iout, I, sizeof(float)*M*N*2, cudaMemcpyDeviceToHost));
+
+        float *host_alpha = (float*)malloc(M*N*sizeof(float));
+        float *host_I_nu_0 = (float*)malloc(M*N*sizeof(float));
+
+        switch(option) {
+        case 0:
+                needed_alpha = snprintf(NULL, 0, "!%s_alpha.fits", out_image) + 1;
+                alphaname = (char*)malloc(needed_alpha*sizeof(char));
+                snprintf(alphaname, needed_alpha*sizeof(char), "!%s_alpha.fits", out_image);
+                break;
+        case 1:
+                needed_alpha = snprintf(NULL, 0, "!%salpha_%d.fits", mempath, iteration) + 1;
+                alphaname = (char*)malloc(needed_alpha*sizeof(char));
+                snprintf(alphaname, needed_alpha*sizeof(char), "!%salpha_%d.fits", mempath, iteration);
+                break;
+        case 2:
+                needed_alpha = snprintf(NULL, 0, "!%salpha_error.fits", out_image) + 1;
+                alphaname = (char*)malloc(needed_alpha*sizeof(char));
+                snprintf(alphaname, needed_alpha*sizeof(char), "!%salpha_error.fits", out_image);
+                break;
+        case -1:
+                break;
+        default:
+                printf("Invalid case to FITS\n");
+                exit(-1);
+        }
+
+        switch(option) {
+        case 0:
+                needed_I_nu_0 = snprintf(NULL, 0, "!%s_I_nu_0.fits", out_image) + 1;
+                Inu_0_name = (char*)malloc(needed_I_nu_0*sizeof(char));
+                snprintf(Inu_0_name, needed_I_nu_0*sizeof(char), "!%s_I_nu_0.fits", out_image);
+                break;
+        case 1:
+                needed_I_nu_0 = snprintf(NULL, 0, "!%sI_nu_0_%d.fits", mempath, iteration) + 1;
+                Inu_0_name = (char*)malloc(needed_I_nu_0*sizeof(char));
+                snprintf(Inu_0_name, needed_I_nu_0*sizeof(char), "!%sI_nu_0_%d.fits", mempath, iteration);
+                break;
+        case 2:
+                needed_I_nu_0 = snprintf(NULL, 0, "!%s_I_nu_0_error.fits", out_image) + 1;
+                Inu_0_name = (char*)malloc(needed_I_nu_0*sizeof(char));
+                snprintf(Inu_0_name, needed_I_nu_0*sizeof(char), "!%s_I_nu_0_error.fits", out_image);
+        case -1:
+                break;
+        default:
+                printf("Invalid case to FITS\n");
+                exit(-1);
+        }
+
+
+        fits_create_file(&fpointerI_nu_0, Inu_0_name, &statusI_nu_0);
+        fits_create_file(&fpointeralpha, alphaname, &statusalpha);
+
+        if (statusI_nu_0 || statusalpha) {
+                fits_report_error(stderr, statusI_nu_0);
+                fits_report_error(stderr, statusalpha);
+                exit(-1); /* print error message */
+        }
+
+        fits_copy_header(canvas, fpointerI_nu_0, &statusI_nu_0);
+        fits_copy_header(canvas, fpointeralpha, &statusalpha);
+
+        if (statusI_nu_0 || statusalpha) {
+                fits_report_error(stderr, statusI_nu_0);
+                fits_report_error(stderr, statusalpha);
+                exit(-1); /* print error message */
+        }
+
+        fits_update_key(fpointerI_nu_0, TSTRING, "BUNIT", I_unit, "Unit of measurement", &statusI_nu_0);
+        fits_update_key(fpointeralpha, TSTRING, "BUNIT", alphaunit, "Unit of measurement", &statusalpha);
+
+
+        for(int i=0; i < M; i++) {
+                for(int j=0; j < N; j++) {
+                        host_I_nu_0[N*i+j] = host_2Iout[N*i+j];
+                        host_alpha[N*i+j] = host_2Iout[N*M+N*i+j];
+                }
+        }
+
+        fits_write_img(fpointerI_nu_0, TFLOAT, fpixel, elements, host_I_nu_0, &statusI_nu_0);
+        fits_write_img(fpointeralpha, TFLOAT, fpixel, elements, host_alpha, &statusalpha);
+
+        if (statusI_nu_0 || statusalpha) {
+                fits_report_error(stderr, statusI_nu_0);
+                fits_report_error(stderr, statusalpha);
+                exit(-1); /* print error message */
+        }
+        fits_close_file(fpointerI_nu_0, &statusI_nu_0);
+        fits_close_file(fpointeralpha, &statusalpha);
+
+        if (statusI_nu_0 || statusalpha) {
+                fits_report_error(stderr, statusI_nu_0);
+                fits_report_error(stderr, statusalpha);
+                exit(-1); /* print error message */
+        }
+
+        free(host_I_nu_0);
+        free(host_alpha);
+
+        free(host_2Iout);
+
+        free(alphaname);
+        free(Inu_0_name);
+
+
+}
+
+__host__ void float3toImage(float3 *I, fitsfile *canvas, char *out_image, char*mempath, int iteration, long M, long N, int option)
+{
+        fitsfile *fpointerT, *fpointertau, *fpointerbeta, *fpointer;
+        int statusT = 0, statustau = 0, statusbeta = 0;
+        long fpixel = 1;
+        long elements = M*N;
+        char *Tname;
+        char *tauname;
+        char *betaname;
+        size_t needed_T;
+        size_t needed_tau;
+        size_t needed_beta;
+        long naxes[2]={M,N};
+        long naxis = 2;
+        char *Tunit = "K";
+        char *tauunit = "";
+        char *betaunit = "";
+
+        float3 *host_3Iout = (float3*)malloc(M*N*sizeof(float3));
+
+        checkCudaErrors(cudaMemcpy2D(host_3Iout, sizeof(float3), I, sizeof(float3), sizeof(float3), M*N, cudaMemcpyDeviceToHost));
+
+        float *host_T = (float*)malloc(M*N*sizeof(float));
+        float *host_tau = (float*)malloc(M*N*sizeof(float));
+        float *host_beta = (float*)malloc(M*N*sizeof(float));
+
+        switch(option) {
+        case 0:
+                needed_T = snprintf(NULL, 0, "!%s_T.fits", out_image) + 1;
+                Tname = (char*)malloc(needed_T*sizeof(char));
+                snprintf(Tname, needed_T*sizeof(char), "!%s_T.fits", out_image);
+                break;
+        case 1:
+                needed_T = snprintf(NULL, 0, "!%sT_%d.fits", mempath, iteration) + 1;
+                Tname = (char*)malloc(needed_T*sizeof(char));
+                snprintf(Tname, needed_T*sizeof(char), "!%sT_%d.fits", mempath, iteration);
+                break;
+        case -1:
+                break;
+        default:
+                printf("Invalid case to FITS\n");
+                exit(-1);
+        }
+
+        switch(option) {
+        case 0:
+                needed_tau = snprintf(NULL, 0, "!%s_tau_0.fits", out_image) + 1;
+                tauname = (char*)malloc(needed_tau*sizeof(char));
+                snprintf(tauname, needed_tau*sizeof(char), "!%s_tau_0.fits", out_image);
+                break;
+        case 1:
+                needed_tau = snprintf(NULL, 0, "!%stau_0_%d.fits", mempath, iteration) + 1;
+                tauname = (char*)malloc(needed_tau*sizeof(char));
+                snprintf(tauname, needed_tau*sizeof(char), "!%stau_0_%d.fits", mempath, iteration);
+                break;
+        case -1:
+                break;
+        default:
+                printf("Invalid case to FITS\n");
+                exit(-1);
+        }
+
+        switch(option) {
+        case 0:
+                needed_beta = snprintf(NULL, 0, "!%s_beta.fits", out_image) + 1;
+                betaname = (char*)malloc(needed_beta*sizeof(char));
+                snprintf(betaname, needed_beta*sizeof(char), "!%s_beta.fits", out_image);
+                break;
+        case 1:
+                needed_beta = snprintf(NULL, 0, "!%sbeta_%d.fits", mempath, iteration) + 1;
+                betaname = (char*)malloc(needed_beta*sizeof(char));
+                snprintf(betaname, needed_beta*sizeof(char), "!%sbeta_%d.fits", mempath, iteration);
+                break;
+        case -1:
+                break;
+        default:
+                printf("Invalid case to FITS\n");
+                exit(-1);
+        }
+
+        fits_create_file(&fpointerT, Tname, &statusT);
+        fits_create_file(&fpointertau, tauname, &statustau);
+        fits_create_file(&fpointerbeta, betaname, &statusbeta);
+
+        if (statusT || statustau || statusbeta) {
+                fits_report_error(stderr, statusT);
+                fits_report_error(stderr, statustau);
+                fits_report_error(stderr, statusbeta);
+                exit(-1);
+        }
+
+        fits_copy_header(canvas, fpointerT, &statusT);
+        fits_copy_header(canvas, fpointertau, &statustau);
+        fits_copy_header(canvas, fpointerbeta, &statusbeta);
+
+        if (statusT || statustau || statusbeta) {
+                fits_report_error(stderr, statusT);
+                fits_report_error(stderr, statustau);
+                fits_report_error(stderr, statusbeta);
+                exit(-1);
+        }
+
+        fits_update_key(fpointerT, TSTRING, "BUNIT", Tunit, "Unit of measurement", &statusT);
+        fits_update_key(fpointertau, TSTRING, "BUNIT", tauunit, "Unit of measurement", &statustau);
+        fits_update_key(fpointerbeta, TSTRING, "BUNIT", betaunit, "Unit of measurement", &statusbeta);
+
+        for(int i=0; i < M; i++) {
+                for(int j=0; j < N; j++) {
+                        host_T[N*i+j] = host_3Iout[N*i+j].x;
+                        host_tau[N*i+j] = host_3Iout[N*i+j].y;
+                        host_beta[N*i+j] = host_3Iout[N*i+j].z;
+                }
+        }
+
+        fits_write_img(fpointerT, TFLOAT, fpixel, elements, host_T, &statusT);
+        fits_write_img(fpointertau, TFLOAT, fpixel, elements, host_tau, &statustau);
+        fits_write_img(fpointerbeta, TFLOAT, fpixel, elements, host_beta, &statusbeta);
+        if (statusT || statustau || statusbeta) {
+                fits_report_error(stderr, statusT);
+                fits_report_error(stderr, statustau);
+                fits_report_error(stderr, statusbeta);
+                exit(-1);
+        }
+        fits_close_file(fpointerT, &statusT);
+        fits_close_file(fpointertau, &statustau);
+        fits_close_file(fpointerbeta, &statusbeta);
+        if (statusT || statustau || statusbeta) {
+                fits_report_error(stderr, statusT);
+                fits_report_error(stderr, statustau);
+                fits_report_error(stderr, statusbeta);
+                exit(-1);
+        }
+
+        free(host_T);
+        free(host_tau);
+        free(host_beta);
+        free(host_3Iout);
+
+        free(betaname);
+        free(tauname);
+        free(Tname);
+
+}
+
+__host__ void closeCanvas(fitsfile *canvas)
+{
+        int status = 0;
+        fits_close_file(canvas, &status);
+        if(status) {
+                fits_report_error(stderr, status);
+                exit(-1);
+        }
 }

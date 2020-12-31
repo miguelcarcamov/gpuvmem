@@ -6,18 +6,18 @@
 class IoMS : public Io
 {
 public:
-IoMS();
-IoMS(std::string input_name, bool apply_noise_input, bool apply_noise_output, bool w_projection, float random_prob_input, float random_prob_output, int gridding);
+canvasVariables IoreadCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag);
 void IoreadMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding);
 void IocopyMS(char const *infile, char const *outfile);
 void IowriteMS(char const *outfile, char const *out_col, std::vector<Field>& fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag);
-private:
-bool apply_noise_input;
-bool apply_noise_output;
-bool w_projection;
-float random_prob_input;
-float random_prob_output;
-int gridding;
+void IocloseCanvas(fitsfile *canvas);
+void IoPrintImage(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU);
+void IoPrintImageIteration(float *I, fitsfile *canvas, char *path, char const *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU);
+void IoPrintOptImageIteration(float *I, char *name_image, char *units, int index, bool isInGPU);
+void IoPrintcuFFTComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option, bool isInGPU);
+void doOrderIterations(float *I);
+void doOrderEnd(float *I);
+void doOrderError(float *I);
 };
 
 #endif

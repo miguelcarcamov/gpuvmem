@@ -1,7 +1,8 @@
 #ifndef CKERNEL_CUH
 #define CKERNEL_CUH
 #include <MSFITSIO.cuh>
-
+extern fitsfile *mod_in;
+extern char *mempath;
 class CKernel
 {
 public:
@@ -139,13 +140,13 @@ __host__ __device__ void setAlpha(float alpha){
 __host__ __device__ void setAngle(float angle){
         this->angle = angle;
 };
-/*__host__ void printCKernel(){
+__host__ void printCKernel(){
         OFITS(this->getKernelPointer(), mod_in, mempath, "ckernel.fits", "", 0, 0, 1.0, this->getm(), this->getn(), false);
-   }
+}
 
-   __host__ void printGPUCKernel(){
+__host__ void printGPUCKernel(){
         OFITS(this->getGPUKernel(), mod_in, mempath, "ckernel_gpu.fits", "", 0, 0, 1.0, this->getm(), this->getn(), true);
-   }*/
+}
 
 private:
 int m_times_n;

@@ -132,70 +132,17 @@ typedef struct MSDataset {
         MSData data;
 }MSDataset;
 
-typedef struct header_values {
+typedef struct canvas_variables {
         double DELTAX, DELTAY;
         double ra, dec;
         double crpix1, crpix2;
         long M, N;
         double beam_bmaj, beam_bmin, beam_bpa;
         float beam_noise;
-        int type;
-        int bitpix;
-}headerValues;
+}canvasVariables;
 
-__host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits);
-__host__ headerValues readFITSHeader(char *filename);
-__host__ fitsfile *openFITS(char *filename);
-__host__ void closeFITS(fitsfile *canvas);
-
-template <typename T>
-__host__ T readHeaderKeyword(char *filename, char *keyword, int type, int verbose_flag)
-{
-        int status_header = 0;
-
-        T value;
-
-        fitsfile *hdu_in = openFITS(filename);
-
-        fits_read_key(hdu_in, type, keyword, &value, NULL, &status_header);
-
-        if (status_header) {
-                fits_report_error(stderr, status_header); /* print error message */
-                exit(0);
-        }
-
-        closeFITS(hdu_in);
-
-        return value;
-
-}
-
-template <typename T>
-__host__ headerValues open_fits(T **data, char *filename)
-{
-        int status = 0;
-        float null = 0;
-        long fpixel = 1;
-        int anynull;
-        headerValues h_values;
-
-        fitsfile *hdu = openFITS(filename);
-
-        h_values = readOpenedFITSHeader(hdu, false);
-        int elements = h_values.M * h_values.N;
-
-        *data = (T*)malloc(elements*sizeof(T));
-
-        fits_read_img(hdu, h_values.type, fpixel, elements, &null, *data, &anynull, &status);
-        if (status) {
-                fits_report_error(stderr, status);         /* print error message */
-                exit(0);
-        }
-
-        closeFITS(hdu);
-        return h_values;
-}
-
+__host__ canvasVariables readCanvas(char *canvas_name, fitsfile *&canvas, float b_noise_aux, int status_canvas, int verbose_flag);
+__host__ void readFITSImageValues(char *imageName, fitsfile *file, float *&values, int status, long M, long N);
 __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding);
 
 __host__ void MScopy(char const *in_dir, char const *in_dir_dest);
@@ -203,10 +150,11 @@ __host__ void MScopy(char const *in_dir, char const *in_dir_dest);
 __host__ void modelToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu);
 __host__ void writeMS(char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag);
 
-__host__ void OCopyFITS(float *I, char *original_filename, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU);
-__host__ void OCopyFITSCufftComplex(cufftComplex *I, char *original_filename, char *path, char *out_image, int iteration, float fg_scale, long M, long N, int option, bool isInGPU);
-__host__ fitsfile *createFITS(char *filename);
-__host__ void copyHeader(fitsfile *original, fitsfile *output);
+__host__ void OFITS(float *I, fitsfile *canvas, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU);
+__host__ void fitsOutputCufftComplex(cufftComplex *I, fitsfile *canvas, char *out_image, char *mempath, int iteration, float fg_scale, long M, long N, int option, bool isInGPU);
+__host__ void float2toImage(float *I, fitsfile *canvas, char *out_image, char*mempath, int iteration, float fg_scale, long M, long N, int option);
+__host__ void float3toImage(float3 *I, fitsfile *canvas, char *out_image, char*mempath, int iteration, long M, long N, int option);
+__host__ void closeCanvas(fitsfile *canvas);
 
 __host__ __device__ float freq_to_wavelength(float freq);
 __host__ __device__ double metres_to_lambda(double uvw_metres, float freq);
