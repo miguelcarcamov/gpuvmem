@@ -56,9 +56,7 @@ extern float threshold;
 extern float nu_0;
 extern int nPenalizators, print_errors, nMeasurementSets, max_number_vis;
 
-extern char* mempath, *out_image;
-
-extern fitsfile *mod_in;
+extern char* mempath, *out_image, modinput;
 
 extern MSDataset *datasets;
 
@@ -1413,7 +1411,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaDeviceSynchronize());
 
 
-                                        fitsOutputCufftComplex(vars_gpu[0].device_V, mod_in, "amp.fits", "./", 0, 1.0, M, N, 0, true);
+                                        //OCopyFITSCufftComplex(vars_gpu[0].device_V, modinput, "amp.fits", "./", 0, 1.0, M, N, 0, true);
                                         // Interpolation / Degridding
                                         vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
                                                 fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
