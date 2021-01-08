@@ -12,7 +12,7 @@ Entropy::Entropy(){
 
 Entropy::Entropy(float prior_value){
         this->name = "Entropy";
-        this->prior_value = 1.0;
+        this->prior_value = prior_value;
 };
 
 float Entropy::getPrior(){
@@ -26,13 +26,14 @@ void Entropy::setPrior(float prior_value){
 float Entropy::calcFi(float *p)
 {
         float result = 0.0;
-        this->set_fivalue(SEntropy(p, device_S, penalization_factor, mod, order, imageIndex));
+        this->set_fivalue(SEntropy(p, device_S, this->prior_value, penalization_factor, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
-}
+};
+
 void Entropy::calcGi(float *p, float *xi)
 {
-        DEntropy(p, device_DS, penalization_factor, mod, order, imageIndex);
+        DEntropy(p, device_DS, this->prior_value, penalization_factor, mod, order, imageIndex);
 };
 
 

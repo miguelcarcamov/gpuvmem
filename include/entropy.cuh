@@ -13,7 +13,7 @@ public:
 Entropy();
 Entropy(float prior_value);
 float getPrior();
-void setPrior(float prior_value);
+void setPrior(float prior_value) override;
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();

@@ -158,12 +158,10 @@ __host__ int main(int argc, char **argv) {
         Fi *l1 = createObject<Fi,std::string>("L1-Norm");
         Fi *tsqv = createObject<Fi,std::string>("TotalSquaredVariation");
         Fi *lap = createObject<Fi,std::string>("Laplacian");
-        Fi *gen = createObject<Fi, std::string>("GEntropy");
-        float p = 1.0;
-        void * param = &p;
-        gen->setParams(param);
+
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
+        e->setPrior(0.001);
         l1->configure(1, 0, 0);
         tsqv->configure(2, 0, 0);
         lap->configure(3, 0, 0);
@@ -180,15 +178,15 @@ __host__ int main(int argc, char **argv) {
         //to modify this, use these sentences, where i corresponds to the index of the image ( particularly, means positivity)
 
         /*std::vector<float> lambdas = {1.0, 1e-5, 1e-5};
-        std::vector<Fi*> fis = of->getFi();
-        int i = 0;
-        for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
-        {
+           std::vector<Fi*> fis = of->getFi();
+           int i = 0;
+           for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
+           {
                 (*it)->setPenalizationFactor(lambdas[i]);
                 i++;
-        }
+           }
 
-        std::vector<float> final_lambdas = fixedPointOpt(lambdas, &runGpuvmem, 1e-6, 60, sy);*/
+           std::vector<float> final_lambdas = fixedPointOpt(lambdas, &runGpuvmem, 1e-6, 60, sy);*/
         sy->run();
 
         sy->writeImages();

@@ -2174,20 +2174,20 @@ __device__ float calculateDS(float *I, float G, float eta, float lambda, float n
         return dS;
 }
 
-__global__ void SVector(float *S, float *noise, float *I, long N, long M, float noise_cut, float MINPIX, float eta, int index)
+__global__ void SVector(float *S, float *noise, float *I, long N, long M, float noise_cut, float prior_value, float eta, int index)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        S[N*i+j] = calculateS(I, MINPIX, eta, noise[N*i+j], noise_cut, index, M, N);
+        S[N*i+j] = calculateS(I, prior_value, eta, noise[N*i+j], noise_cut, index, M, N);
 }
 
-__global__ void DS(float *dS, float *I, float *noise, float noise_cut, float lambda, float MINPIX, float eta, long N, long M, int index)
+__global__ void DS(float *dS, float *I, float *noise, float noise_cut, float lambda, float prior_value, float eta, long N, long M, int index)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        dS[N*i+j]  = calculateDS(I, MINPIX, eta, lambda, noise[N*i+j], noise_cut, index, M, N);
+        dS[N*i+j]  = calculateDS(I, prior_value, eta, lambda, noise[N*i+j], noise_cut, index, M, N);
 }
 
 __global__ void SGVector(float *S, float *noise, float *I, long N, long M, float noise_cut, float *prior, float eta, int index)
@@ -3223,14 +3223,14 @@ __host__ void DL1Norm(float *I, float *dgi, float penalization_factor, float eps
 };
 
 
-__host__ float SEntropy(float *I, float * ds, float penalization_factor, int mod, int order, int index)
+__host__ float SEntropy(float *I, float * ds, float prior_value, float penalization_factor, int mod, int order, int index)
 {
         cudaSetDevice(firstgpu);
 
         float resultS = 0.0f;
         if(iter > 0 && penalization_factor)
         {
-                SVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, initial_values[index], eta, index);
+                SVector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, N, M, noise_cut, prior_value, eta, index);
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
@@ -3238,14 +3238,14 @@ __host__ float SEntropy(float *I, float * ds, float penalization_factor, int mod
         return resultS;
 };
 
-__host__ void DEntropy(float *I, float *dgi, float penalization_factor, int mod, int order, int index)
+__host__ void DEntropy(float *I, float *dgi, float prior_value, float penalization_factor, int mod, int order, int index)
 {
         cudaSetDevice(firstgpu);
 
         if(iter > 0 && penalization_factor)
         {
                 if(flag_opt%2 == index) {
-                        DS<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, initial_values[index], eta, N, M, index);
+                        DS<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image, noise_cut, penalization_factor, prior_value, eta, N, M, index);
                         checkCudaErrors(cudaDeviceSynchronize());
                 }
         }

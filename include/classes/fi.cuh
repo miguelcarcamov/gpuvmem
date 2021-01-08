@@ -15,7 +15,10 @@ virtual float calcFi(float *p) = 0;
 virtual void calcGi(float *p, float *xi) = 0;
 virtual void restartDGi() = 0;
 virtual void addToDphi(float *device_dphi) = 0;
-virtual void setParams(void * params){}
+virtual void setPrior(float prior){
+};
+virtual void setPrior(float *prior){
+};
 
 float get_fivalue(){
         return this->fi_value;

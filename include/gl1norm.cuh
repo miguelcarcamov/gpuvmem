@@ -19,7 +19,7 @@ GL1Norm(std::vector<float> prior, float normalization_factor);
 ~GL1Norm();
 float getNormalizationFactor();
 void setNormalizationFactor(float normalization_factor);
-void setPrior(float *prior);
+void setPrior(float *prior) override;
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();

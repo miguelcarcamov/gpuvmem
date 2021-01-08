@@ -19,13 +19,12 @@ GEntropy(std::vector<float> prior, float normalization_factor);
 ~GEntropy();
 float getNormalizationFactor();
 void setNormalizationFactor(float normalization_factor);
-void setPrior(float *prior);
+void setPrior(float *prior) override;
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();
 void addToDphi(float *device_dphi);
 void setSandDs(float *S, float *Ds);
-void setParams(void *params) override;
 float calculateSecondDerivate(){
 };
 void normalizePrior();
