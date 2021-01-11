@@ -25,7 +25,7 @@ void TVariation::setEpsilon(float epsilon){
 
 float TVariation::calcFi(float *p)
 {
-        float result = 0.0;
+        float result = 0.0f;
         this->set_fivalue(totalvariation(p, device_S, this->epsilon, penalization_factor, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;

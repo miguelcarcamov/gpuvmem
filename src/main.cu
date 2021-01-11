@@ -161,7 +161,7 @@ __host__ int main(int argc, char **argv) {
 
         chi2->configure(-1, 0, 0); // (penalizatorIndex, ImageIndex, imageToaddDphi)
         e->configure(0, 0, 0);
-        e->setPrior(0.001);
+        e->setPrior(0.001f);
         l1->configure(1, 0, 0);
         tsqv->configure(2, 0, 0);
         lap->configure(3, 0, 0);

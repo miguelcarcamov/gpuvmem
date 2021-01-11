@@ -39,7 +39,7 @@ float *device_xicom, (*nrfunc)(float*);
 extern long M;
 extern long N;
 extern float MINPIX, eta;
-extern int nopositivity;
+extern bool nopositivity;
 
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
@@ -78,7 +78,7 @@ __host__ void linmin(float *p, float *xi, float *fret, float (*func)(float*)) //
         //xi     = xi*xmin;
         //p      = p + xi;
         imageMap *auxPtr = I->getFunctionMapping();
-        if(nopositivity == 0) {
+        if(!nopositivity) {
                 for(int i=0; i<I->getImageCount(); i++)
                 {
                         (auxPtr[i].newP)(p, xi, xmin, i);

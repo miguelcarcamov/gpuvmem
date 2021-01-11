@@ -39,7 +39,7 @@ extern long N;
 extern float MINPIX, eta;
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
-extern int nopositivity;
+extern bool nopositivity;
 extern float *initial_values;
 extern int image_count;
 
@@ -57,7 +57,7 @@ __host__ float f1dim(float x)
 
         imageMap* auxPtr = I->getFunctionMapping();
         //xt = pcom+x*xicom;
-        if(nopositivity == 0) {
+        if(!nopositivity) {
                 for(int i=0; i<I->getImageCount(); i++)
                 {
                         (auxPtr[i].evaluateXt)(device_xt, device_pcom, device_xicom, x, i);

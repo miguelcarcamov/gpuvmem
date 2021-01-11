@@ -14,10 +14,10 @@ double beam_bmaj, beam_bmin, beam_bpa;
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
 
-int nopositivity = 0, verbose_flag = 0, clip_flag = 0, apply_noise = 0, print_images = 0, save_model_input = 0, radius_mask = 0;
 int gridding, it_maximum, status_mod_in;
-int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, print_errors, nMeasurementSets=0, max_number_vis;
-char *output, *mempath, *out_image, *msinput, *msoutput, *inputdat, *modinput;
+int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, nMeasurementSets=0, max_number_vis;
+
+std::string msinput, msoutput, inputdat, modinput, mempath, out_image, output;
 float nu_0, threshold;
 extern int num_gpus;
 
@@ -28,12 +28,19 @@ std::vector<MSDataset> datasets;
 
 varsPerGPU *vars_gpu;
 
+bool verbose_flag, nopositivity, clip_flag, apply_noise, \
+     print_images, print_errors, save_model_input, radius_mask;
+
 Vars variables;
 
 clock_t t;
 double start, end;
 
 float noise_min = 1E32;
+
+Flags flags;
+
+char *executable;
 
 inline bool IsGPUCapableP2P(cudaDeviceProp *pProp)
 {
@@ -44,20 +51,11 @@ inline bool IsGPUCapableP2P(cudaDeviceProp *pProp)
   #endif
 }
 
-std::vector<std::string> MFS::countAndSeparateStrings(char *input)
+std::vector<std::string> MFS::countAndSeparateStrings(std::string long_str, std::string sep)
 {
-        char *pt;
         std::vector<std::string> ret;
+        boost::split(ret, long_str, boost::is_any_of(sep));
 
-        int counter = 0;
-        pt = strtok(input, ",");
-        while(pt!=NULL) {
-                std::string s(pt);
-                ret.push_back(s);
-                pt = strtok (NULL, ",");
-        }
-
-        free(pt);
         return ret;
 }
 
@@ -73,10 +71,10 @@ void MFS::configure(int argc, char **argv)
         msoutput = variables.output;
         inputdat = variables.inputdat;
         modinput = variables.modin;
-        iohandler->setOriginal_FITS_name(modinput);
+        iohandler->setOriginal_FITS_name(modinput.c_str());
         out_image = variables.output_image;
         mempath = variables.path;
-        iohandler->setFitsPath(mempath);
+        iohandler->setFitsPath(mempath.c_str());
         it_maximum = variables.it_max;
         total_visibilities = 0;
         b_noise_aux = variables.noise;
@@ -92,8 +90,8 @@ void MFS::configure(int argc, char **argv)
         int n_outputs;
 
 
-        if(strcmp(msinput, "NULL")!=0) {
-                string_values = countAndSeparateStrings(msinput);
+        if(msinput != "NULL") {
+                string_values = countAndSeparateStrings(msinput, ",");
                 nMeasurementSets = string_values.size();
         }else{
                 printf("Datasets files were not provided\n");
@@ -101,8 +99,8 @@ void MFS::configure(int argc, char **argv)
                 exit(-1);
         }
 
-        if(strcmp(msoutput, "NULL")!=0) {
-                s_output_values = countAndSeparateStrings(msoutput);
+        if(msoutput != "NULL") {
+                s_output_values = countAndSeparateStrings(msoutput, ",");
                 n_outputs = s_output_values.size();
         }else{
                 printf("Output/s was/were not provided\n");
@@ -130,8 +128,8 @@ void MFS::configure(int argc, char **argv)
         string_values.clear();
         s_output_values.clear();
 
-        if(strcmp(variables.initial_values, "NULL")!=0) {
-                string_values = countAndSeparateStrings(variables.initial_values);
+        if(variables.initial_values != "NULL") {
+                string_values = countAndSeparateStrings(variables.initial_values, ",");
                 image_count = string_values.size();
         }else{
                 printf("Initial values for image/s were not provided\n");
@@ -141,9 +139,9 @@ void MFS::configure(int argc, char **argv)
 
         for(int i=0; i< image_count; i++) {
                 if(i==0) {
-                        initial_values.push_back(atof(string_values[i].c_str()) * -1.0f * eta);
+                        initial_values.push_back(std::stof(string_values[i]) * -1.0f * eta);
                 }else{
-                        initial_values.push_back(atof(string_values[i].c_str()));
+                        initial_values.push_back(std::stof(string_values[i]));
                 }
         }
 
@@ -161,14 +159,14 @@ void MFS::configure(int argc, char **argv)
          */
         struct stat st = {0};
         if(print_images)
-                if(stat(mempath, &st) == -1) mkdir(mempath,0700);
+                if(stat(mempath.c_str(), &st) == -1) mkdir(mempath.c_str(),0700);
 
         /*
            Read input.dat file and FITS header
          */
-        readInputDat(inputdat);
-        headerValues canvas_vars = iohandler->IoreadCanvas(modinput);
-
+        readInputDat(strdup(inputdat.c_str()));
+        headerValues canvas_vars = iohandler->IoreadCanvas(strdup(modinput.c_str()));
+        //canvas_vars.beam_noise = iohandler->readHeaderKeyword<float>(strdup(modinput.c_str()), "NOISE", TFLOAT);
         M = canvas_vars.M;
         N = canvas_vars.N;
         DELTAX = canvas_vars.DELTAX;
@@ -271,7 +269,7 @@ void MFS::configure(int argc, char **argv)
         printf("The maximum theoretical resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec);
         printf("The oversampled (by a factor of 7) resolution of this/these dataset/s is ~%f arcsec\n", resolution_arcsec/7.0f);
 
-        if(nu_0 < 0) {
+        if(nu_0 < 0.0) {
                 printf("Reference frequency not provided. It will be calculated as the median of all the arrays of frequencies.\n");
                 nu_0 = median(ms_ref_freqs);
         }
@@ -296,7 +294,7 @@ void MFS::configure(int argc, char **argv)
         firstgpu = 0;
         int count_gpus;
 
-        string_values = countAndSeparateStrings(variables.gpus);
+        string_values = countAndSeparateStrings(variables.gpus, ",");
         count_gpus = string_values.size();
 
         if(count_gpus == 0) {
@@ -304,23 +302,24 @@ void MFS::configure(int argc, char **argv)
                 selected = 0;
         }else if(count_gpus == 1) {
                 multigpu = 0;
-                selected = atoi(string_values[0].c_str());
+                selected = std::stoi(string_values[0]);
                 firstgpu = selected;
         }else{
                 multigpu = count_gpus;
-                firstgpu = atoi(string_values[0].c_str());
+                firstgpu = std::stoi(string_values[0]);
         }
 
 
         string_values.clear();
 
-        if(strcmp(variables.penalization_factors, "NULL")!=0) {
+        if(variables.penalization_factors != "NULL") {
 
-                string_values = countAndSeparateStrings(variables.penalization_factors);
+                string_values = countAndSeparateStrings(variables.penalization_factors, ",");
                 nPenalizators = string_values.size();
                 penalizators = (float*)malloc(sizeof(float)*nPenalizators);
-                for(int i = 0; i < nPenalizators; i++)
-                        penalizators[i] = atof(string_values[i].c_str());
+                for(int i = 0; i < nPenalizators; i++) {
+                        penalizators[i] = std::stof(string_values[i]);
+                }
 
         }else{
                 printf("No regularization factors provided\n");
@@ -846,8 +845,8 @@ void MFS::run()
         printf("Total CPU time: %lf\n", time_taken);
         printf("Wall time: %lf\n\n\n", wall_time);
 
-        if(strcmp(variables.ofile,"NULL") != 0) {
-                FILE *outfile = fopen(variables.ofile, "w");
+        if(variables.ofile != "NULL") {
+                FILE *outfile = fopen(variables.ofile.c_str(), "w");
                 if (outfile == NULL)
                 {
                         printf("Error opening output file!\n");
@@ -877,7 +876,7 @@ void MFS::writeImages()
 {
         printf("Saving final image to disk\n");
         if(IoOrderEnd == NULL) {
-                iohandler->IoPrintImage(image->getImage(), "", out_image, "JY/PIXEL", iter, 0, fg_scale, M, N, true);
+                iohandler->IoPrintImage(image->getImage(), "", strdup(out_image.c_str()), "JY/PIXEL", iter, 0, fg_scale, M, N, true);
                 iohandler->IoPrintImage(image->getImage(), "", "alpha.fits", "", iter, 1, 1.0, M, N, true);
         }else{
                 (IoOrderEnd)(image->getImage(), iohandler);
@@ -1036,9 +1035,6 @@ void MFS::unSetDevice()
                 }
         }
         free(host_I);
-        free(msinput);
-        free(msoutput);
-        free(modinput);
 
         for(int i=0; i< nMeasurementSets; i++) {
                 free(datasets[i].name);

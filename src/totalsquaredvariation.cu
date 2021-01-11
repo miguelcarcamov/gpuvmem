@@ -6,12 +6,12 @@ extern float * penalizators;
 extern int nPenalizators;
 
 TotalSquaredVariationP::TotalSquaredVariationP(){
-  this->name = "Total Squared Variation";
+        this->name = "Total Squared Variation";
 };
 
 float TotalSquaredVariationP::calcFi(float *p)
 {
-        float result = 0.0;
+        float result = 0.0f;
         this->set_fivalue(TotalSquaredVariation(p, device_S, penalization_factor, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;

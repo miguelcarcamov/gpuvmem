@@ -11,7 +11,7 @@ Laplacian::Laplacian(){
 
 float Laplacian::calcFi(float *p)
 {
-        float result = 0.0;
+        float result = 0.0f;
         this->set_fivalue(laplacian(p, device_S, penalization_factor, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;

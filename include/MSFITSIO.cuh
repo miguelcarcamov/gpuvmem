@@ -149,7 +149,7 @@ __host__ fitsfile *openFITS(char *filename);
 __host__ void closeFITS(fitsfile *canvas);
 
 template <typename T>
-__host__ T readHeaderKeyword(char *filename, char *keyword, int type, int verbose_flag)
+__host__ T readHeaderKeyword(char *filename, char *keyword, int type)
 {
         int status_header = 0;
 
@@ -161,7 +161,6 @@ __host__ T readHeaderKeyword(char *filename, char *keyword, int type, int verbos
 
         if (status_header) {
                 fits_report_error(stderr, status_header); /* print error message */
-                exit(0);
         }
 
         closeFITS(hdu_in);

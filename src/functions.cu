@@ -35,8 +35,8 @@
 namespace cg = cooperative_groups;
 
 extern long M, N;
-extern int iterations, iter, nopositivity, image_count, \
-           status_mod_in, flag_opt, verbose_flag, clip_flag, num_gpus, selected, iter, multigpu, firstgpu, reg_term, save_model_input, apply_noise, print_images, gridding, radius_mask;
+extern int iterations, iter, image_count, \
+           status_mod_in, flag_opt, num_gpus, selected, iter, multigpu, firstgpu, reg_term, gridding;
 
 extern cufftHandle plan1GPU;
 extern cufftComplex *device_V, *device_fg_image, *device_I_nu;
@@ -54,7 +54,7 @@ extern float *initial_values, *penalizators, robust_param;
 extern double ra, dec, DELTAX, DELTAY, deltau, deltav, crpix1, crpix2;
 extern float threshold;
 extern float nu_0;
-extern int nPenalizators, print_errors, nMeasurementSets, max_number_vis;
+extern int nPenalizators, nMeasurementSets, max_number_vis;
 
 extern char* mempath, *out_image;
 
@@ -65,6 +65,13 @@ extern MSDataset *datasets;
 extern varsPerGPU *vars_gpu;
 
 extern Vars variables;
+
+extern bool verbose_flag, nopositivity, clip_flag, apply_noise, \
+            print_images, print_errors, save_model_input, radius_mask;
+
+extern Flags flags;
+
+extern char* executable;
 
 typedef float (*FnPtr)(float, float, float, float);
 
@@ -214,40 +221,7 @@ __host__ void readInputDat(char *file)
 }
 
 __host__ void print_help() {
-        printf("Example: ./bin/gpuvmem options [ arguments ...]\n");
-        printf("    -h  --help             Shows this\n");
-        printf( "   -X  --blockSizeX       Block X Size for Image (Needs to be pow of 2)\n");
-        printf( "   -Y  --blockSizeY       Block Y Size for Image (Needs to be pow of 2)\n");
-        printf( "   -V  --blockSizeV       Block Size for Visibilities (Needs to be pow of 2)\n");
-        printf( "   -i  --input            The name of the input file/s (separated by a comma) of visibilities(MS)\n");
-        printf( "   -o  --output           The name of the output file/s (separated by a comma) of residual visibilities(MS)\n");
-        printf( "   -O  --output-image     The name of the output image FITS file\n");
-        printf("    -I  --inputdat         The name of the input file of parameters\n");
-        printf("    -m  --model_input      FITS file including a complete header for astrometry\n");
-        printf("    -n  --noise            Noise Parameter (Optional)\n");
-        printf("    -N  --noise-cut        Noise-cut Parameter (Optional)\n");
-        printf("    -r  --randoms          Percentage of data used when random sampling (Default = 1.0, optional)\n");
-        printf("    -e  --eta              Variable that controls the minimum image value (Default eta = -1.0)\n");
-        printf("    -p  --path             MEM path to save FITS images. With last / included. (Example ./../mem/)\n");
-        printf("    -f  --file             Output file where final objective function values are saved (Optional)\n");
-        printf("    -G  --gpus             Index of the GPU/s you are going to use separated by a comma\n");
-        printf("    -t  --iterations       Number of iterations for optimization (Default = 500)\n");
-        printf("    -g  --gridding         Use gridding to decrease the number of visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)\n");
-        printf("    -F  --nu_0             Reference frequency in Hz (if alpha is not zero)");
-        printf("    -z  --initial_values   Initial conditions for image/s\n");
-        printf("    -Z  --penalizators     penalizators for Fi\n");
-        printf("    -R  --robust-parameter Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0 for natural weighting and 0.0 for a tradeoff between these two. (Default R = 2.0).\n");
-        printf("    -T  --threshold        Threshold to calculate the spectral index image from a certain number of sigmas in I_nu_0\n");
-        printf("    -c  --copyright        Shows copyright conditions\n");
-        printf("    -w  --warranty         Shows no warranty details\n");
-        printf("        --use-radius-mask  Use a mask based on a radius instead of the noise estimation\n");
-        printf("        --savemodel-input  Saves the model visibilities on the model column of the input MS\n");
-        printf("        --nopositivity     Run gpuvmem using chi2 with no posititivy restriction\n");
-        printf("        --apply-noise      Apply random gaussian noise to visibilities\n");
-        printf("        --clipping         Clips the image to positive values\n");
-        printf("        --print-images     Prints images per iteration\n");
-        printf("        --print-errors     Prints final error images\n");
-        printf("        --verbose          Shows information through all the execution\n");
+        flags.PrintHelp(executable);
 }
 
 __host__ char *strip(const char *string, const char *chars)
@@ -268,174 +242,60 @@ __host__ char *strip(const char *string, const char *chars)
 
 __host__ Vars getOptions(int argc, char **argv) {
         Vars variables;
-        variables.gpus = "0";
-        variables.ofile = "NULL";
-        variables.path = "mem/";
-        variables.output_image = "mod_out.fits";
-        variables.initial_values = "NULL";
-        variables.penalization_factors = "NULL";
-        variables.blockSizeX = -1;
-        variables.blockSizeY = -1;
-        variables.blockSizeV = -1;
-        variables.it_max = 500;
-        variables.noise = -1;
-        variables.randoms = -1.0;
-        variables.noise_cut = -1;
-        variables.eta = -1.0;
-        variables.gridding = 0;
-        variables.robust_param = 2.0;
-        variables.nu_0 = -1;
-        variables.threshold = 0.0;
+        bool help, copyright, warranty;
 
+        flags.Var(variables.input, 'i', "input", std::string("NULL"), "Name of the input visibility file/s (separated by a comma)", "Mandatory");
+        flags.Var(variables.output, 'o', "output", std::string("NULL"), "Name of the output visibility file/s (separated by a comma)", "Mandatory");
+        flags.Var(variables.output_image, 'O', "output_image", std::string("mod_out.fits"), "Name of the output visibility file/s (separated by a comma)");
+        flags.Var(variables.inputdat, 'I', "input_file", std::string("input.dat"), "Name of the input parameter file", "Mandatory");
+        flags.Var(variables.modin, 'm', "model_input", std::string("mod_in_0.fits"), "FITS file including a complete header for astrometry");
+        flags.Var(variables.noise, 'n', "noise", -1.0f, "Noise factor parameter", "Optional");
+        flags.Var(variables.eta, 'e', "eta", -1.0f, "Variable that controls the minimum image value in the entropy prior");
+        flags.Var(variables.noise_cut, 'N', "noise_cut", -1.0f, "Noise-cut Parameter", "Optional");
+        flags.Var(variables.nu_0, 'F', "ref_frequency", -1.0f, "Reference frequency in Hz (if alpha is not zero)");
+        flags.Var(variables.threshold, 'T', "threshold", 0.0f, "Threshold to calculate the spectral index image above a certain number of sigmas in I_nu_0");
+        flags.Var(variables.path, 'p', "path", std::string("mem/"), "Path to save FITS images. With last trail / included. (Example ./../mem/)");
+        flags.Var(variables.gpus, 'G', "gpus", std::string("0"), "Index of the GPU/s you are going to use separated by a comma");
+        flags.Var(variables.randoms, 'r', "random_sampling", -1.0f, "Percentage of data used when random sampling", "Optional");
+        flags.Var(variables.robust_param, 'R', "robust_parameter", 2.0f, "Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0 for natural weighting and 0.0 for a tradeoff between these two.");
+        flags.Var(variables.ofile, 'f', "output_file", std::string("NULL"), "Output file where final objective function values are saved", "Optional");
+        flags.Var(variables.blockSizeX, 'X', "blockSizeX", -1, "GPU block X Size for image/Fourier plane (Needs to be pow of 2)");
+        flags.Var(variables.blockSizeY, 'Y', "blockSizeY", -1, "GPU block Y Size for image/Fourier plane (Needs to be pow of 2)");
+        flags.Var(variables.blockSizeV, 'V', "blockSizeV", -1, "GPU block V Size for visibilities (Needs to be pow of 2)");
+        flags.Var(variables.it_max, 't', "iterations", 500, "Number of iterations for optimization");
+        flags.Var(variables.gridding, 'g', "gridding", 0, "Use gridded visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)");
+        flags.Var(variables.initial_values, 'z', "initial_values", std::string("NULL"), "Initial values for image/s");
+        flags.Var(variables.penalization_factors, 'Z', "regularization_factors", std::string("NULL"), "Regularization factors for each regularization (separated by a comma)");
+        flags.Bool(verbose_flag, 'v', "verbose", "Shows information through all the execution", "Flag");
+        flags.Bool(nopositivity, 'x', "nopositivity", "Runs gpuvmem with no positivity restrictions on the images", "Flag");
+        flags.Bool(clip_flag, 'C', "clipping", "Clips the image to positive values", "Flag");
+        flags.Bool(apply_noise, 'a', "apply-noise", "Applies random gaussian noise to visibilities", "Flag");
+        flags.Bool(print_images, 'P', "print-images", "Prints images per iteration", "Flag");
+        flags.Bool(print_errors, 'E', "print-errors", "Prints final error maps", "Flag");
+        flags.Bool(save_model_input, 's', "save_modelcolumn", "Saves the model visibilities on the model column of the input MS", "Flag");
+        flags.Bool(radius_mask, 'M', "use-radius-mask", "Use a mask based on a radius instead of the noise estimation", "Flag");
+        flags.Bool(help, 'h', "help", "Shows this help");
+        flags.Bool(warranty, 'w', "warranty", "Shows no warranty details");
+        flags.Bool(copyright, 'c', "copyright", "Shows copyright conditions");
+        executable = argv[0];
 
-        long next_op;
-        const char* const short_op = "hcwi:o:O:I:m:n:N:r:R:f:G:e:p:X:Y:V:t:g:z:T:F:Z:";
-
-        const struct option long_op[] = { //Flag for help, copyright and warranty
-                {"help", 0, NULL, 'h' },
-                {"warranty", 0, NULL, 'w' },
-                {"copyright", 0, NULL, 'c' },
-                /* These options set a flag. */
-                {"verbose", 0, &verbose_flag, 1},
-                {"nopositivity", 0, &nopositivity, 1},
-                {"clipping", 0, &clip_flag, 1},
-                {"apply-noise", 0, &apply_noise, 1},
-                {"print-images", 0, &print_images, 1},
-                {"print-errors", 0, &print_errors, 1},
-                {"savemodel-input", 0, &save_model_input, 1},
-                {"use-radius-mask", 0, &radius_mask, 1},
-                /* These options don’t set a flag. */
-                {"input", 1, NULL, 'i' }, {"output", 1, NULL, 'o'}, {"output-image", 1, NULL, 'O'},
-                {"threshold", 0, NULL, 'T'}, {"nu_0", 0, NULL, 'F'}, {"inputdat", 1, NULL, 'I'},
-                {"model_input", 1, NULL, 'm' }, {"noise", 0, NULL, 'n' }, {"gpus", 0, NULL, 'G'},
-                {"path", 1, NULL, 'p'}, {"robust-parameter", 0, NULL, 'R'}, {"eta", 0, NULL, 'e'},
-                {"blockSizeX", 1, NULL, 'X'}, {"blockSizeY", 1, NULL, 'Y'}, {"blockSizeV", 1, NULL, 'V'},
-                {"iterations", 0, NULL, 't'}, {"noise-cut", 0, NULL, 'N' }, {"initial_values", 1, NULL, 'z'}, {"penalizators", 0, NULL, 'Z'},
-                {"randoms", 0, NULL, 'r' }, {"file", 0, NULL, 'f' }, {"gridding", 0, NULL, 'g' }, { NULL, 0, NULL, 0 }
-        };
-
-        if (argc == 1) {
-                printf(
-                        "ERROR. THE PROGRAM HAS BEEN EXECUTED WITHOUT THE NEEDED PARAMETERS OR OPTIONS\n");
+        if (!flags.Parse(argc, argv)) {
+                print_help();
+                exit(EXIT_SUCCESS);
+        }else if(help) {
                 print_help();
                 exit(EXIT_SUCCESS);
         }
-        int option_index = 0;
-        while (1) {
-                next_op = getopt_long(argc, argv, short_op, long_op, &option_index);
-                if (next_op == -1) {
-                        break;
-                }
 
-                switch (next_op) {
-                case 0:
-                        /* If this option set a flag, do nothing else now. */
-                        if (long_op[option_index].flag != 0)
-                                break;
-                        printf ("option %s", long_op[option_index].name);
-                        if (optarg)
-                                printf (" with arg %s", optarg);
-                        printf ("\n");
-                        break;
-                case 'h':
-                        print_help();
-                        exit(EXIT_SUCCESS);
-                case 'w':
-                        print_warranty();
-                        exit(EXIT_SUCCESS);
-                case 'c':
-                        print_copyright();
-                        exit(EXIT_SUCCESS);
-                case 'i':
-                        variables.input = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.input, optarg);
-                        break;
-                case 'o':
-                        variables.output = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.output, optarg);
-                        break;
-                case 'O':
-                        variables.output_image = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.output_image, optarg);
-                        break;
-                case 'I':
-                        variables.inputdat = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.inputdat, optarg);
-                        break;
-                case 'm':
-                        variables.modin = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.modin, optarg);
-                        break;
-                case 'n':
-                        variables.noise = atof(optarg);
-                        break;
-                case 'e':
-                        variables.eta = atof(optarg);
-                        break;
-                case 'N':
-                        variables.noise_cut = atof(optarg);
-                        break;
-                case 'F':
-                        variables.nu_0 = atof(optarg);
-                        break;
-                case 'T':
-                        variables.threshold = atof(optarg);
-                        break;
-                case 'p':
-                        variables.path = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.path, optarg);
-                        break;
-                case 'G':
-                        variables.gpus = optarg;
-                        break;
-                case 'r':
-                        variables.randoms = atof(optarg);
-                        break;
-                case 'R':
-                        variables.robust_param = atof(optarg);
-                        break;
-                case 'f':
-                        variables.ofile = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.ofile, optarg);
-                        break;
-                case 'X':
-                        variables.blockSizeX = atoi(optarg);
-                        break;
-                case 'Y':
-                        variables.blockSizeY = atoi(optarg);
-                        break;
-                case 'V':
-                        variables.blockSizeV = atoi(optarg);
-                        break;
-                case 't':
-                        variables.it_max = atoi(optarg);
-                        break;
-                case 'g':
-                        variables.gridding = atoi(optarg);
-                        break;
-                case 'z':
-                        variables.initial_values = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.initial_values, optarg);
-                        break;
-                case 'Z':
-                        variables.penalization_factors = (char*) malloc((strlen(optarg)+1)*sizeof(char));
-                        strcpy(variables.penalization_factors, optarg);
-                        break;
-                case '?':
-                        print_help();
-                        exit(EXIT_FAILURE);
-                case -1:
-                        break;
-                default:
-                        print_help();
-                        exit(EXIT_FAILURE);
-                }
+
+        if(warranty) {
+                print_help();
+                exit(EXIT_SUCCESS);
         }
 
-        if(strcmp(strip(variables.input, " "),"") == 0 && strcmp(strip(variables.output, " "),"") == 0 && strcmp(strip(variables.output_image, " "),"") == 0 && strcmp(strip(variables.inputdat, " "),"") == 0 ||
-           strcmp(strip(variables.modin, " "),"") == 0 && strcmp(strip(variables.path, " "),"") == 0) {
+        if(copyright) {
                 print_help();
-                exit(EXIT_FAILURE);
+                exit(EXIT_SUCCESS);
         }
 
         if(variables.randoms > 1.0) {
@@ -1295,7 +1155,7 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
-        if(beam_noise == -1 || gridding > 0)
+        if(beam_noise <= 0.0 || gridding > 0)
         {
                 beam_noise = sqrt(variance);
                 if(verbose_flag) {
@@ -1730,7 +1590,6 @@ __global__ void total_attenuation(float *total_atten, float antenna_diameter, fl
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         float attenPerFreq = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
-
         total_atten[N*i+j] += attenPerFreq;
 }
 
@@ -2151,7 +2010,7 @@ __device__ float calculateS(float *I, float G, float eta, float noise, float noi
         float S = 0.0f;
 
         if(noise < noise_cut) {
-                S = c * logf((c/G) + (eta + 1.0));
+                S = c * logf((c/G) + (eta + 1.0f));
         }
 
         return S;
@@ -2167,7 +2026,7 @@ __device__ float calculateDS(float *I, float G, float eta, float lambda, float n
 
         float c = I[N*M*index+N*i+j];
         if(noise < noise_cut) {
-                dS = logf((c / G) + (eta+1.0)) + 1.0/(1.0 + (((eta+1.0)*G) / c));
+                dS = logf((c / G) + (eta+1.0f)) + 1.0f/(1.0f + (((eta+1.0f)*G) / c));
         }
 
         dS *= lambda;
@@ -2228,7 +2087,7 @@ __device__ float calculateQP(float *I, float noise, float noise_cut, int index, 
                              (c - r) * (c - r) +
                              (c - u) * (c - u) +
                              (c - d) * (c - d);
-                        qp /= 2.0;
+                        qp /= 2.0f;
                 }else{
                         qp = c;
                 }
@@ -2262,7 +2121,7 @@ __device__ float calculateDQ(float *I, float lambda, float noise, float noise_cu
                         r = I[N*M*index+N*i+(j+1)];
                         l = I[N*M*index+N*i+(j-1)];
 
-                        dQ = 2 * (4 * c - d + u + r + l);
+                        dQ = 2.0f * (4.0f * c - d + u + r + l);
                 }else{
                         dQ = c;
                 }
@@ -2342,7 +2201,7 @@ __device__ float calculateDTV(float *I, float epsilon, float lambda, float noise
                         dl_corner = I[N*M*index+N*(i+1)+(j-1)];
                         ru_corner = I[N*M*index+N*(i-1)+(j+1)];
 
-                        num0 = 2 * c - r - d;
+                        num0 = 2.0f * c - r - d;
                         num1 = c - l;
                         num2 = c - u;
 

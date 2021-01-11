@@ -7,13 +7,13 @@ class Io
 {
 public:
 
-virtual void setFitsPath(char *fits_path)
+virtual void setFitsPath(const char *fits_path)
 {
-        this->fits_path = fits_path;
+        this->fits_path = strdup(fits_path);
 };
-virtual void setOriginal_FITS_name(char *original_FITS_name)
+virtual void setOriginal_FITS_name(const char *original_FITS_name)
 {
-        this->original_FITS_name = original_FITS_name;
+        this->original_FITS_name = strdup(original_FITS_name);
 };
 virtual headerValues IoreadCanvas(char *canvas_name) = 0;
 virtual void IoreadMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding) = 0;

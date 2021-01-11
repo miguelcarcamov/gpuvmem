@@ -9,6 +9,7 @@
 #include <string>
 #include <functional>
 #include <numeric>
+#include <cstdint>
 #include "device_launch_parameters.h"
 #include <math_constants.h>
 #include <float.h>
@@ -32,6 +33,8 @@
 #include <ckernel.cuh>
 #include <synthesizer.cuh>
 #include <factory.cuh>
+#include <flags.cuh>
+#include <boost/algorithm/string.hpp>
 
 extern long M, N;
 extern int image_count;
@@ -47,16 +50,16 @@ typedef struct varsPerGPU {
 }varsPerGPU;
 
 typedef struct variables {
-        char *input;
-        char *output;
-        char *inputdat;
-        char *modin;
-        char *ofile;
-        char *path;
-        char *output_image;
-        char *gpus;
-        char *initial_values;
-        char *penalization_factors;
+        std::string input;
+        std::string output;
+        std::string inputdat;
+        std::string modin;
+        std::string ofile;
+        std::string path;
+        std::string output_image;
+        std::string gpus;
+        std::string initial_values;
+        std::string penalization_factors;
         int blockSizeX;
         int blockSizeY;
         int blockSizeV;

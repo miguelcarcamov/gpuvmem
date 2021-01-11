@@ -7,7 +7,7 @@ extern int nPenalizators;
 
 Entropy::Entropy(){
         this->name = "Entropy";
-        this->prior_value = 1.0;
+        this->prior_value = 1.0f;
 };
 
 Entropy::Entropy(float prior_value){
@@ -25,7 +25,7 @@ void Entropy::setPrior(float prior_value){
 
 float Entropy::calcFi(float *p)
 {
-        float result = 0.0;
+        float result = 0.0f;
         this->set_fivalue(SEntropy(p, device_S, this->prior_value, penalization_factor, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;

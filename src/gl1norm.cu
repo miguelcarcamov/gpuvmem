@@ -58,7 +58,7 @@ void GL1Norm::setPrior(float *prior){
 
 float GL1Norm::calcFi(float *p)
 {
-        float result = 0.0;
+        float result = 0.0f;
         this->set_fivalue(SGEntropy(p, device_S, this->prior, penalization_factor, mod, order, imageIndex));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
