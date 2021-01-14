@@ -43,14 +43,11 @@ Image *I;
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-extern float MINPIX, ftol;
 extern int verbose_flag;
 int flag_opt;
 
 #define EPS 1.0e-10
 extern int it_maximum;
-
-#define ALPHA 1.e-4
 
 #define FREEALL cudaFree(device_gg_vector); cudaFree(device_dgg_vector); cudaFree(xi); cudaFree(device_h); cudaFree(device_g);
 
@@ -108,7 +105,7 @@ __host__ void ConjugateGradient::optimize()
                         printf("\n\n********** Iteration %d **********\n\n", i);
                 }
                 linmin(image->getImage(), xi, &fret, NULL);
-                if (2.0*fabs(fret-fp) <= ftol*(fabs(fret)+fabs(fp)+EPS)) {
+                if (2.0*fabs(fret-fp) <= this->tolerance*(fabs(fret)+fabs(fp)+EPS)) {
                         printf("Exit due to tolerance\n");
                         of->calcFunction(I->getImage());
                         deallocateMemoryGpu();

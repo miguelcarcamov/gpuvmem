@@ -7,14 +7,6 @@ ImageProcessor::ImageProcessor()
 {
 }
 
-void ImageProcessor::clip(float *I)
-{
-
-        if(image_count == 2)
-        {
-                linkClip(I);
-        }
-};
 void ImageProcessor::calculateInu(cufftComplex *image, float *I, float freq)
 {
         if(image_count == 2)

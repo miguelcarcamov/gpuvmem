@@ -57,7 +57,7 @@ void Var(T & var, char shortFlag, std::string longFlag, T defaultValue, std::str
 void Bool(bool & var, char shortFlag, std::string longFlag, std::string description, std::string descriptionGroup = "");
 
 bool Parse(int argc, char ** argv);
-void PrintHelp(char * argv0, std::ostream & to = std::cout);
+void PrintHelp(std::ostream & to = std::cout);
 
 private:
 int autoId;
@@ -66,6 +66,7 @@ std::set<std::string> longFlags;
 std::map<std::string, std::vector<std::string> > help;     // group -> help itmes
 std::vector<struct option> options;
 std::string optionStr;
+std::string argv0;
 
 template <typename T>
 void set(T & var, std::string optarg);
@@ -154,6 +155,7 @@ inline void Flags::Bool(bool & var, char shortFlag, std::string longFlag, std::s
 }
 
 inline bool Flags::Parse(int argc, char ** argv) {
+        this->argv0 = std::string(argv[0]);
         this->options.push_back({NULL, 0, NULL, 0});
         int ch;
         while ((ch = getopt_long(argc, argv, this->optionStr.c_str(), &this->options[0], NULL)) != -1) {
@@ -171,8 +173,8 @@ inline bool Flags::Parse(int argc, char ** argv) {
         return true;
 }
 
-inline void Flags::PrintHelp(char * argv0, std::ostream & to) {
-        to << "Usage: " << argv0 << " [options]" << std::endl <<std::endl;
+inline void Flags::PrintHelp(std::ostream & to) {
+        to << "Usage: " << this->argv0 << " [options]" << std::endl <<std::endl;
         for (auto& it : this->help) {
                 if (it.first.size()) {
                         to << it.first << ":" << std::endl;

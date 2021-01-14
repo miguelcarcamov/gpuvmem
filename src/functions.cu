@@ -44,7 +44,7 @@ extern float *device_I;
 
 extern float *device_dphi, *device_S, *device_dchi2_total, *device_dS, *device_noise_image;
 extern float noise_jypix, fg_scale, noise_cut, MINPIX, \
-             minpix, lambda, ftol, random_probability, final_chi2, final_S, eta;
+             minpix, lambda, random_probability, final_chi2, final_S, eta;
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 
@@ -66,12 +66,10 @@ extern varsPerGPU *vars_gpu;
 
 extern Vars variables;
 
-extern bool verbose_flag, nopositivity, clip_flag, apply_noise, \
+extern bool verbose_flag, nopositivity, apply_noise, \
             print_images, print_errors, save_model_input, radius_mask;
 
 extern Flags flags;
-
-extern char* executable;
 
 typedef float (*FnPtr)(float, float, float, float);
 
@@ -180,48 +178,8 @@ __host__ bool isPow2(unsigned int x)
         return ((x&(x-1))==0);
 }
 
-__host__ void readInputDat(char *file)
-{
-        FILE *fp;
-        char item[50];
-        char status[50];
-        if((fp = fopen(file, "r")) == NULL) {
-                printf("ERROR. The input file wasn't provided by the user.\n");
-                goToError();
-        }else{
-                while(true) {
-                        int ret = fscanf(fp, "%s %s", item, status);
-
-                        if(ret==EOF) {
-                                break;
-                        }else{
-                                if (strcmp(item,"noise_cut")==0) {
-                                        if(noise_cut == -1) {
-                                                noise_cut = atof(status);
-                                        }
-                                }else if(strcmp(item,"ftol")==0) {
-                                        ftol = atof(status);
-                                } else if(strcmp(item,"random_probability")==0) {
-                                        if(random_probability == -1) {
-                                                random_probability = atof(status);
-                                        }
-                                }else{
-                                        printf("Keyword not defined in input\n");
-                                        goToError();
-                                }
-                        }
-                }
-        }
-
-        if(random_probability == 0.0) {
-                printf("The random probability cannot be zero as you will not get any data\n");
-                goToError();
-        }
-
-}
-
 __host__ void print_help() {
-        flags.PrintHelp(executable);
+        flags.PrintHelp();
 }
 
 __host__ char *strip(const char *string, const char *chars)
@@ -247,16 +205,15 @@ __host__ Vars getOptions(int argc, char **argv) {
         flags.Var(variables.input, 'i', "input", std::string("NULL"), "Name of the input visibility file/s (separated by a comma)", "Mandatory");
         flags.Var(variables.output, 'o', "output", std::string("NULL"), "Name of the output visibility file/s (separated by a comma)", "Mandatory");
         flags.Var(variables.output_image, 'O', "output_image", std::string("mod_out.fits"), "Name of the output visibility file/s (separated by a comma)");
-        flags.Var(variables.inputdat, 'I', "input_file", std::string("input.dat"), "Name of the input parameter file", "Mandatory");
-        flags.Var(variables.modin, 'm', "model_input", std::string("mod_in_0.fits"), "FITS file including a complete header for astrometry");
+        flags.Var(variables.modin, 'm', "model_input", std::string("mod_in_0.fits"), "FITS file including a complete header for astrometry", "Mandatory");
         flags.Var(variables.noise, 'n', "noise", -1.0f, "Noise factor parameter", "Optional");
         flags.Var(variables.eta, 'e', "eta", -1.0f, "Variable that controls the minimum image value in the entropy prior");
-        flags.Var(variables.noise_cut, 'N', "noise_cut", -1.0f, "Noise-cut Parameter", "Optional");
-        flags.Var(variables.nu_0, 'F', "ref_frequency", -1.0f, "Reference frequency in Hz (if alpha is not zero)");
+        flags.Var(variables.noise_cut, 'N', "noise_cut", 10.0f, "Noise-cut Parameter", "Optional");
+        flags.Var(variables.nu_0, 'F', "ref_frequency", -1.0f, "Reference frequency in Hz (if alpha is not zero). It will be calculated from the measurement set if not set", "Optional");
         flags.Var(variables.threshold, 'T', "threshold", 0.0f, "Threshold to calculate the spectral index image above a certain number of sigmas in I_nu_0");
         flags.Var(variables.path, 'p', "path", std::string("mem/"), "Path to save FITS images. With last trail / included. (Example ./../mem/)");
         flags.Var(variables.gpus, 'G', "gpus", std::string("0"), "Index of the GPU/s you are going to use separated by a comma");
-        flags.Var(variables.randoms, 'r', "random_sampling", -1.0f, "Percentage of data used when random sampling", "Optional");
+        flags.Var(variables.randoms, 'r', "random_sampling", 1.0f, "Percentage of data used when random sampling", "Optional");
         flags.Var(variables.robust_param, 'R', "robust_parameter", 2.0f, "Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0 for natural weighting and 0.0 for a tradeoff between these two.");
         flags.Var(variables.ofile, 'f', "output_file", std::string("NULL"), "Output file where final objective function values are saved", "Optional");
         flags.Var(variables.blockSizeX, 'X', "blockSizeX", -1, "GPU block X Size for image/Fourier plane (Needs to be pow of 2)");
@@ -266,18 +223,16 @@ __host__ Vars getOptions(int argc, char **argv) {
         flags.Var(variables.gridding, 'g', "gridding", 0, "Use gridded visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)");
         flags.Var(variables.initial_values, 'z', "initial_values", std::string("NULL"), "Initial values for image/s");
         flags.Var(variables.penalization_factors, 'Z', "regularization_factors", std::string("NULL"), "Regularization factors for each regularization (separated by a comma)");
-        flags.Bool(verbose_flag, 'v', "verbose", "Shows information through all the execution", "Flag");
-        flags.Bool(nopositivity, 'x', "nopositivity", "Runs gpuvmem with no positivity restrictions on the images", "Flag");
-        flags.Bool(clip_flag, 'C', "clipping", "Clips the image to positive values", "Flag");
-        flags.Bool(apply_noise, 'a', "apply-noise", "Applies random gaussian noise to visibilities", "Flag");
-        flags.Bool(print_images, 'P', "print-images", "Prints images per iteration", "Flag");
-        flags.Bool(print_errors, 'E', "print-errors", "Prints final error maps", "Flag");
-        flags.Bool(save_model_input, 's', "save_modelcolumn", "Saves the model visibilities on the model column of the input MS", "Flag");
-        flags.Bool(radius_mask, 'M', "use-radius-mask", "Use a mask based on a radius instead of the noise estimation", "Flag");
-        flags.Bool(help, 'h', "help", "Shows this help");
-        flags.Bool(warranty, 'w', "warranty", "Shows no warranty details");
-        flags.Bool(copyright, 'c', "copyright", "Shows copyright conditions");
-        executable = argv[0];
+        flags.Bool(verbose_flag, 'v', "verbose", "Shows information through all the execution", "Flags");
+        flags.Bool(nopositivity, 'x', "nopositivity", "Runs gpuvmem with no positivity restrictions on the images", "Flags");
+        flags.Bool(apply_noise, 'a', "apply-noise", "Applies random gaussian noise to visibilities", "Flags");
+        flags.Bool(print_images, 'P', "print-images", "Prints images per iteration", "Flags");
+        flags.Bool(print_errors, 'E', "print-errors", "Prints final error maps", "Flags");
+        flags.Bool(save_model_input, 's', "save_modelcolumn", "Saves the model visibilities on the model column of the input MS", "Flags");
+        flags.Bool(radius_mask, 'M', "use-radius-mask", "Use a mask based on a radius instead of the noise estimation", "Flags");
+        flags.Bool(help, 'h', "help", "Shows this help", "Help");
+        flags.Bool(warranty, 'w', "warranty", "Shows warranty details", "Help");
+        flags.Bool(copyright, 'c', "copyright", "Shows copyright conditions", "Help");
 
         if (!flags.Parse(argc, argv)) {
                 print_help();
@@ -1836,27 +1791,6 @@ __global__ void getGGandDGG(float *gg, float *dgg, float* xi, float* g, long N, 
         dgg[N*i+j] += dgg_temp;
 }
 
-__global__ void clip(cufftComplex *I, long N, float MINPIX)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        if(I[N*i+j].x < MINPIX && MINPIX >= 0.0) {
-                I[N*i+j].x = MINPIX;
-        }
-        I[N*i+j].y = 0;
-}
-
-__global__ void clip(float *I, long N, float MINPIX)
-{
-        const int j = threadIdx.x + blockDim.x * blockIdx.x;
-        const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-        if(I[N*i+j] < MINPIX && MINPIX >= 0.0) {
-                I[N*i+j] = MINPIX;
-        }
-}
-
 __global__ void clip2I(float *I, long N, float MINPIX)
 {
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2844,10 +2778,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         float resultchi2  = 0.0f;
 
-        if(clip_flag) {
-                ip->clip(I);
-        }
-
         ip->clipWNoise(I);
 
         for(int d=0; d<nMeasurementSets; d++) {
@@ -2930,10 +2860,6 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
 {
 
         cudaSetDevice(firstgpu);
-
-        if(clip_flag) {
-                ip->clip(I);
-        }
 
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
@@ -3033,12 +2959,6 @@ __host__ void linkApplyBeam2I(cufftComplex *image, float antenna_diameter, float
 __host__ void linkCalculateInu2I(cufftComplex *image, float *I, float freq)
 {
         calculateInu<<<numBlocksNN, threadsPerBlockNN>>>(image, I, freq, nu_0, initial_values[0], eta, N, M);
-        checkCudaErrors(cudaDeviceSynchronize());
-};
-
-__host__ void linkClip(float *I)
-{
-        clip<<<numBlocksNN, threadsPerBlockNN>>>(I, N, initial_values[0]);
         checkCudaErrors(cudaDeviceSynchronize());
 };
 

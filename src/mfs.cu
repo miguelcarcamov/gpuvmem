@@ -6,7 +6,7 @@ long M, N, numVisibilities;
 int iter=0;
 
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
-float beam_noise, b_noise_aux, noise_cut, MINPIX, minpix, lambda, ftol, random_probability = 1.0;
+float beam_noise, b_noise_aux, noise_cut, MINPIX, minpix, lambda, random_probability = 1.0;
 float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
@@ -17,7 +17,7 @@ dim3 numBlocksNN;
 int gridding, it_maximum, status_mod_in;
 int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, nMeasurementSets=0, max_number_vis;
 
-std::string msinput, msoutput, inputdat, modinput, mempath, out_image, output;
+std::string msinput, msoutput, modinput, mempath, out_image, output;
 float nu_0, threshold;
 extern int num_gpus;
 
@@ -28,7 +28,7 @@ std::vector<MSDataset> datasets;
 
 varsPerGPU *vars_gpu;
 
-bool verbose_flag, nopositivity, clip_flag, apply_noise, \
+bool verbose_flag, nopositivity, apply_noise, \
      print_images, print_errors, save_model_input, radius_mask;
 
 Vars variables;
@@ -39,8 +39,6 @@ double start, end;
 float noise_min = 1E32;
 
 Flags flags;
-
-char *executable;
 
 inline bool IsGPUCapableP2P(cudaDeviceProp *pProp)
 {
@@ -69,7 +67,6 @@ void MFS::configure(int argc, char **argv)
         variables = getOptions(argc, argv);
         msinput = variables.input;
         msoutput = variables.output;
-        inputdat = variables.inputdat;
         modinput = variables.modin;
         iohandler->setOriginal_FITS_name(modinput.c_str());
         out_image = variables.output_image;
@@ -164,7 +161,6 @@ void MFS::configure(int argc, char **argv)
         /*
            Read input.dat file and FITS header
          */
-        readInputDat(strdup(inputdat.c_str()));
         headerValues canvas_vars = iohandler->IoreadCanvas(strdup(modinput.c_str()));
         //canvas_vars.beam_noise = iohandler->readHeaderKeyword<float>(strdup(modinput.c_str()), "NOISE", TFLOAT);
         M = canvas_vars.M;

@@ -43,14 +43,11 @@ extern Image *I;
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-extern float MINPIX, ftol;
 extern int verbose_flag;
 extern int flag_opt;
 
 #define EPS 1.0e-10
 extern int it_maximum;
-
-#define ALPHA 1.e-4
 
 #define FREEALL cudaFree(d_y); cudaFree(d_s); cudaFree(xi); cudaFree(xi_old); cudaFree(p_old); cudaFree(norm_vector);
 
@@ -122,7 +119,7 @@ __host__ void LBFGS::optimize()
 
                 linmin(image->getImage(), xi, &fret, NULL);
 
-                if (2.0*fabs(fret-fp) <= ftol*(fabs(fret)+fabs(fp)+EPS)) {
+                if (2.0*fabs(fret-fp) <= this->tolerance*(fabs(fret)+fabs(fp)+EPS)) {
                         printf("Exit due to tolerance\n");
                         of->calcFunction(I->getImage());
                         deallocateMemoryGpu();
@@ -136,7 +133,7 @@ __host__ void LBFGS::optimize()
                         norm += deviceReduce<float>(norm_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                 }
 
-                if(norm <= ftol) {
+                if(norm <= this->tolerance) {
                         printf("Exit due to norm = 0\n");
                         of->calcFunction(image->getImage());
                         deallocateMemoryGpu();
