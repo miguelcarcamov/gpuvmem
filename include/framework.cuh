@@ -28,7 +28,7 @@
 #include <virtualimageprocessor.cuh>
 #include <io.cuh>
 #include <objectivefunction.cuh>
-#include <optimizator.cuh>
+#include <optimizer.cuh>
 #include <filter.cuh>
 #include <ckernel.cuh>
 #include <synthesizer.cuh>
@@ -179,7 +179,7 @@ CallbackMap callbacks_;
 class OptimizatorFactory
 {
 public:
-typedef Optimizator* (*CreateOptimizatorCallback)();
+typedef Optimizer* (*CreateOptimizatorCallback)();
 private:
 typedef std::map<int, CreateOptimizatorCallback> CallbackMap;
 public:
@@ -194,13 +194,13 @@ bool UnregisterOptimizator(int OptimizatorId)
         return callbacks_.erase(OptimizatorId) == 1;
 };
 
-Optimizator* CreateOptimizator(int OptimizatorId)
+Optimizer* CreateOptimizator(int OptimizatorId)
 {
         CallbackMap::const_iterator i = callbacks_.find(OptimizatorId);
         if (i == callbacks_.end())
         {
                 // not found
-                throw std::runtime_error("Unknown optimizator ID");
+                throw std::runtime_error("Unknown optimizer ID");
         }
         // Invoke the creation function
         return (i->second)();

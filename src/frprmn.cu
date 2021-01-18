@@ -156,11 +156,11 @@ __host__ void ConjugateGradient::optimize()
 };
 
 namespace {
-Optimizator *CreateFrprmn()
+Optimizer *CreateFrprmn()
 {
         return new ConjugateGradient;
 };
 
 const std::string name = "CG-FRPRMN";
-const bool RegisteredFrprmn = registerCreationFunction<Optimizator, std::string>(name, CreateFrprmn);
+const bool RegisteredFrprmn = registerCreationFunction<Optimizer, std::string>(name, CreateFrprmn);
 };

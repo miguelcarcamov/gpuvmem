@@ -2,7 +2,7 @@
 #define LBFGS_CUH
 #include "linmin.cuh"
 
-class LBFGS : public Optimizator
+class LBFGS : public Optimizer
 {
 public:
 __host__ void allocateMemoryGpu();

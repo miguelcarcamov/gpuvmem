@@ -13,8 +13,8 @@ __host__ virtual void applyFilter(Filter *filter) = 0;
 __host__ virtual void writeImages() = 0;
 __host__ virtual void clearRun() = 0;
 __host__ virtual void writeResiduals() = 0;
-__host__ void setOptimizator(Optimizator *min){
-        this->optimizator = min;
+__host__ void setOptimizator(Optimizer *min){
+        this->optimizer = min;
 };
 __host__ void setVisibilities(Visibilities * v){
         this->visibilities = v;
@@ -29,7 +29,7 @@ __host__ void setError(Error *e){
 __host__ void setWeightingScheme(WeightingScheme *scheme){
         this->scheme = scheme;
 };
-__host__ void setOrder(void (*func)(Optimizator *o, Image *I)){
+__host__ void setOrder(void (*func)(Optimizer *o, Image *I)){
         this->Order = func;
 };
 Image *getImage(){
@@ -48,8 +48,8 @@ void setIoOrderIterations(void (*func)(float *I, Io *io)){
         this->IoOrderIterations = func;
 };
 
-Optimizator* getOptimizator(){
-        return this->optimizator;
+Optimizer* getOptimizator(){
+        return this->optimizer;
 };
 
 __host__ void setGriddingKernel(CKernel *ckernel){
@@ -58,13 +58,13 @@ __host__ void setGriddingKernel(CKernel *ckernel){
 protected:
 cufftComplex *device_I;
 Image *image;
-Optimizator *optimizator;
+Optimizer *optimizer;
 CKernel *ckernel;
 Io *iohandler = NULL;
 Visibilities *visibilities;
 Error *error = NULL;
 int griddingMode = 0;
-void (*Order)(Optimizator *o, Image *I) = NULL;
+void (*Order)(Optimizer *o, Image *I) = NULL;
 int imagesChanged = 0;
 void (*IoOrderIterations)(float *I, Io *io) = NULL;
 void (*IoOrderEnd)(float *I, Io *io) = NULL;

@@ -4,7 +4,7 @@
 
 __host__ void frprmn(float *p, float ftol, float *fret, float (*func)(float*), void (*dfunc)(float*, float*));
 
-class ConjugateGradient : public Optimizator
+class ConjugateGradient : public Optimizer
 {
 public:
 __host__ void allocateMemoryGpu();

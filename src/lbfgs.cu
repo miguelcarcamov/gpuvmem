@@ -287,11 +287,11 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
 };
 
 namespace {
-Optimizator *CreateLbfgs()
+Optimizer *CreateLbfgs()
 {
         return new LBFGS;
 };
 
 const std::string name = "CG-LBFGS";
-const bool RegisteredLbgs = registerCreationFunction<Optimizator, std::string>(name, CreateLbfgs);
+const bool RegisteredLbgs = registerCreationFunction<Optimizer, std::string>(name, CreateLbfgs);
 };

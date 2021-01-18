@@ -85,16 +85,16 @@ std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer)
         return lambdas;
 }
 
-void optimizationOrder(Optimizator *optimizator, Image *image){
-        optimizator->setImage(image);
-        optimizator->setFlag(0);
-        optimizator->optimize();
-        /*optimizator->setFlag(1);
-           optimizator->optimize();
-           optimizator->setFlag(2);
-           optimizator->optimize();
-           optimizator->setFlag(3);
-           optimizator->optimize();*/
+void optimizationOrder(Optimizer *optimizer, Image *image){
+        optimizer->setImage(image);
+        optimizer->setFlag(0);
+        optimizer->optimize();
+        /*optimizer->setFlag(1);
+           optimizer->optimize();
+           optimizer->setFlag(2);
+           optimizer->optimize();
+           optimizer->setFlag(3);
+           optimizer->optimize();*/
 }
 
 
@@ -117,19 +117,8 @@ __host__ int main(int argc, char **argv) {
                 exit(EXIT_SUCCESS);
         }
 
-        //// AVAILABLE CLASSES
-        enum {MFS}; // Synthesizer
-        enum {Chi2, Entropy, Laplacian, QuadraticPenalization, TotalVariation, TotalSquaredVariation, L1Norm}; // Fi
-        enum {Gridding}; // Filter
-        enum {CG, LBFGS}; // Optimizator
-        enum {DefaultObjectiveFunction}; // ObjectiveFunction
-        enum {MS}; // Io
-        enum {SecondDerivative}; // Error calculation
-        enum {pillbox2D, ellipticalGaussian2D, gaussian2D, sinc2D, gaussianSinc2D, pswf_02D, pswf_12D}; // CKernels for gridding
-        enum {natural, uniform, briggs, radial}; // Weighting Schemes
-
         Synthesizer * sy = createObject<Synthesizer, std::string>("MFS");
-        Optimizator * cg = createObject<Optimizator, std::string>("CG-FRPRMN");
+        Optimizer * cg = createObject<Optimizer, std::string>("CG-FRPRMN");
         // Choose your antialiasing kernel!
         CKernel * sc = new PillBox2D();
         //CKernel *sc = new Gaussian2D(7,7);
