@@ -12,13 +12,13 @@ TotalSquaredVariationP::TotalSquaredVariationP(){
 float TotalSquaredVariationP::calcFi(float *p)
 {
         float result = 0.0f;
-        this->set_fivalue(TotalSquaredVariation(p, device_S, penalization_factor, mod, order, imageIndex));
+        this->set_fivalue(TotalSquaredVariation(p, device_S, penalization_factor, mod, order, imageIndex, this->iteration));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 }
 void TotalSquaredVariationP::calcGi(float *p, float *xi)
 {
-        DTSVariation(p, device_DS, penalization_factor, mod, order, imageIndex);
+        DTSVariation(p, device_DS, penalization_factor, mod, order, imageIndex, this->iteration);
 };
 
 void TotalSquaredVariationP::restartDGi()

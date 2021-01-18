@@ -11,6 +11,14 @@ extern int nPenalizators;
 class Fi
 {
 public:
+
+Fi::Fi(){
+      this->name = "default";
+      this->penalization_factor = 1.0f;
+      this->Inu = NULL;
+      this->iteration = 0;
+}
+
 virtual float calcFi(float *p) = 0;
 virtual void calcGi(float *p, float *xi) = 0;
 virtual void restartDGi() = 0;
@@ -43,6 +51,9 @@ void setS(float *S){
 };
 void setDS(float *DS){
         cudaFree(device_DS); this->device_DS = DS;
+};
+void setIteration(int iteration){
+        this->iteration = iteration;
 };
 
 virtual float calculateSecondDerivate() = 0;
@@ -82,12 +93,13 @@ protected:
 float fi_value;
 float *device_S;
 float *device_DS;
-float penalization_factor = 1.0f;
+float penalization_factor;
 int imageIndex;
+int iteration;
 int mod;
 int order;
-char *name = "default";
-cufftComplex * Inu = NULL;
+char *name;;
+cufftComplex * Inu;
 int imageToAdd;
 };
 

@@ -11,13 +11,13 @@ QuadraticP::QuadraticP(){
 float QuadraticP::calcFi(float *p)
 {
         float result = 0.0;
-        this->set_fivalue(quadraticP(p, device_S, penalization_factor, mod, order, imageIndex));
+        this->set_fivalue(quadraticP(p, device_S, penalization_factor, mod, order, imageIndex, this->iteration));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 }
 void QuadraticP::calcGi(float *p, float *xi)
 {
-        DQuadraticP(p, device_DS, penalization_factor, mod, order, imageIndex);
+        DQuadraticP(p, device_DS, penalization_factor, mod, order, imageIndex, this->iteration);
 };
 
 

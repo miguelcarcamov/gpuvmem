@@ -26,13 +26,13 @@ void L1norm::setEpsilon(float epsilon){
 float L1norm::calcFi(float *p)
 {
         float result = 0.0f;
-        this->set_fivalue(L1Norm(p, device_S, penalization_factor, this->epsilon, mod, order, imageIndex));
+        this->set_fivalue(L1Norm(p, device_S, penalization_factor, this->epsilon, mod, order, imageIndex, this->iteration));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 }
 void L1norm::calcGi(float *p, float *xi)
 {
-        DL1Norm(p, device_DS, penalization_factor, this->epsilon, mod, order, imageIndex);
+        DL1Norm(p, device_DS, penalization_factor, this->epsilon, mod, order, imageIndex, this->iteration);
 };
 
 void L1norm::restartDGi()

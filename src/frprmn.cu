@@ -35,7 +35,6 @@
 
 extern long M;
 extern long N;
-extern int iter;
 
 ObjectiveFunction *testof;
 Image *I;
@@ -47,7 +46,6 @@ extern int verbose_flag;
 int flag_opt;
 
 #define EPS 1.0e-10
-extern int it_maximum;
 
 #define FREEALL cudaFree(device_gg_vector); cudaFree(device_dgg_vector); cudaFree(xi); cudaFree(device_h); cudaFree(device_g);
 
@@ -98,9 +96,9 @@ __host__ void ConjugateGradient::optimize()
                 checkCudaErrors(cudaDeviceSynchronize());
         }
         ////////////////////////////////////////////////////////////////
-        for(int i=1; i <= it_maximum; i++) {
+        for(int i=1; i <= this->total_iterations; i++) {
                 start = omp_get_wtime();
-                iter = i;
+                this->current_iteration = i;
                 if(verbose_flag) {
                         printf("\n\n********** Iteration %d **********\n\n", i);
                 }

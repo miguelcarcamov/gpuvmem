@@ -145,9 +145,9 @@ __host__ int main(int argc, char **argv) {
         sy->setOrder(&optimizationOrder);
         sy->setWeightingScheme(scheme);
         sy->setGriddingKernel(sc);
+        sy->setOptimizator(cg);
         sy->configure(argc, argv);
         cg->setObjectiveFunction(of);
-        sy->setOptimizator(cg);
 
         //Filter *g = Singleton<FilterFactory>::Instance().CreateFilter(Gridding);
         //sy->applyFilter(g); // delete this line for no gridding

@@ -35,7 +35,6 @@
 
 extern long M;
 extern long N;
-extern int iter;
 
 extern ObjectiveFunction *testof;
 extern Image *I;
@@ -47,7 +46,6 @@ extern int verbose_flag;
 extern int flag_opt;
 
 #define EPS 1.0e-10
-extern int it_maximum;
 
 #define FREEALL cudaFree(d_y); cudaFree(d_s); cudaFree(xi); cudaFree(xi_old); cudaFree(p_old); cudaFree(norm_vector);
 
@@ -106,9 +104,9 @@ __host__ void LBFGS::optimize()
         }
 
         ////////////////////////////////////////////////////////////////
-        for(int i=1; i <= it_maximum; i++) {
+        for(int i=1; i <= this->total_iterations; i++) {
                 start = omp_get_wtime();
-                iter = i;
+                this->current_iteration = i;
                 norm = 0.0f;
                 if(verbose_flag) {
                         printf("\n\n********** Iteration %d **********\n\n", i);
@@ -149,11 +147,11 @@ __host__ void LBFGS::optimize()
 
                 for(int i=0; i < image->getImageCount(); i++)
                 {
-                        calculateSandY<<<numBlocksNN, threadsPerBlockNN>>>(d_y, d_s, image->getImage(), xi, p_old, xi_old, (iter-1)%K, M, N, i);
+                        calculateSandY<<<numBlocksNN, threadsPerBlockNN>>>(d_y, d_s, image->getImage(), xi, p_old, xi_old, (this->current_iteration-1)%K, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
                 }
 
-                LBFGS_recursion(d_y, d_s, xi, std::min(K,iter), (iter-1)%K, M, N);
+                LBFGS_recursion(d_y, d_s, xi, std::min(K,this->current_iteration), (this->current_iteration-1)%K, M, N);
 
                 end = omp_get_wtime();
                 double wall_time = end-start;

@@ -3,7 +3,6 @@
 
 
 long M, N, numVisibilities;
-int iter=0;
 
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
 float beam_noise, b_noise_aux, noise_cut, MINPIX, minpix, lambda, random_probability = 1.0;
@@ -14,7 +13,7 @@ double beam_bmaj, beam_bmin, beam_bpa;
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
 
-int gridding, it_maximum, status_mod_in;
+int gridding, status_mod_in;
 int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, nMeasurementSets=0, max_number_vis;
 
 std::string msinput, msoutput, modinput, mempath, out_image, output;
@@ -72,7 +71,8 @@ void MFS::configure(int argc, char **argv)
         out_image = variables.output_image;
         mempath = variables.path;
         iohandler->setFitsPath(mempath.c_str());
-        it_maximum = variables.it_max;
+        optimizator->setTotalIterations(variables.it_max);
+        std::cout << "Here" << std::endl;
         total_visibilities = 0;
         b_noise_aux = variables.noise;
         noise_cut = variables.noise_cut;
@@ -823,7 +823,7 @@ void MFS::run()
         t = clock() - t;
         end = omp_get_wtime();
         printf("Minimization ended successfully\n\n");
-        printf("Iterations: %d\n", iter);
+        printf("Iterations: %d\n", optimizator->getCurrentIteration());
         printf("chi2: %f\n", final_chi2);
         printf("0.5*chi2: %f\n", 0.5*final_chi2);
         printf("Total visibilities: %d\n", total_visibilities);
@@ -849,7 +849,7 @@ void MFS::run()
                         goToError();
                 }
 
-                fprintf(outfile, "Iterations: %d\n", iter);
+                fprintf(outfile, "Iterations: %d\n", optimizator->getCurrentIteration());
                 fprintf(outfile, "chi2: %f\n", final_chi2);
                 fprintf(outfile, "0.5*chi2: %f\n", 0.5*final_chi2);
                 fprintf(outfile, "Total visibilities: %d\n", total_visibilities);
@@ -872,8 +872,8 @@ void MFS::writeImages()
 {
         printf("Saving final image to disk\n");
         if(IoOrderEnd == NULL) {
-                iohandler->IoPrintImage(image->getImage(), "", strdup(out_image.c_str()), "JY/PIXEL", iter, 0, fg_scale, M, N, true);
-                iohandler->IoPrintImage(image->getImage(), "", "alpha.fits", "", iter, 1, 1.0, M, N, true);
+                iohandler->IoPrintImage(image->getImage(), "", strdup(out_image.c_str()), "JY/PIXEL", optimizator->getCurrentIteration(), 0, fg_scale, M, N, true);
+                iohandler->IoPrintImage(image->getImage(), "", "alpha.fits", "", optimizator->getCurrentIteration(), 1, 1.0, M, N, true);
         }else{
                 (IoOrderEnd)(image->getImage(), iohandler);
         }
@@ -889,8 +889,8 @@ void MFS::writeImages()
                 printf("Calculating Error Images\n");
                 this->error->calculateErrorImage(this->image, this->visibilities);
                 if(IoOrderError == NULL) {
-                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_Inu_0.fits", "JY/PIXEL", iter, 0, 1.0, M, N, true);
-                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_alpha.fits", "", iter, 1, 1.0, M, N, true);
+                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_Inu_0.fits", "JY/PIXEL", optimizator->getCurrentIteration(), 0, 1.0, M, N, true);
+                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_alpha.fits", "", optimizator->getCurrentIteration(), 1, 1.0, M, N, true);
                 }else{
                         (IoOrderError)(image->getErrorImage(), iohandler);
                 }

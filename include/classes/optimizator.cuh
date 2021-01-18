@@ -12,10 +12,22 @@ __host__ virtual void optimize() = 0;
 
 __host__ Optimizator::Optimizator(){
         this->tolerance = 1E-12;
-}
+        this->total_iterations = 500;
+        this->current_iteration = 0;
+};
+
+__host__ Optimizator::Optimizator(int total_iterations, float tolerance){
+        this->tolerance = tolerance;
+        this->total_iterations = total_iterations;
+        this->current_iteration = 0;
+};
 
 __host__ float getTolerance(){
         return this->tolerance;
+};
+
+__host__ int getCurrentIteration(){
+    return this->current_iteration;
 };
 
 __host__ void setImage(Image *image){
@@ -32,6 +44,10 @@ void setTolerance(float tol){
     this->tolerance = tol;
 };
 
+void setTotalIterations(int iterations){
+    this->total_iterations = iterations;
+};
+
 ObjectiveFunction* getObjectiveFuntion(){
         return this->of;
 };
@@ -39,6 +55,8 @@ protected:
 ObjectiveFunction *of;
 Image *image;
 int flag;
+int total_iterations;
+int current_iteration;
 float tolerance;
 };
 

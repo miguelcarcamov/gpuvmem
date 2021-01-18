@@ -26,14 +26,14 @@ void TVariation::setEpsilon(float epsilon){
 float TVariation::calcFi(float *p)
 {
         float result = 0.0f;
-        this->set_fivalue(totalvariation(p, device_S, this->epsilon, penalization_factor, mod, order, imageIndex));
+        this->set_fivalue(totalvariation(p, device_S, this->epsilon, penalization_factor, mod, order, imageIndex, this->iteration));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 };
 
 void TVariation::calcGi(float *p, float *xi)
 {
-        DTVariation(p, device_DS, this->epsilon, penalization_factor, mod, order, imageIndex);
+        DTVariation(p, device_DS, this->epsilon, penalization_factor, mod, order, imageIndex, this->iteration);
 };
 
 

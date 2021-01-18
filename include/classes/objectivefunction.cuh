@@ -42,6 +42,7 @@ void calcGradient(float *p, float *xi, int iter)
         restartDPhi();
         for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
         {
+                (*it)->setIteration(iter);
                 (*it)->calcGi(p, xi);
                 (*it)->addToDphi(dphi);
         }

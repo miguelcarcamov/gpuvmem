@@ -36,7 +36,7 @@ namespace cg = cooperative_groups;
 
 extern long M, N;
 extern int iterations, iter, image_count, \
-           status_mod_in, flag_opt, num_gpus, selected, iter, multigpu, firstgpu, reg_term, gridding;
+           status_mod_in, flag_opt, num_gpus, selected, multigpu, firstgpu, reg_term, gridding;
 
 extern cufftHandle plan1GPU;
 extern cufftComplex *device_V, *device_fg_image, *device_I_nu;
@@ -1885,7 +1885,8 @@ __global__ void chi2Vector(float *chi2, cufftComplex *Vr, float *w, long numVisi
 
 }
 
-__host__ __device__ float approxAbs(float val, float epsilon){
+__host__ __device__ float approxAbs(float val, float epsilon)
+{
         return sqrtf(val*val + epsilon);
 }
 
@@ -1933,6 +1934,52 @@ __global__ void DL1NormK(float *dL1, float *I, float *noise, float epsilon, floa
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         dL1[N*i+j]  = calculateDNormL1(I, lambda, noise[N*i+j], epsilon, noise_cut, index, M, N);
+}
+
+__device__ float calculateGL1norm(float *I, float prior, float epsilon_a, float epsilon_b, float noise, float noise_cut, int index, int M, int N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        float c = I[N*M*index+N*i+j];
+
+        float l1 = 0.0f;
+
+        if(noise < noise_cut) {
+                l1 = approxAbs(c, epsilon_a)/(approxAbs(prior, epsilon_a) + epsilon_b);
+        }
+
+        return l1;
+}
+
+__global__ void GL1Vector(float *L1, float *noise, float *I, float *prior, long N, long M, float epsilon_a, float epsilon_b, float noise_cut, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        L1[N*i+j] = calculateGL1norm(I, prior[N*i+j], epsilon_a, epsilon_b, noise[N*i+j], noise_cut, index, M, N);
+}
+
+__device__ float calculateDGNormL1(float *I, float prior, float lambda, float noise, float epsilon_a, float epsilon_b, float noise_cut, int index, int M, int N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+        float den;
+        float dL1 = 0.0f;
+        float c = I[N*M*index+N*i+j];
+
+        if(noise < noise_cut)
+                dL1 = c/(approxAbs(c, epsilon_a)*(approxAbs(prior, epsilon_a) + epsilon_b));
+
+        dL1 *= lambda;
+        return dL1;
+}
+
+__global__ void DGL1NormK(float *dL1, float *I, float *prior, float *noise, float epsilon_a, float epsilon_b, float noise_cut, float lambda, long N, long M, int index)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        dL1[N*i+j]  = calculateDGNormL1(I, prior[N*i+j], lambda, noise[N*i+j], epsilon_a, epsilon_b, noise_cut, index, M, N);
 }
 
 __device__ float calculateS(float *I, float G, float eta, float noise, float noise_cut, int index, int M, int N)
@@ -2973,7 +3020,7 @@ __host__ void normalizeImage(float *image, float normalization_factor)
         normalizeImageKernel<<<numBlocksNN, threadsPerBlockNN>>>(image, normalization_factor, N);
         checkCudaErrors(cudaDeviceSynchronize());
 };
-__host__ float L1Norm(float *I, float * ds, float penalization_factor, float epsilon, int mod, int order, int index)
+__host__ float L1Norm(float *I, float * ds, float penalization_factor, float epsilon, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -2988,7 +3035,7 @@ __host__ float L1Norm(float *I, float * ds, float penalization_factor, float eps
         return resultL1norm;
 };
 
-__host__ void DL1Norm(float *I, float *dgi, float penalization_factor, float epsilon, int mod, int order, int index)
+__host__ void DL1Norm(float *I, float *dgi, float penalization_factor, float epsilon, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3001,8 +3048,36 @@ __host__ void DL1Norm(float *I, float *dgi, float penalization_factor, float eps
         }
 };
 
+__host__ float GL1NormK(float *I, float *prior, float * ds, float penalization_factor, float epsilon_a, float epsilon_b, int mod, int order, int index, int iter)
+{
+        cudaSetDevice(firstgpu);
 
-__host__ float SEntropy(float *I, float * ds, float prior_value, float penalization_factor, int mod, int order, int index)
+        float resultL1norm = 0.0f;
+        if(iter > 0 && penalization_factor)
+        {
+                GL1Vector<<<numBlocksNN, threadsPerBlockNN>>>(ds, device_noise_image, I, prior, N, M, epsilon_a, epsilon_b, noise_cut, index);
+                checkCudaErrors(cudaDeviceSynchronize());
+                resultL1norm  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
+        }
+
+        return resultL1norm;
+};
+
+__host__ void DGL1Norm(float *I, float *prior, float *dgi, float penalization_factor, float epsilon_a, float epsilon_b, int mod, int order, int index, int iter)
+{
+        cudaSetDevice(firstgpu);
+
+        if(iter > 0 && penalization_factor)
+        {
+                if(flag_opt%2 == index) {
+                        DGL1NormK<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, prior, device_noise_image, epsilon_a, epsilon_b, noise_cut, penalization_factor, N, M, index);
+                        checkCudaErrors(cudaDeviceSynchronize());
+                }
+        }
+};
+
+
+__host__ float SEntropy(float *I, float * ds, float prior_value, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3017,7 +3092,7 @@ __host__ float SEntropy(float *I, float * ds, float prior_value, float penalizat
         return resultS;
 };
 
-__host__ void DEntropy(float *I, float *dgi, float prior_value, float penalization_factor, int mod, int order, int index)
+__host__ void DEntropy(float *I, float *dgi, float prior_value, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3030,7 +3105,7 @@ __host__ void DEntropy(float *I, float *dgi, float prior_value, float penalizati
         }
 };
 
-__host__ float SGEntropy(float *I, float * ds, float *prior, float penalization_factor, int mod, int order, int index)
+__host__ float SGEntropy(float *I, float * ds, float *prior, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3045,7 +3120,7 @@ __host__ float SGEntropy(float *I, float * ds, float *prior, float penalization_
         return resultS;
 };
 
-__host__ void DGEntropy(float *I, float *dgi, float *prior, float penalization_factor, int mod, int order, int index)
+__host__ void DGEntropy(float *I, float *dgi, float *prior, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3058,7 +3133,7 @@ __host__ void DGEntropy(float *I, float *dgi, float *prior, float penalization_f
         }
 };
 
-__host__ float laplacian(float *I, float * ds, float penalization_factor, int mod, int order, int imageIndex)
+__host__ float laplacian(float *I, float * ds, float penalization_factor, int mod, int order, int imageIndex, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3072,7 +3147,7 @@ __host__ float laplacian(float *I, float * ds, float penalization_factor, int mo
         return resultS;
 };
 
-__host__ void DLaplacian(float *I, float *dgi, float penalization_factor, float mod, float order, float index)
+__host__ void DLaplacian(float *I, float *dgi, float penalization_factor, float mod, float order, float index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3085,7 +3160,7 @@ __host__ void DLaplacian(float *I, float *dgi, float penalization_factor, float 
         }
 };
 
-__host__ float quadraticP(float *I, float * ds, float penalization_factor, int mod, int order, int index)
+__host__ float quadraticP(float *I, float * ds, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3100,7 +3175,7 @@ __host__ float quadraticP(float *I, float * ds, float penalization_factor, int m
         return resultS;
 };
 
-__host__ void DQuadraticP(float *I, float *dgi, float penalization_factor, int mod, int order, int index)
+__host__ void DQuadraticP(float *I, float *dgi, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3113,7 +3188,7 @@ __host__ void DQuadraticP(float *I, float *dgi, float penalization_factor, int m
         }
 };
 
-__host__ float totalvariation(float *I, float * ds, float epsilon, float penalization_factor, int mod, int order, int index)
+__host__ float totalvariation(float *I, float * ds, float epsilon, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3128,7 +3203,7 @@ __host__ float totalvariation(float *I, float * ds, float epsilon, float penaliz
         return resultS;
 };
 
-__host__ void DTVariation(float *I, float *dgi, float epsilon, float penalization_factor, int mod, int order, int index)
+__host__ void DTVariation(float *I, float *dgi, float epsilon, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3141,7 +3216,7 @@ __host__ void DTVariation(float *I, float *dgi, float epsilon, float penalizatio
         }
 };
 
-__host__ float TotalSquaredVariation(float *I, float * ds, float penalization_factor, int mod, int order, int index)
+__host__ float TotalSquaredVariation(float *I, float * ds, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3156,7 +3231,7 @@ __host__ float TotalSquaredVariation(float *I, float * ds, float penalization_fa
         return resultS;
 };
 
-__host__ void DTSVariation(float *I, float *dgi, float penalization_factor, int mod, int order, int index)
+__host__ void DTSVariation(float *I, float *dgi, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 

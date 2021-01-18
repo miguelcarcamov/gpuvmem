@@ -12,13 +12,13 @@ Laplacian::Laplacian(){
 float Laplacian::calcFi(float *p)
 {
         float result = 0.0f;
-        this->set_fivalue(laplacian(p, device_S, penalization_factor, mod, order, imageIndex));
+        this->set_fivalue(laplacian(p, device_S, penalization_factor, mod, order, imageIndex, this->iteration));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 }
 void Laplacian::calcGi(float *p, float *xi)
 {
-        DLaplacian(p, device_DS, penalization_factor, mod, order, imageIndex);
+        DLaplacian(p, device_DS, penalization_factor, mod, order, imageIndex, this->iteration);
 };
 
 
