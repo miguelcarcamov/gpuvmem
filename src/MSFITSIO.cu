@@ -54,10 +54,11 @@ __host__ __device__ float distance(float x, float y, float x0, float y0)
 }
 
 
-__host__ fitsfile *openFITS(char *filename)
+__host__ fitsfile *openFITS(const char *filename)
 {
         fitsfile *hdu;
         int status = 0;
+
         fits_open_file(&hdu, filename, 0, &status);
         if (status) {
                 fits_report_error(stderr, status); /* print error message */
@@ -66,7 +67,7 @@ __host__ fitsfile *openFITS(char *filename)
         return hdu;
 }
 
-__host__ fitsfile *createFITS(char *filename)
+__host__ fitsfile *createFITS(const char *filename)
 {
         fitsfile *fpointer;
         int status = 0;
@@ -98,7 +99,7 @@ __host__ void closeFITS(fitsfile *canvas)
         }
 }
 
-__host__ void OCopyFITS(float *I, char *original_filename, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
+__host__ void OCopyFITS(float *I, const char *original_filename, const char *path, const char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
 {
         int status = 0;
         long fpixel = 1;
@@ -150,7 +151,7 @@ __host__ void OCopyFITS(float *I, char *original_filename, char *path, char *nam
         free(host_IFITS);
 }
 
-__host__ void OCopyFITSCufftComplex(cufftComplex *I, char *original_filename, char *path, char *out_image, int iteration, float fg_scale, long M, long N, int option, bool isInGPU)
+__host__ void OCopyFITSCufftComplex(cufftComplex *I, const char *original_filename, const char *path, const char *out_image, int iteration, float fg_scale, long M, long N, int option, bool isInGPU)
 {
         int status = 0;
         long fpixel = 1;
@@ -265,7 +266,7 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
         return h_values;
 }
 
-__host__ headerValues readFITSHeader(char *filename)
+__host__ headerValues readFITSHeader(const char *filename)
 {
         int status_header = 0;
 
@@ -317,7 +318,7 @@ constexpr unsigned int str2int(const char* str, int h = 0)
         return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
 }
 
-__host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
+__host__ void readMS(const char *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
 {
 
         char *error = 0;
@@ -614,7 +615,297 @@ __host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std:
 
 }
 
-__host__ void MScopy(char const *in_dir, char const *in_dir_dest)
+__host__ void readMS(const char *MS_name, std::string data_column, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding)
+{
+
+        char *error = 0;
+        int g = 0, h = 0;
+
+        std::string dir(MS_name);
+        casacore::Table main_tab(dir);
+
+        data->nsamples = main_tab.nrow();
+        if (data->nsamples == 0) {
+                printf("ERROR: nsamples is zero... exiting....\n");
+                exit(-1);
+        }
+
+        if(!main_tab.tableDesc().isColumn(data_column)){
+                printf("ERROR: There is no column CORRECTED_DATA OR DATA in this Measurement SET. Exiting...\n");
+                exit(-1);
+        }
+
+        printf("GPUVMEM is reading %s data column\n", data_column.c_str());
+
+        casacore::Vector<double> pointing_ref;
+        casacore::Vector<double> pointing_phs;
+        int pointing_id;
+
+        casacore::Table observation_tab(main_tab.keywordSet().asTable("OBSERVATION"));
+        casacore::ROScalarColumn<casacore::String> obs_col(observation_tab,"TELESCOPE_NAME");
+
+        data->telescope_name = obs_col(0);
+
+        std::string field_query = "select REFERENCE_DIR,PHASE_DIR,ROWID() AS ID FROM "+dir+"/FIELD where !FLAG_ROW";
+        casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
+
+        std::string aux_query = "select DATA_DESC_ID FROM "+dir+" WHERE !FLAG_ROW AND ANY(WEIGHT > 0) AND ANY(!FLAG) ORDER BY UNIQUE DATA_DESC_ID";
+        std::string spw_query = "select NUM_CHAN,CHAN_FREQ,ROWID() AS ID FROM "+dir+"/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==["+aux_query+"])";
+        casacore::Table spectral_window_tab(casacore::tableCommand(spw_query.c_str()));
+
+        std::string pol_query = "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM "+dir+"/POLARIZATION where !FLAG_ROW";
+        casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
+
+        std::string antenna_tab_query = "select POSITION,DISH_DIAMETER,NAME,STATION FROM "+dir+"/ANTENNA where !FLAG_ROW";
+        std::string maxmin_baseline_query = "select GMAX(B_LENGTH) AS MAX_BLENGTH, GMIN(B_LENGTH) AS MIN_BLENGTH \
+        FROM (select sqrt(sumsqr(UVW[:2])) as B_LENGTH FROM "+dir+" GROUPBY ANTENNA1,ANTENNA2)";
+        std::string freq_query = "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, GMEDIAN(CHAN_FREQ) as REF_FREQ FROM "+dir+"/SPECTRAL_WINDOW";
+        std::string maxuv_metres_query = "select MAX(GMAX(UVW[0]),GMAX(UVW[1])) as MAXUV FROM "+dir;
+
+        casacore::Table antenna_tab(casacore::tableCommand(antenna_tab_query.c_str()));
+        casacore::Table maxmin_baseline_tab(casacore::tableCommand(maxmin_baseline_query.c_str()));
+        casacore::Table freq_tab(casacore::tableCommand(freq_query.c_str()));
+        casacore::Table maxuv_metres_tab(casacore::tableCommand(maxuv_metres_query.c_str()));
+
+        casacore::ROScalarColumn<casacore::Double> max_blength_col(maxmin_baseline_tab,"MAX_BLENGTH");
+        casacore::ROScalarColumn<casacore::Double> min_blength_col(maxmin_baseline_tab,"MIN_BLENGTH");
+        casacore::ROScalarColumn<casacore::Double> maxuv_metres_col(maxuv_metres_tab,"MAXUV");
+
+        casacore::ROScalarColumn<casacore::Double> min_freq_col(freq_tab,"MIN_FREQ");
+        casacore::ROScalarColumn<casacore::Double> max_freq_col(freq_tab,"MAX_FREQ");
+        casacore::ROScalarColumn<casacore::Double> ref_freq_col(freq_tab,"REF_FREQ");
+
+        data->nantennas = antenna_tab.nrow();
+        data->nbaselines = (data->nantennas) * (data->nantennas - 1) / 2;
+        data->ref_freq = ref_freq_col(0);
+        data->min_freq = min_freq_col(0);
+        data->max_freq = max_freq_col(0);
+        data->max_blength = max_blength_col(0);
+        data->min_blength = min_blength_col(0);
+        data->uvmax_wavelength = maxuv_metres_col(0) * data->max_freq / LIGHTSPEED;
+
+        float max_wavelength = freq_to_wavelength(data->min_freq);
+
+        casacore::ROArrayColumn<casacore::Double> dishposition_col(antenna_tab,"POSITION");
+        casacore::ROScalarColumn<casacore::Double> dishdiameter_col(antenna_tab,"DISH_DIAMETER");
+        casacore::ROScalarColumn<casacore::String> dishname_col(antenna_tab,"NAME");
+        casacore::ROScalarColumn<casacore::String> dishstation_col(antenna_tab,"STATION");
+
+        casacore::Vector<double> antenna_positions;
+
+        float firstj1zero = boost::math::cyl_bessel_j_zero(1.0f, 1);
+        float pb_defaultfactor = firstj1zero/PI;
+
+        for(int a=0; a<data->nantennas; a++) {
+                antennas.push_back(MSAntenna());
+                antennas[a].antenna_id = dishname_col(a);
+                antennas[a].station = dishstation_col(a);
+                antenna_positions = dishposition_col(a);
+                antennas[a].position.x = antenna_positions[0];
+                antennas[a].position.y = antenna_positions[1];
+                antennas[a].position.z = antenna_positions[2];
+                antennas[a].antenna_diameter = dishdiameter_col(a);
+
+                switch(str2int((data->telescope_name).c_str())) {
+                case str2int("ALMA"):
+                        antennas[a].pb_factor = 1.13f;
+                        antennas[a].primary_beam = AIRYDISK;
+                        break;
+                case str2int("EVLA"):
+                        antennas[a].pb_factor = 1.25f;
+                        antennas[a].primary_beam = GAUSSIAN;
+                        break;
+                default:
+                        antennas[a].pb_factor = pb_defaultfactor;
+                        antennas[a].primary_beam = GAUSSIAN;
+                        break;
+                }
+
+                antennas[a].pb_cutoff = 10.0f * antennas[a].pb_factor * (max_wavelength/antennas[a].antenna_diameter);
+        }
+
+        data->nfields = field_tab.nrow();
+        casacore::ROTableRow field_row(field_tab, casacore::stringToVector("ID,REFERENCE_DIR,PHASE_DIR"));
+
+        for(int f=0; f<data->nfields; f++) {
+
+                const casacore::TableRecord &values = field_row.get(f);
+                pointing_id = values.asInt("ID");
+                pointing_ref = values.asArrayDouble("REFERENCE_DIR");
+                pointing_phs = values.asArrayDouble("PHASE_DIR");
+
+                fields.push_back(Field());
+
+                fields[f].id = pointing_id;
+                fields[f].ref_ra = pointing_ref[0];
+                fields[f].ref_dec = pointing_ref[1];
+
+                fields[f].phs_ra = pointing_phs[0];
+                fields[f].phs_dec = pointing_phs[1];
+        }
+
+
+        casacore::ROScalarColumn<casacore::Int64> ncorr_col(polarization_tab,"NUM_CORR");
+        data->nstokes=ncorr_col(0);
+        casacore::ROArrayColumn<casacore::Int64> correlation_col(polarization_tab,"CORR_TYPE");
+        casacore::Vector<casacore::Int64> polarizations = correlation_col(0);
+
+        for(int i=0; i<data->nstokes; i++) {
+                data->corr_type.push_back(polarizations[i]);
+        }
+
+        data->n_internal_frequencies = spectral_window_tab.nrow();
+
+        casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,"CHAN_FREQ");
+
+        casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,"NUM_CHAN");
+
+        casacore::ROScalarColumn<casacore::Int64> spectral_window_ids(spectral_window_tab,"ID");
+
+        for(int i = 0; i < data->n_internal_frequencies; i++) {
+                data->n_internal_frequencies_ids.push_back(spectral_window_ids(i));
+                data->channels.push_back(n_chan_freq(i));
+        }
+
+        int total_frequencies = 0;
+        for(int i=0; i <data->n_internal_frequencies; i++) {
+                for(int j=0; j < data->channels[i]; j++) {
+                        total_frequencies++;
+                }
+        }
+
+        data->total_frequencies = total_frequencies;
+
+        for(int f=0; f<data->nfields; f++) {
+                for(int i = 0; i < data->n_internal_frequencies; i++) {
+                        casacore::Vector<double> chan_freq_vector;
+                        chan_freq_vector=chan_freq_col(i);
+                        for(int j = 0; j < data->channels[i]; j++) {
+                                fields[f].nu.push_back(chan_freq_vector[j]);
+                        }
+                }
+        }
+
+        for(int f=0; f < data->nfields; f++) {
+                fields[f].visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
+                fields[f].device_visibilities.resize(data->total_frequencies, std::vector<DVis>(data->nstokes, DVis()));
+                fields[f].numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
+                fields[f].numVisibilitiesPerFreq.resize(data->total_frequencies,0);
+                fields[f].backup_visibilities.resize(data->total_frequencies, std::vector<HVis>(data->nstokes, HVis()));
+                if(gridding) {
+                        fields[f].backup_numVisibilitiesPerFreqPerStoke.resize(data->total_frequencies, std::vector<long>(data->nstokes,0));
+                        fields[f].backup_numVisibilitiesPerFreq.resize(data->total_frequencies,0);
+                }
+        }
+
+        std::string query;
+
+        casacore::Vector<float> weights;
+        casacore::Vector<double> uvw;
+        casacore::Matrix<casacore::Complex> dataCol;
+        casacore::Matrix<bool> flagCol;
+
+        double3 MS_uvw;
+        cufftComplex MS_vis;
+        for(int f=0; f<data->nfields; f++) {
+                g=0;
+                for(int i=0; i < data->n_internal_frequencies; i++) {
+
+                        dataCol.resize(data->nstokes, data->channels[i]);
+                        flagCol.resize(data->nstokes, data->channels[i]);
+
+                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data->n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
+                        if(W_projection && random_prob < 1.0)
+                        {
+                                query += " and RAND()<"+std::to_string(random_prob)+" ORDERBY ASC UVW[2]";
+                        }else if(W_projection) {
+                                query += " ORDERBY ASC UVW[2]";
+                        }else if(random_prob < 1.0) {
+                                query += " and RAND()<"+std::to_string(random_prob);
+                        }
+
+                        casacore::Table query_tab = casacore::tableCommand(query.c_str());
+
+                        casacore::ROArrayColumn<double> uvw_col(query_tab,"UVW");
+                        casacore::ROArrayColumn<float> weight_col(query_tab,"WEIGHT");
+                        casacore::ROArrayColumn<casacore::Complex> data_col(query_tab, data_column);
+                        casacore::ROArrayColumn<bool> flag_col(query_tab,"FLAG");
+
+                        for (int k=0; k < query_tab.nrow(); k++) {
+                                uvw = uvw_col(k);
+                                dataCol = data_col(k);
+                                weights = weight_col(k);
+                                flagCol = flag_col(k);
+                                for(int j=0; j < data->channels[i]; j++) {
+                                        for (int sto=0; sto < data->nstokes; sto++) {
+                                                if(weights[sto] > 0.0f && flagCol(sto,j) == false) {
+                                                        MS_uvw.x = uvw[0];
+                                                        MS_uvw.y = uvw[1];
+                                                        MS_uvw.z = uvw[2];
+
+                                                        fields[f].visibilities[g+j][sto].uvw.push_back(MS_uvw);
+
+                                                        MS_vis = make_cuComplex(dataCol(sto,j).real(), dataCol(sto,j).imag());
+
+                                                        if(noise)
+                                                                fields[f].visibilities[g+j][sto].Vo.push_back(addNoiseToVis(MS_vis, weights[sto]));
+                                                        else
+                                                                fields[f].visibilities[g+j][sto].Vo.push_back(MS_vis);
+
+                                                        fields[f].visibilities[g+j][sto].weight.push_back(weights[sto]);
+                                                        fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto]++;
+                                                        fields[f].numVisibilitiesPerFreq[g+j]++;
+                                                }
+                                        }
+                                }
+                        }
+                        g += data->channels[i];
+                }
+        }
+
+
+        for(int f=0; f<data->nfields; f++) {
+                for(int i=0; i<data->total_frequencies; i++) {
+                        for (int sto=0; sto<data->nstokes; sto++) {
+                                fields[f].numVisibilitiesPerFreq[i] += fields[f].numVisibilitiesPerFreqPerStoke[i][sto];
+                                /*
+                                 *
+                                 * We will allocate memory for model visibilities using the size of the observed visibilities vector.
+                                 */
+                                fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), complexZero<cufftComplex>());
+                        }
+                }
+        }
+
+        for(int f=0; f<data->nfields; f++) {
+                h = 0;
+                fields[f].valid_frequencies = 0;
+                for(int i = 0; i < data->n_internal_frequencies; i++) {
+                        for(int j = 0; j < data->channels[i]; j++) {
+                                if(fields[f].numVisibilitiesPerFreq[h] > 0) {
+                                        fields[f].valid_frequencies++;
+                                }
+                                h++;
+                        }
+                }
+        }
+
+        int local_max = 0;
+        int max = 0;
+        for(int f=0; f < data->nfields; f++) {
+                for(int i=0; i< data->total_frequencies; i++) {
+                        local_max = *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].data(),fields[f].numVisibilitiesPerFreqPerStoke[i].data() + data->nstokes);
+                        if(local_max > max) {
+                                max = local_max;
+                        }
+                }
+        }
+
+        data->max_number_visibilities_in_channel_and_stokes = max;
+
+}
+
+__host__ void MScopy(const char *in_dir, const char *in_dir_dest)
 {
         string dir_origin = in_dir;
         string dir_dest = in_dir_dest;
@@ -663,7 +954,7 @@ __host__ void modelToHost(std::vector<Field>& fields, MSData data, int num_gpus,
 
 }
 
-__host__ void writeMS(char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag)
+__host__ void writeMS(const char *outfile, const char *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection)
 {
         std::string dir = outfile;
         casacore::Table main_tab(dir,casacore::Table::Update);

@@ -58,30 +58,40 @@ std::vector<std::string> MFS::countAndSeparateStrings(std::string long_str, std:
 
 void MFS::configure(int argc, char **argv)
 {
-        if(iohandler == NULL)
+        if(ioImageHandler == NULL)
         {
-                iohandler = createObject<Io, std::string>("IoMS");
+                ioImageHandler = createObject<Io, std::string>("IoFITS");
+        }
+
+        if(ioVisibilitiesHandler == NULL)
+        {
+                ioVisibilitiesHandler = createObject<Io, std::string>("IoMS");
         }
 
         variables = getOptions(argc, argv);
         msinput = variables.input;
         msoutput = variables.output;
         modinput = variables.modin;
-        iohandler->setOriginal_FITS_name(modinput.c_str());
+        ioImageHandler->setInput(modinput);
         out_image = variables.output_image;
-        mempath = variables.path;
-        iohandler->setFitsPath(mempath.c_str());
+        ioImageHandler->setOutput(out_image);
+        ioImageHandler->setPath(variables.path);
         optimizer->setTotalIterations(variables.it_max);
-        std::cout << "Here" << std::endl;
         total_visibilities = 0;
         b_noise_aux = variables.noise;
         noise_cut = variables.noise_cut;
         random_probability = variables.randoms;
+        ioVisibilitiesHandler->setRandomProbability(random_probability);
         eta = variables.eta;
         gridding = variables.gridding;
+        ioVisibilitiesHandler->setGridding(gridding);
         nu_0 = variables.nu_0;
         robust_param = variables.robust_param;
         threshold = variables.threshold * 5.0;
+        ioVisibilitiesHandler->setApplyNoiseInput(apply_noise);
+        ioVisibilitiesHandler->setStoreModelVisInput(save_model_input);
+        ioImageHandler->setPrintImages(print_images);
+
         std::vector<std::string> string_values;
         std::vector<std::string> s_output_values;
         int n_outputs;
@@ -151,20 +161,13 @@ void MFS::configure(int argc, char **argv)
         }
 
         /*
-         *
-         * Create directory to save images for each iterations
+           Read FITS header
          */
-        struct stat st = {0};
-        if(print_images)
-                if(stat(mempath.c_str(), &st) == -1) mkdir(mempath.c_str(),0700);
-
-        /*
-           Read input.dat file and FITS header
-         */
-        headerValues canvas_vars = iohandler->IoreadCanvas(strdup(modinput.c_str()));
+        headerValues canvas_vars = ioImageHandler->readHeader(modinput);
         //canvas_vars.beam_noise = iohandler->readHeaderKeyword<float>(strdup(modinput.c_str()), "NOISE", TFLOAT);
         M = canvas_vars.M;
         N = canvas_vars.N;
+        ioImageHandler->setMN(M,N);
         DELTAX = canvas_vars.DELTAX;
         DELTAY = canvas_vars.DELTAY;
         ra = canvas_vars.ra;
@@ -173,6 +176,7 @@ void MFS::configure(int argc, char **argv)
         crpix2 = canvas_vars.crpix2;
         beam_noise = canvas_vars.beam_noise;
 
+        ckernel->setIoImageHandler(ioImageHandler);
         //printf("Beam size canvas: %lf x %lf (arcsec)/ %lf (degrees)\n", canvas_vars.beam_bmaj*3600.0, canvas_vars.beam_bmin*3600.0, canvas_vars.beam_bpa);
         cudaDeviceProp dprop[num_gpus];
 
@@ -240,11 +244,7 @@ void MFS::configure(int argc, char **argv)
         std::vector<float> ms_min_blength;
         std::vector<float> ms_uvmax_wavelength;
         for(int d=0; d<nMeasurementSets; d++) {
-                if(apply_noise) {
-                        iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, true, false, random_probability, gridding);
-                }else{
-                        iohandler->IoreadMS(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data, false, false, random_probability, gridding);
-                }
+                ioVisibilitiesHandler->read(datasets[d].name, datasets[d].antennas, datasets[d].fields, &datasets[d].data);
                 ms_ref_freqs.push_back(datasets[d].data.ref_freq);
                 ms_max_freqs.push_back(datasets[d].data.max_freq);
                 ms_max_blength.push_back(datasets[d].data.max_blength);
@@ -703,7 +703,7 @@ void MFS::setDevice()
 
                         if(print_images) {
                                 std::string atten_name =  "dataset_" + std::to_string(d) + "_atten";
-                                iohandler->IoPrintImageIteration(datasets[d].fields[f].atten_image, atten_name.c_str(), "", f, 0, 1.0, M, N, true);
+                                ioImageHandler->printNotNormalizedImageIteration(datasets[d].fields[f].atten_image, atten_name.c_str(), "", f, 0, true);
                         }
                 }
 
@@ -732,9 +732,9 @@ void MFS::setDevice()
         noise_image<<<numBlocksNN, threadsPerBlockNN>>>(device_noise_image, device_weight_image, max_weight, noise_jypix, N);
         checkCudaErrors(cudaDeviceSynchronize());
         if(print_images) {
-                iohandler->IoPrintImage(device_noise_image, "noise.fits", "", 0, 0, 1.0, M, N, true);
+                ioImageHandler->printNotNormalizedImage(device_noise_image, "noise.fits", "", 0, 0, true);
                 if(radius_mask)
-                        iohandler->IoPrintImage(device_distance_image, "distance.fits", "", 0, 0, 1.0, M, N, true);
+                        ioImageHandler->printNotNormalizedImage(device_distance_image, "distance.fits", "", 0, 0, true);
         }
 
         float *host_noise_image = (float*)malloc(M*N*sizeof(float));
@@ -797,8 +797,7 @@ void MFS::clearRun()
 void MFS::run()
 {
         printf("\n\nStarting optimizer\n");
-        optimizer->getObjectiveFuntion()->setIo(iohandler);
-        optimizer->getObjectiveFuntion()->setPrintImages(print_images);
+        optimizer->getObjectiveFuntion()->setIo(ioImageHandler);
 
         if(this->Order == NULL) {
                 if(imagesChanged)
@@ -872,10 +871,10 @@ void MFS::writeImages()
 {
         printf("Saving final image to disk\n");
         if(IoOrderEnd == NULL) {
-                iohandler->IoPrintImage(image->getImage(), "", strdup(out_image.c_str()), "JY/PIXEL", optimizer->getCurrentIteration(), 0, fg_scale, M, N, true);
-                iohandler->IoPrintImage(image->getImage(), "", "alpha.fits", "", optimizer->getCurrentIteration(), 1, 1.0, M, N, true);
+                ioImageHandler->printNotPathImage(image->getImage(), "JY/PIXEL", optimizer->getCurrentIteration(), 0, fg_scale, true);
+                ioImageHandler->printNotPathNotNormalizedImage(image->getImage(), "alpha.fits", "", optimizer->getCurrentIteration(), 1, true);
         }else{
-                (IoOrderEnd)(image->getImage(), iohandler);
+                (IoOrderEnd)(image->getImage(), ioImageHandler);
         }
 
         if(print_errors) /* flag for print error image */
@@ -889,10 +888,10 @@ void MFS::writeImages()
                 printf("Calculating Error Images\n");
                 this->error->calculateErrorImage(this->image, this->visibilities);
                 if(IoOrderError == NULL) {
-                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_Inu_0.fits", "JY/PIXEL", optimizer->getCurrentIteration(), 0, 1.0, M, N, true);
-                        iohandler->IoPrintImage(image->getErrorImage(), "", "error_alpha.fits", "", optimizer->getCurrentIteration(), 1, 1.0, M, N, true);
+                        ioImageHandler->printNotPathImage(image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL", optimizer->getCurrentIteration(), 0, 1.0, true);
+                        ioImageHandler->printNotPathImage(image->getErrorImage(), "error_alpha.fits", "", optimizer->getCurrentIteration(), 1, 1.0, true);
                 }else{
-                        (IoOrderError)(image->getErrorImage(), iohandler);
+                        (IoOrderError)(image->getErrorImage(), ioImageHandler);
                 }
 
         }
@@ -927,15 +926,8 @@ void MFS::writeResiduals()
 
         printf("Saving residuals and model to MS...\n");
         for(int d=0; d<nMeasurementSets; d++) {
-                iohandler->IocopyMS(datasets[d].name, datasets[d].oname);
-                if(!save_model_input) {
-                        iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
-                        iohandler->IowriteMS(datasets[d].oname, "MODEL_DATA", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
-                }else{
-                        iohandler->IowriteMS(datasets[d].oname, "DATA", datasets[d].fields, datasets[d].data, random_probability, false, false, false, verbose_flag);
-                        iohandler->IowriteMS(datasets[d].name, "MODEL_DATA", datasets[d].fields, datasets[d].data, random_probability, true, false, false, verbose_flag);
-                }
-
+                ioVisibilitiesHandler->copy(datasets[d].name, datasets[d].oname);
+                ioVisibilitiesHandler->writeResidualsAndModel(datasets[d].name, datasets[d].oname, datasets[d].fields, datasets[d].data);
         }
 
         printf("Residuals and model visibilities saved.\n");

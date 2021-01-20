@@ -144,8 +144,8 @@ typedef struct header_values {
 }headerValues;
 
 __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits);
-__host__ headerValues readFITSHeader(char *filename);
-__host__ fitsfile *openFITS(char *filename);
+__host__ headerValues readFITSHeader(const char *filename);
+__host__ fitsfile *openFITS(const char *filename);
 __host__ void closeFITS(fitsfile *canvas);
 
 template <typename T>
@@ -170,7 +170,7 @@ __host__ T readHeaderKeyword(char *filename, char *keyword, int type)
 }
 
 template <typename T>
-__host__ headerValues open_fits(T **data, char *filename)
+__host__ headerValues open_fits(T **data, const char *filename)
 {
         int status = 0;
         float null = 0;
@@ -195,16 +195,15 @@ __host__ headerValues open_fits(T **data, char *filename)
         return h_values;
 }
 
-__host__ void readMS(char const *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding);
-
-__host__ void MScopy(char const *in_dir, char const *in_dir_dest);
+__host__ void readMS(const char *MS_name, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding);
+__host__ void readMS(const char *MS_name, std::string data_column, std::vector<MSAntenna>& antennas, std::vector<Field>& fields, MSData *data, bool noise, bool W_projection, float random_prob, int gridding);
+__host__ void MScopy(const char *in_dir, const char *in_dir_dest);
 
 __host__ void modelToHost(std::vector<Field>& fields, MSData data, int num_gpus, int firstgpu);
-__host__ void writeMS(char const *outfile, char const *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection, int verbose_flag);
-
-__host__ void OCopyFITS(float *I, char *original_filename, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU);
-__host__ void OCopyFITSCufftComplex(cufftComplex *I, char *original_filename, char *path, char *out_image, int iteration, float fg_scale, long M, long N, int option, bool isInGPU);
-__host__ fitsfile *createFITS(char *filename);
+__host__ void writeMS(const char *outfile, const char *out_col, std::vector<Field> fields, MSData data, float random_probability, bool sim, bool noise, bool W_projection);
+__host__ void OCopyFITS(float *I, const char *original_filename, const char *path, const char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU);
+__host__ void OCopyFITSCufftComplex(cufftComplex *I, const char *original_filename, const char *path, const char *out_image, int iteration, float fg_scale, long M, long N, int option, bool isInGPU);
+__host__ fitsfile *createFITS(const char *filename);
 __host__ void copyHeader(fitsfile *original, fitsfile *output);
 
 __host__ __device__ float freq_to_wavelength(float freq);

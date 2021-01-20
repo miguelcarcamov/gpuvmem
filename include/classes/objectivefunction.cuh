@@ -31,10 +31,10 @@ float calcFunction(float *p)
 
 void calcGradient(float *p, float *xi, int iter)
 {
-        if(print_images) {
+        if(io->getPrintImages()) {
                 if(IoOrderIterations == NULL) {
-                        io->IoPrintOptImageIteration(p, "I_nu_0","JY/PIXEL", 0, iter, true);
-                        io->IoPrintOptImageIteration(p, "alpha", "", 1, iter, true);
+                        io->printImageIteration(p, "I_nu_0", "JY/PIXEL", iter, 0, true);
+                        io->printImageIteration(p, "alpha", "JY/PIXEL", iter, 0, true);
                 }else{
                         (IoOrderIterations)(p, io);
                 }
@@ -79,9 +79,7 @@ void setImageCount(int I){
 void setIo(Io *i){
         this->io = i;
 };
-void setPrintImages(int i){
-        this->print_images = i;
-};
+
 void setIoOrderIterations(void (*func)(float *I, Io *io)){
         this->IoOrderIterations = func;
 };
@@ -105,7 +103,6 @@ int phiStatus = 1;
 int flag = 0;
 long N = 0;
 long M = 0;
-int print_images = 0;
 void (*IoOrderIterations)(float *I, Io *io) = NULL;
 int image_count = 1;
 };

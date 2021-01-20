@@ -19,9 +19,15 @@ __host__ void setOptimizator(Optimizer *min){
 __host__ void setVisibilities(Visibilities * v){
         this->visibilities = v;
 };
-__host__ void setIoHandler(Io *handler){
-        this->iohandler = handler;
+
+__host__ void setIoImageHandler(Io *imageHandler){
+        this->ioImageHandler = imageHandler;
 };
+
+__host__ void setIoVisibilitiesHandler(Io *visHandler){
+        this->ioVisibilitiesHandler = visHandler;
+};
+
 __host__ void setError(Error *e){
         this->error = e;
 };
@@ -55,12 +61,14 @@ Optimizer* getOptimizator(){
 __host__ void setGriddingKernel(CKernel *ckernel){
         this->ckernel = ckernel;
 }
+
 protected:
 cufftComplex *device_I;
 Image *image;
 Optimizer *optimizer;
 CKernel *ckernel;
-Io *iohandler = NULL;
+Io *ioImageHandler = NULL;
+Io *ioVisibilitiesHandler = NULL;
 Visibilities *visibilities;
 Error *error = NULL;
 int griddingMode = 0;

@@ -129,8 +129,10 @@ __host__ int main(int argc, char **argv) {
         //CKernel * sc = createObject<CKernel, std::string>("GaussianSinc2D");
         ObjectiveFunction *of = createObject<ObjectiveFunction, std::string>("ObjectiveFunction");
         Io *ioms = createObject<Io, std::string>("IoMS"); // This is the default Io Class
+        Io *iofits = createObject<Io, std::string>("IoFITS"); // This is the default Io Class
         WeightingScheme *scheme = createObject<WeightingScheme, std::string>("Briggs");
-        sy->setIoHandler(ioms);
+        sy->setIoVisibilitiesHandler(ioms);
+        sy->setIoImageHandler(iofits);
         sy->setOrder(&optimizationOrder);
         sy->setWeightingScheme(scheme);
         sy->setGriddingKernel(sc);

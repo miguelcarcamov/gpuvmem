@@ -13,6 +13,7 @@ __host__ __device__ CKernel::CKernel()
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
+        this->ioImageHandler = NULL;
 };
 
 __host__ __device__ CKernel::CKernel(int m, int n)
@@ -23,8 +24,19 @@ __host__ __device__ CKernel::CKernel(int m, int n)
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
+        this->ioImageHandler = NULL;
 };
 
+__host__ CKernel::CKernel(int m, int n, Io *imageHandler)
+{
+        this->m = m;
+        this->n = n;
+        this->alpha = 2;
+        this->angle = 0.0;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
+};
 
 __host__ __device__ CKernel::CKernel(int m, int n, float w1)
 {
@@ -35,6 +47,19 @@ __host__ __device__ CKernel::CKernel(int m, int n, float w1)
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
+        this->ioImageHandler = NULL;
+};
+
+__host__ CKernel::CKernel(int m, int n, float w1, Io *imageHandler)
+{
+        this->n = m;
+        this->n = n;
+        this->w1 = w1;
+        this->alpha = 2;
+        this->angle = 0.0;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
 };
 
 __host__ __device__ CKernel::CKernel(int m, int n, float w1, float w2)
@@ -47,6 +72,20 @@ __host__ __device__ CKernel::CKernel(int m, int n, float w1, float w2)
         this->angle = 0.0;
         this->setm_times_n();
         this->setSupports();
+        this->ioImageHandler = NULL;
+};
+
+__host__ CKernel::CKernel(int m, int n, float w1, float w2, Io *imageHandler)
+{
+        this->m = m;
+        this->n = n;
+        this->w1 = w1;
+        this->w2 = w2;
+        this->alpha = 2;
+        this->angle = 0.0;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
 };
 
 
@@ -61,6 +100,20 @@ __host__ __device__ CKernel::CKernel(float w1, float w2, float angle, int m, int
         this->angle = angle;
         this->setm_times_n();
         this->setSupports();
+        this->ioImageHandler = NULL;
+};
+
+__host__ CKernel::CKernel(float w1, float w2, float angle, int m, int n, Io *imageHandler)
+{
+        this->m = m;
+        this->n = n;
+        this->w1 = w1;
+        this->w2 = w2;
+        this->alpha = 2.0;
+        this->angle = angle;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
 };
 
 __host__ __device__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
@@ -73,6 +126,20 @@ __host__ __device__ CKernel::CKernel(float w1, float w2, float alpha, float angl
         this->angle = angle;
         this->setm_times_n();
         this->setSupports();
+        this->ioImageHandler = NULL;
+};
+
+__host__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n, Io *imageHandler)
+{
+        this->m = m;
+        this->n = n;
+        this->w1 = w1;
+        this->w2 = w2;
+        this->alpha = alpha;
+        this->angle = angle;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
 };
 
 __host__ ~CKernel() {
@@ -138,13 +205,16 @@ __host__ __device__ void setAlpha(float alpha){
 __host__ __device__ void setAngle(float angle){
         this->angle = angle;
 };
-/*__host__ void printCKernel(){
-        OFITS(this->getKernelPointer(), mod_in, mempath, "ckernel.fits", "", 0, 0, 1.0, this->getm(), this->getn(), false);
-   }
+__host__ void setIoImageHandler(Io *imageHandler){
+        this->ioImageHandler = imageHandler;
+};
+__host__ void printCKernel(){
+        this->ioImageHandler->printImage(this->getKernelPointer(), "ckernel.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), false);
+};
 
-   __host__ void printGPUCKernel(){
-        OFITS(this->getGPUKernel(), mod_in, mempath, "ckernel_gpu.fits", "", 0, 0, 1.0, this->getm(), this->getn(), true);
-   }*/
+__host__ void printGPUCKernel(){
+        this->ioImageHandler->printImage(this->getGPUKernel(), "ckernel_gpu.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), true);
+};
 
 private:
 int m_times_n;
@@ -174,6 +244,7 @@ float alpha;
 float angle;
 std::vector<float> kernel;
 float *gpu_kernel;
+Io *ioImageHandler = NULL;
 
 __host__ void setKernelMemory(){
         this->kernel.resize(this->m_times_n);
