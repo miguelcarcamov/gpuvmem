@@ -78,10 +78,13 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 y = round(grid_pos_y + M / 2);
 
                                                 // And we grid the weights
-                                                #pragma omp critical
+                                                if(x >= 0 && y >= 0 && x < M && y < M)
                                                 {
-                                                        g_weights[N * y + x] += w;
+                                                  #pragma omp critical
+                                                  {
+                                                          g_weights[N * y + x] += w;
 
+                                                  }
                                                 }
 
 
@@ -133,14 +136,19 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 x = round(grid_pos_x + N / 2);
                                                 y = round(grid_pos_y + M / 2);
 
-                                                xy_pos[z].x = x;
-                                                xy_pos[z].y = y;
-
-                                                // And we grid the weights
-                                                #pragma omp critical
+                                                if(x >= 0 && y >= 0 && x < M && y < M)
                                                 {
-                                                        g_weights[N * y + x] += w;
+                                                  xy_pos[z].x = x;
+                                                  xy_pos[z].y = y;
+                                                  // And we grid the weights
+                                                  #pragma omp critical
+                                                  {
+                                                          g_weights[N * y + x] += w;
 
+                                                  }
+                                                }else{
+                                                  xy_pos[z].x = -1;
+                                                  xy_pos[z].y = -1;
                                                 }
 
                                         }
@@ -151,7 +159,10 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 x = xy_pos[z].x;
                                                 y = xy_pos[z].y;
 
-                                                d[j].fields[f].visibilities[i][s].weight[z] /= (1.0 + g_weights[N*y + x] * f_squared);
+                                                if(x>=0 && y>=0)
+                                                  d[j].fields[f].visibilities[i][s].weight[z] /= (1.0 + g_weights[N*y + x] * f_squared);
+                                                else
+                                                  d[j].fields[f].visibilities[i][s].weight[z] = 0.0f;
                                         }
                                         std::fill_n(g_weights.begin(), M*N, 0.0f);
                                 }
