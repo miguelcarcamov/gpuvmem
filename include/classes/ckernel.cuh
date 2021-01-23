@@ -5,7 +5,8 @@ class CKernel
 {
 public:
 __host__ virtual void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
-__host__ __device__ CKernel::CKernel()
+__host__ virtual float GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha) = 0;
+__host__ CKernel::CKernel()
 {
         this->m = 7;
         this->n = 7;
@@ -16,7 +17,7 @@ __host__ __device__ CKernel::CKernel()
         this->ioImageHandler = NULL;
 };
 
-__host__ __device__ CKernel::CKernel(int m, int n)
+__host__ CKernel::CKernel(int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -38,7 +39,7 @@ __host__ CKernel::CKernel(int m, int n, Io *imageHandler)
         this->ioImageHandler = imageHandler;
 };
 
-__host__ __device__ CKernel::CKernel(int m, int n, float w1)
+__host__ CKernel::CKernel(int m, int n, float w1)
 {
         this->n = m;
         this->n = n;
@@ -62,7 +63,7 @@ __host__ CKernel::CKernel(int m, int n, float w1, Io *imageHandler)
         this->ioImageHandler = imageHandler;
 };
 
-__host__ __device__ CKernel::CKernel(int m, int n, float w1, float w2)
+__host__ CKernel::CKernel(int m, int n, float w1, float w2)
 {
         this->m = m;
         this->n = n;
@@ -90,7 +91,7 @@ __host__ CKernel::CKernel(int m, int n, float w1, float w2, Io *imageHandler)
 
 
 
-__host__ __device__ CKernel::CKernel(float w1, float w2, float angle, int m, int n)
+__host__ CKernel::CKernel(float w1, float w2, float angle, int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -116,7 +117,7 @@ __host__ CKernel::CKernel(float w1, float w2, float angle, int m, int n, Io *ima
         this->ioImageHandler = imageHandler;
 };
 
-__host__ __device__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
+__host__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -147,28 +148,28 @@ __host__ ~CKernel() {
         this->freeGPUKernel();
 };
 
-__host__ __device__ int getm(){
+__host__ int getm(){
         return this->m;
 };
-__host__ __device__ int getn(){
+__host__ int getn(){
         return this->n;
 };
-__host__ __device__ int getSupportX(){
+__host__ int getSupportX(){
         return this->support_x;
 };
-__host__ __device__ int getSupportY(){
+__host__ int getSupportY(){
         return this->support_y;
 };
-__host__ __device__ float getW1(){
+__host__ float getW1(){
         return this->w1;
 };
-__host__ __device__ float getW2(){
+__host__ float getW2(){
         return this->w2;
 };
-__host__ __device__ float getAlpha(){
+__host__ float getAlpha(){
         return this->alpha;
 };
-__host__ __device__ float getAngle(){
+__host__ float getAngle(){
         return this->angle;
 };
 __host__ float getKernelValue(int i, int j)
@@ -187,22 +188,22 @@ __host__ float* getGPUKernel()
 {
         return this->gpu_kernel;
 };
-__host__ __device__ void setmn(int m, int n){
+__host__  void setmn(int m, int n){
         this->m = m; this->n = n;
         this->setm_times_n();
         this->setSupports();
 };
 
-__host__ __device__ void setW1(float w1){
+__host__  void setW1(float w1){
         this->w1 = w1;
 };
-__host__ __device__ void setW2(float w2){
+__host__  void setW2(float w2){
         this->w2 = w2;
 };
-__host__ __device__ void setAlpha(float alpha){
+__host__  void setAlpha(float alpha){
         this->alpha = alpha;
 };
-__host__ __device__ void setAngle(float angle){
+__host__  void setAngle(float angle){
         this->angle = angle;
 };
 __host__ void setIoImageHandler(Io *imageHandler){
@@ -219,11 +220,11 @@ __host__ void printGPUCKernel(){
 private:
 int m_times_n;
 
-__host__ __device__ void setm_times_n(){
+__host__  void setm_times_n(){
         this->m_times_n = this->m * this->n;
 };
 
-__host__ __device__ void setSupports(){
+__host__  void setSupports(){
         this->support_x = floor(this->m/2.0f);
         this->support_y = floor(this->m/2.0f);
 };
@@ -256,7 +257,7 @@ __host__ void copyKerneltoGPU(){
         checkCudaErrors(cudaMemcpy(this->gpu_kernel, this->kernel.data(), sizeof(float) * this->m_times_n, cudaMemcpyHostToDevice));
 };
 
-__host__ __device__ float gaussian1D(float amp, float x, float x0, float sigma, float w, float alpha)
+__host__ float gaussian1D(float amp, float x, float x0, float sigma, float w, float alpha)
 {
         float radius_x = distance(x, 0.0f, x0, 0.0f);
         float val = radius_x/(w*sigma);
@@ -266,7 +267,7 @@ __host__ __device__ float gaussian1D(float amp, float x, float x0, float sigma, 
         return G;
 };
 
-__host__ __device__ float gaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
+__host__ float gaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
 {
         float radius_x = distance(x, 0.0f, x0, 0.0f);
         float radius_y = distance(0.0f, y, 0.0f, y0);
@@ -284,7 +285,7 @@ __host__ __device__ float gaussian2D(float amp, float x, float y, float x0, floa
                 return 0.0f;
 };
 
-__host__ __device__ float sincf(float x)
+__host__ float sincf(float x)
 {
         float value;
         if(x==0.0f)
@@ -295,7 +296,7 @@ __host__ __device__ float sincf(float x)
         return value;
 };
 
-__host__ __device__ float sinc1D(float amp, float x, float x0, float sigma, float w)
+__host__ float sinc1D(float amp, float x, float x0, float sigma, float w)
 {
         float radius = distance(x, 0.0f, x0, 0.0f);
         float val = radius/(w*sigma);
@@ -307,19 +308,19 @@ __host__ __device__ float sinc1D(float amp, float x, float x0, float sigma, floa
         return s;
 };
 
-__host__ __device__ float gaussianSinc1D(float amp, float x, float x0, float sigma, float w1, float w2, float alpha)
+__host__ float gaussianSinc1D(float amp, float x, float x0, float sigma, float w1, float w2, float alpha)
 {
         return amp*gaussian1D(1.0f, x, x0, sigma, w1, alpha)*sinc1D(1.0f, x, x0, sigma, w2);
 };
 
-__host__ __device__ float sinc2D(float amp, float x, float x0, float y, float y0, float sigma_x, float sigma_y, float w)
+__host__ float sinc2D(float amp, float x, float x0, float y, float y0, float sigma_x, float sigma_y, float w)
 {
         float s_x = sinc1D(1.0f, x, x0, sigma_x, w);
         float s_y = sinc1D(1.0f, y, y0, sigma_y, w);
         return amp*s_x*s_y;
 };
 
-__host__ __device__ float gaussianSinc2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w1, float w2, float alpha)
+__host__ float gaussianSinc2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w1, float w2, float alpha)
 {
         float G = gaussian2D(1.0f, x, y, x0, y0, sigma_x, sigma_y, w1, alpha);
         float S = sinc2D(1.0f, x, x0, y, y0, sigma_x, sigma_y, w2);
@@ -327,7 +328,7 @@ __host__ __device__ float gaussianSinc2D(float amp, float x, float y, float x0, 
         return amp*G*S;
 };
 
-__host__ __device__ float pillBox1D(float amp, float x, float limit)
+__host__ float pillBox1D(float amp, float x, float limit)
 {
         if(fabs(x) < limit)
                 return amp;
@@ -335,12 +336,12 @@ __host__ __device__ float pillBox1D(float amp, float x, float limit)
                 return 0.0f;
 };
 
-__host__ __device__ float pillBox2D(float amp, float x, float y, float limit_x, float limit_y)
+__host__ float pillBox2D(float amp, float x, float y, float limit_x, float limit_y)
 {
         return pillBox1D(amp, x, limit_x)*pillBox1D(amp, y, limit_y);
 };
 
-__host__ __device__ float pswf_11D_func(float nu)
+__host__ float pswf_11D_func(float nu)
 {
         float nu_end;
         float dnusq, top, bottom;
@@ -387,7 +388,7 @@ __host__ __device__ float pswf_11D_func(float nu)
         return res;
 };
 
-__host__ __device__ float pswf_11D(float amp, float x, float x0, float sigma, float w)
+__host__ float pswf_11D(float amp, float x, float x0, float sigma, float w)
 {
         float nu, pswf, nu_sq, val;
         float radius = distance(x, 0.0f, x0, 0.0f);
@@ -403,7 +404,7 @@ __host__ __device__ float pswf_11D(float amp, float x, float x0, float sigma, fl
         return val;
 };
 
-__host__ __device__ float pswf_12D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
+__host__ float pswf_12D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
 {
         float xval = pswf_11D(1.0f, x, x0, sigma_x, w);
         float yval = pswf_11D(1.0f, y, y0, sigma_y, w);

@@ -14,7 +14,7 @@ __host__ void Gaussian2D::buildKernel(float amp, float x0, float y0, float sigma
         this->copyKerneltoGPU();
 };
 
-__device__ float Gaussian2D::buildGCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
+__host__ float Gaussian2D::GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
 {
         return gaussian2D(amp, PI*x, PI*y, PI*x0, PI*y0, sigma_x, sigma_y, 2.0f*w, alpha);
 }
