@@ -6,7 +6,15 @@ class CKernel
 public:
 __host__ virtual void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
 __host__ virtual float GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha) = 0;
-__host__ CKernel::CKernel()
+__host__ virtual void buildGCF(float amp, float x0, float y0, float sigma_x, float sigma_y) {};
+__host__ virtual CKernel * getGCF(){return gcf;};
+__host__ virtual void fillGCFvalues(float amp, float x0, float y0, float sigma_x, float sigma_y){gcf->buildGCF(amp, x0, y0, sigma_x, sigma_y);};
+__host__ virtual void createMemberGCF(){};
+__host__ virtual void setGCF(CKernel * gcf){this->gcf = gcf;};
+__host__ virtual float * getGCFGpuValues(){return this->gcf->getGPUKernel();};
+__host__ virtual std::vector<float> getGCFCpuValues(){return this->gcf->getKernel();};
+
+__host__ CKernel()
 {
         this->m = 7;
         this->n = 7;
@@ -17,7 +25,7 @@ __host__ CKernel::CKernel()
         this->ioImageHandler = NULL;
 };
 
-__host__ CKernel::CKernel(int m, int n)
+__host__ CKernel(int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -28,7 +36,7 @@ __host__ CKernel::CKernel(int m, int n)
         this->ioImageHandler = NULL;
 };
 
-__host__ CKernel::CKernel(int m, int n, Io *imageHandler)
+__host__ CKernel(int m, int n, Io *imageHandler)
 {
         this->m = m;
         this->n = n;
@@ -39,7 +47,7 @@ __host__ CKernel::CKernel(int m, int n, Io *imageHandler)
         this->ioImageHandler = imageHandler;
 };
 
-__host__ CKernel::CKernel(int m, int n, float w1)
+__host__ CKernel(int m, int n, float w1)
 {
         this->n = m;
         this->n = n;
@@ -51,7 +59,7 @@ __host__ CKernel::CKernel(int m, int n, float w1)
         this->ioImageHandler = NULL;
 };
 
-__host__ CKernel::CKernel(int m, int n, float w1, Io *imageHandler)
+__host__ CKernel(int m, int n, float w1, Io *imageHandler)
 {
         this->n = m;
         this->n = n;
@@ -63,7 +71,7 @@ __host__ CKernel::CKernel(int m, int n, float w1, Io *imageHandler)
         this->ioImageHandler = imageHandler;
 };
 
-__host__ CKernel::CKernel(int m, int n, float w1, float w2)
+__host__ CKernel(int m, int n, float w1, float w2)
 {
         this->m = m;
         this->n = n;
@@ -76,7 +84,7 @@ __host__ CKernel::CKernel(int m, int n, float w1, float w2)
         this->ioImageHandler = NULL;
 };
 
-__host__ CKernel::CKernel(int m, int n, float w1, float w2, Io *imageHandler)
+__host__ CKernel(int m, int n, float w1, float w2, Io *imageHandler)
 {
         this->m = m;
         this->n = n;
@@ -91,7 +99,7 @@ __host__ CKernel::CKernel(int m, int n, float w1, float w2, Io *imageHandler)
 
 
 
-__host__ CKernel::CKernel(float w1, float w2, float angle, int m, int n)
+__host__ CKernel(float w1, float w2, float angle, int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -104,7 +112,7 @@ __host__ CKernel::CKernel(float w1, float w2, float angle, int m, int n)
         this->ioImageHandler = NULL;
 };
 
-__host__ CKernel::CKernel(float w1, float w2, float angle, int m, int n, Io *imageHandler)
+__host__ CKernel(float w1, float w2, float angle, int m, int n, Io *imageHandler)
 {
         this->m = m;
         this->n = n;
@@ -117,7 +125,7 @@ __host__ CKernel::CKernel(float w1, float w2, float angle, int m, int n, Io *ima
         this->ioImageHandler = imageHandler;
 };
 
-__host__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n)
+__host__ CKernel(float w1, float w2, float alpha, float angle, int m, int n)
 {
         this->m = m;
         this->n = n;
@@ -130,7 +138,7 @@ __host__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, i
         this->ioImageHandler = NULL;
 };
 
-__host__ CKernel::CKernel(float w1, float w2, float alpha, float angle, int m, int n, Io *imageHandler)
+__host__ CKernel(float w1, float w2, float alpha, float angle, int m, int n, Io *imageHandler)
 {
         this->m = m;
         this->n = n;
@@ -246,6 +254,7 @@ float angle;
 std::vector<float> kernel;
 float *gpu_kernel;
 Io *ioImageHandler = NULL;
+CKernel *gcf = NULL;
 
 __host__ void setKernelMemory(){
         this->kernel.resize(this->m_times_n);
