@@ -1,5 +1,47 @@
 #include "sinc2D.cuh"
 
+__host__ float sincf(float x)
+{
+        float value;
+        if(x==0.0f)
+                value = 1.0f;
+        else
+                value = sinf(PI*x)/(PI*x);
+
+        return value;
+};
+
+__host__ float sinc1D(float amp, float x, float x0, float sigma, float w)
+{
+        float radius = distance(x, 0.0f, x0, 0.0f);
+        float val = radius/(w*sigma);
+        float s;
+        if(radius < w*sigma)
+                s = amp*sincf(val);
+        else
+                s = 0.0f;
+        return s;
+};
+
+__host__ float sinc2D(float amp, float x, float x0, float y, float y0, float sigma_x, float sigma_y, float w)
+{
+        float s_x = sinc1D(1.0f, x, x0, sigma_x, w);
+        float s_y = sinc1D(1.0f, y, y0, sigma_y, w);
+        return amp*s_x*s_y;
+};
+
+__host__ Sinc2D::Sinc2D() : CKernel(){
+        this->w =1.55f;
+        this->name = "Sinc";
+};
+__host__  Sinc2D::Sinc2D(int m, int n) : CKernel(m, n){
+        this->w =1.55f;
+        this->name = "Sinc";
+};
+__host__ Sinc2D::Sinc2D(int m, int n, float w) : CKernel(m, n, w){
+        this->name = "Sinc";
+};
+
 __host__ void Sinc2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
 {
         this->setKernelMemory();
@@ -8,7 +50,22 @@ __host__ void Sinc2D::buildKernel(float amp, float x0, float y0, float sigma_x, 
                 for(int j=0; j<this->n; j++) {
                         y = (i-this->support_y)*sigma_y;
                         x = (j-this->support_x)*sigma_x;
-                        this->kernel[this->n*i+j] = sinc2D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w1);
+                        this->kernel[this->n*i+j] = sinc2D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w);
+                }
+        }
+        this->copyKerneltoGPU();
+
+};
+
+__host__ void Sinc2D::buildKernel()
+{
+        this->setKernelMemory();
+        float x, y;
+        for(int i=0; i<this->m; i++) {
+                for(int j=0; j<this->n; j++) {
+                        y = (i-this->support_y)*sigma_y;
+                        x = (j-this->support_x)*sigma_x;
+                        this->kernel[this->n*i+j] = sinc2D(this->amp, x, y, this->x0, this->y0, this->sigma_x, this->sigma_y, this->w);
                 }
         }
         this->copyKerneltoGPU();

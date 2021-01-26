@@ -91,6 +91,7 @@ void MFS::configure(int argc, char **argv)
         ioVisibilitiesHandler->setApplyNoiseInput(apply_noise);
         ioVisibilitiesHandler->setStoreModelVisInput(save_model_input);
         ioImageHandler->setPrintImages(print_images);
+        this->ckernel->setIoImageHandler(ioImageHandler);
 
         std::vector<std::string> string_values;
         std::vector<std::string> s_output_values;
@@ -419,10 +420,11 @@ void MFS::configure(int argc, char **argv)
         if(gridding) {
                 printf("Doing gridding\n");
                 printf("Building Antialiasing Kernel\n");
-                this->ckernel->buildKernel(1.0f, 0.0f, 0.0f, fabs(deltau), fabs(deltav));
+                this->ckernel->setSigmas(fabs(deltau), fabs(deltav));
+                this->ckernel->buildKernel();
                 //if(print_images)
                 //        ckernel->printCKernel();
-                printf("Using an antialiasing kernel of size (%d, %d) and support (%d, %d)\n", this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
+                printf("Using an antialiasing kernel %s of size (%d, %d) and support (%d, %d)\n", this->ckernel->getName().c_str(), this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
         }

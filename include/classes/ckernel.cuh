@@ -5,162 +5,187 @@ class CKernel
 {
 public:
 __host__ virtual void buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y) = 0;
-__host__ virtual float GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha) = 0;
+__host__ virtual void buildKernel() = 0;
+__host__ virtual float GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y){return;};
+__host__ virtual float GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w){return;};
+__host__ virtual float GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha){return;};
 __host__ virtual void buildGCF(float amp, float x0, float y0, float sigma_x, float sigma_y) {};
+__host__ virtual void buildGCF() {};
 __host__ virtual CKernel * getGCF(){return gcf;};
-__host__ virtual void fillGCFvalues(float amp, float x0, float y0, float sigma_x, float sigma_y){gcf->buildGCF(amp, x0, y0, sigma_x, sigma_y);};
+__host__ virtual void fillGCFvalues(float amp, float x0, float y0, float sigma_x, float sigma_y){this->gcf->buildGCF(amp, x0, y0, sigma_x, sigma_y);};
 __host__ virtual void createMemberGCF(){};
 __host__ virtual void setGCF(CKernel * gcf){this->gcf = gcf;};
-__host__ virtual float * getGCFGpuValues(){return this->gcf->getGPUKernel();};
-__host__ virtual std::vector<float> getGCFCpuValues(){return this->gcf->getKernel();};
+__host__ virtual float * getGCFGPUValues(){return this->gcf->getGPUKernel();};
+__host__ virtual std::vector<float> getGCFCPUValues(){return this->gcf->getKernel();};
+__host__ virtual float* getGCFCPUPointer(){return this->gcf->getKernelPointer();};
 
 __host__ CKernel()
 {
+        this->amp = 1.0f;
         this->m = 7;
         this->n = 7;
-        this->alpha = 2;
-        this->angle = 0.0;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->name = "";
 };
 
 __host__ CKernel(int m, int n)
 {
+        this->amp = 1.0f;
         this->m = m;
         this->n = n;
-        this->alpha = 2;
-        this->angle = 0.0;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->name = "";
 };
 
 __host__ CKernel(int m, int n, Io *imageHandler)
 {
+        this->amp = 1.0f;
         this->m = m;
         this->n = n;
-        this->alpha = 2;
-        this->angle = 0.0;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = imageHandler;
+        this->name = "";
 };
 
-__host__ CKernel(int m, int n, float w1)
+__host__ CKernel(int m, int n, float dx, float dy)
 {
+        this->amp = 1.0f;
+        this->m = m;
+        this->n = n;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = NULL;
+        this->name = "";
+};
+
+__host__ CKernel(int m, int n, float dx, float dy, Io *imageHandler)
+{
+        this->amp = 1.0f;
+        this->m = m;
+        this->n = n;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
+        this->name = "";
+};
+
+__host__ CKernel(int m, int n, float w)
+{
+        this->amp = 1.0f;
         this->n = m;
         this->n = n;
-        this->w1 = w1;
-        this->alpha = 2;
-        this->angle = 0.0;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->name = "";
 };
 
-__host__ CKernel(int m, int n, float w1, Io *imageHandler)
+__host__ CKernel(int m, int n, float w, Io *imageHandler)
 {
+        this->amp = 1.0f;
         this->n = m;
         this->n = n;
-        this->w1 = w1;
-        this->alpha = 2;
-        this->angle = 0.0;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = imageHandler;
+        this->name = "";
 };
 
-__host__ CKernel(int m, int n, float w1, float w2)
+__host__ CKernel(int m, int n, float dx, float dy, float w)
 {
-        this->m = m;
+        this->amp = 1.0f;
+        this->n = m;
         this->n = n;
-        this->w1 = w1;
-        this->w2 = w2;
-        this->alpha = 2;
-        this->angle = 0.0;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->name = "";
 };
 
-__host__ CKernel(int m, int n, float w1, float w2, Io *imageHandler)
+__host__ CKernel(int m, int n, float dx, float dy, float w, Io *imageHandler)
 {
-        this->m = m;
+        this->amp = 1.0f;
+        this->n = m;
         this->n = n;
-        this->w1 = w1;
-        this->w2 = w2;
-        this->alpha = 2;
-        this->angle = 0.0;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = imageHandler;
-};
-
-
-
-__host__ CKernel(float w1, float w2, float angle, int m, int n)
-{
-        this->m = m;
-        this->n = n;
-        this->w1 = w1;
-        this->w2 = w2;
-        this->alpha = 2.0;
-        this->angle = angle;
-        this->setm_times_n();
-        this->setSupports();
-        this->ioImageHandler = NULL;
-};
-
-__host__ CKernel(float w1, float w2, float angle, int m, int n, Io *imageHandler)
-{
-        this->m = m;
-        this->n = n;
-        this->w1 = w1;
-        this->w2 = w2;
-        this->alpha = 2.0;
-        this->angle = angle;
-        this->setm_times_n();
-        this->setSupports();
-        this->ioImageHandler = imageHandler;
-};
-
-__host__ CKernel(float w1, float w2, float alpha, float angle, int m, int n)
-{
-        this->m = m;
-        this->n = n;
-        this->w1 = w1;
-        this->w2 = w2;
-        this->alpha = alpha;
-        this->angle = angle;
-        this->setm_times_n();
-        this->setSupports();
-        this->ioImageHandler = NULL;
-};
-
-__host__ CKernel(float w1, float w2, float alpha, float angle, int m, int n, Io *imageHandler)
-{
-        this->m = m;
-        this->n = n;
-        this->w1 = w1;
-        this->w2 = w2;
-        this->alpha = alpha;
-        this->angle = angle;
-        this->setm_times_n();
-        this->setSupports();
-        this->ioImageHandler = imageHandler;
+        this->name = "";
 };
 
 __host__ ~CKernel() {
         this->kernel.clear();
         this->freeGPUKernel();
+        this->gcf->kernel.clear();
+        this->gcf->freeGPUKernel();
 };
 
+__host__ float getAmp(){
+        return this->amp;
+};
 __host__ int getm(){
         return this->m;
 };
 __host__ int getn(){
         return this->n;
+};
+
+__host__ int2 getMN(){
+        int2 ret;
+        ret.x = this->m;
+        ret.y = this->n;
+};
+
+__host__ int getSigmaX(){
+        return this->sigma_x;
+};
+__host__ int getSigmaY(){
+        return this->sigma_y;
 };
 __host__ int getSupportX(){
         return this->support_x;
@@ -168,18 +193,25 @@ __host__ int getSupportX(){
 __host__ int getSupportY(){
         return this->support_y;
 };
-__host__ float getW1(){
-        return this->w1;
+__host__ float getW(){
+        return this->w;
 };
-__host__ float getW2(){
-        return this->w2;
+
+__host__ float getX0(){
+        return this->x0;
 };
-__host__ float getAlpha(){
-        return this->alpha;
+
+__host__ float getY0(){
+        return this->y0;
 };
-__host__ float getAngle(){
-        return this->angle;
+
+__host__ float2 getCenter(){
+        float2 ret;
+        ret.x = this->x0;
+        ret.y = this->y0;
+        return ret;
 };
+
 __host__ float getKernelValue(int i, int j)
 {
         return this->kernel[this->n * i + j];
@@ -196,24 +228,36 @@ __host__ float* getGPUKernel()
 {
         return this->gpu_kernel;
 };
+__host__ std::string getName(){
+        return this->name;
+};
+
+__host__ void setName(std::string name){
+        this->name = name;
+};
+
+__host__ void setAmp(float amp){
+        this->amp = amp;
+};
+
+__host__ void setCenter(float x0, float y0){
+        this->x0 = x0; this->y0 = y0;
+};
+
 __host__  void setmn(int m, int n){
         this->m = m; this->n = n;
         this->setm_times_n();
         this->setSupports();
 };
 
-__host__  void setW1(float w1){
-        this->w1 = w1;
+__host__  void setSigmas(float dx, float dy){
+        this->sigma_x = dx; this->sigma_y = dy;
 };
-__host__  void setW2(float w2){
-        this->w2 = w2;
+
+__host__  void setW(float w){
+        this->w = w;
 };
-__host__  void setAlpha(float alpha){
-        this->alpha = alpha;
-};
-__host__  void setAngle(float angle){
-        this->angle = angle;
-};
+
 __host__ void setIoImageHandler(Io *imageHandler){
         this->ioImageHandler = imageHandler;
 };
@@ -247,14 +291,19 @@ int m;     //size of the kernel
 int n;     //size of the kernel
 int support_x;
 int support_y;
-float w1;
-float w2;
-float alpha;
-float angle;
+float amp;
+float x0;
+float y0;
+float sigma_x;
+float sigma_y;
+float w;
 std::vector<float> kernel;
 float *gpu_kernel;
 Io *ioImageHandler = NULL;
+// Gridding correction function (GCF)
 CKernel *gcf = NULL;
+std::string name;
+
 
 __host__ void setKernelMemory(){
         this->kernel.resize(this->m_times_n);
@@ -264,161 +313,6 @@ __host__ void setKernelMemory(){
 
 __host__ void copyKerneltoGPU(){
         checkCudaErrors(cudaMemcpy(this->gpu_kernel, this->kernel.data(), sizeof(float) * this->m_times_n, cudaMemcpyHostToDevice));
-};
-
-__host__ float gaussian1D(float amp, float x, float x0, float sigma, float w, float alpha)
-{
-        float radius_x = distance(x, 0.0f, x0, 0.0f);
-        float val = radius_x/(w*sigma);
-        float val_alpha = powf(val, alpha);
-        float G = amp*expf(-val_alpha);
-
-        return G;
-};
-
-__host__ float gaussian2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
-{
-        float radius_x = distance(x, 0.0f, x0, 0.0f);
-        float radius_y = distance(0.0f, y, 0.0f, y0);
-
-        if(radius_x < w*sigma_x && radius_y < w*sigma_y) {
-                float fx = radius_x/(w*sigma_x);
-                float fy = radius_y/(w*sigma_y);
-
-                float val_x = powf(fx, alpha);
-                float val_y = powf(fy, alpha);
-                float G = amp*expf(-1.0f*(val_x+val_y));
-
-                return G;
-        }else
-                return 0.0f;
-};
-
-__host__ float sincf(float x)
-{
-        float value;
-        if(x==0.0f)
-                value = 1.0f;
-        else
-                value = sinf(PI*x)/(PI*x);
-
-        return value;
-};
-
-__host__ float sinc1D(float amp, float x, float x0, float sigma, float w)
-{
-        float radius = distance(x, 0.0f, x0, 0.0f);
-        float val = radius/(w*sigma);
-        float s;
-        if(radius < w*sigma)
-                s = amp*sincf(val);
-        else
-                s = 0.0f;
-        return s;
-};
-
-__host__ float gaussianSinc1D(float amp, float x, float x0, float sigma, float w1, float w2, float alpha)
-{
-        return amp*gaussian1D(1.0f, x, x0, sigma, w1, alpha)*sinc1D(1.0f, x, x0, sigma, w2);
-};
-
-__host__ float sinc2D(float amp, float x, float x0, float y, float y0, float sigma_x, float sigma_y, float w)
-{
-        float s_x = sinc1D(1.0f, x, x0, sigma_x, w);
-        float s_y = sinc1D(1.0f, y, y0, sigma_y, w);
-        return amp*s_x*s_y;
-};
-
-__host__ float gaussianSinc2D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w1, float w2, float alpha)
-{
-        float G = gaussian2D(1.0f, x, y, x0, y0, sigma_x, sigma_y, w1, alpha);
-        float S = sinc2D(1.0f, x, x0, y, y0, sigma_x, sigma_y, w2);
-        //printf("Gaussian :%f - Sinc: %f\n", G, S);
-        return amp*G*S;
-};
-
-__host__ float pillBox1D(float amp, float x, float limit)
-{
-        if(fabs(x) < limit)
-                return amp;
-        else
-                return 0.0f;
-};
-
-__host__ float pillBox2D(float amp, float x, float y, float limit_x, float limit_y)
-{
-        return pillBox1D(amp, x, limit_x)*pillBox1D(amp, y, limit_y);
-};
-
-__host__ float pswf_11D_func(float nu)
-{
-        float nu_end;
-        float dnusq, top, bottom;
-        int idx;
-
-        const float mat_p[2][5] = {{8.203343e-2, -3.644705e-1, 6.278660e-1, -5.335581e-1, 2.312756e-1},
-                {4.028559e-3, -3.697768e-2, 1.021332e-1, -1.201436e-1, 6.412774e-2}};
-
-        const float mat_q[2][3] = {{1.0000000e0, 8.212018e-1, 2.078043e-1},
-                {1.0000000e0, 9.599102e-1, 2.918724e-1}};
-
-        float n_nu = fabsf(nu);
-        float res = 0.0f;
-        if(n_nu > 1.0f)
-                res = 0.0f;
-        else{
-                nu_end = 0.0f;
-                idx = 0;
-                if(n_nu >= 0.0f && n_nu < 0.75) {
-                        idx = 0;
-                        nu_end = 0.75f;
-                }else{
-                        idx = 1;
-                        nu_end = 1.0f;
-                }
-
-                dnusq = n_nu*n_nu - nu_end*nu_end;
-                top = mat_p[idx][0];
-                bottom = mat_q[idx][0];
-
-                for(int i=1; i<5; i++) {
-                        top += mat_p[idx][i] * powf(dnusq, i);
-                }
-
-                for(int i=1; i<3; i++) {
-                        bottom += mat_q[idx][i] * powf(dnusq, i);
-                }
-
-                if(bottom > 0.0f) {
-                        res = top/bottom;
-                }
-
-        }
-        return res;
-};
-
-__host__ float pswf_11D(float amp, float x, float x0, float sigma, float w)
-{
-        float nu, pswf, nu_sq, val;
-        float radius = distance(x, 0.0f, x0, 0.0f);
-
-        nu =  radius/(w*sigma);
-        if(nu==0.0f) {
-                val = 1.0f;
-        }else{
-                pswf = pswf_11D_func(nu);
-                nu_sq = nu * nu;
-                val = amp*(1.0f-nu_sq)*pswf;
-        }
-        return val;
-};
-
-__host__ float pswf_12D(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w)
-{
-        float xval = pswf_11D(1.0f, x, x0, sigma_x, w);
-        float yval = pswf_11D(1.0f, y, y0, sigma_y, w);
-        float val = amp*xval*yval;
-        return val;
 };
 
 };

@@ -1,10 +1,33 @@
 #include "pillBox2D.cuh"
 
+__host__ float pillBox1D(float amp, float x, float limit)
+{
+        if(fabs(x) < limit)
+                return amp;
+        else
+                return 0.0f;
+};
+
+__host__ float pillBox2D(float amp, float x, float y, float limit_x, float limit_y)
+{
+        return pillBox1D(amp, x, limit_x)*pillBox1D(amp, y, limit_y);
+};
+
+__host__ PillBox2D::PillBox2D() : CKernel(){
+        this->name = "Pill Box";
+        this->setmn(1, 1);
+
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n) : CKernel(m, n){
+        this->name = "Pill Box";
+};
+
 __host__ void PillBox2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
 {
         this->setKernelMemory();
-        float limit_x = this->m * sigma_x / 2;
-        float limit_y = this->n * sigma_y / 2;
+        float limit_x = (this->m/2.0f) * sigma_x;
+        float limit_y = (this->n/2.0f) * sigma_y;
 
         float x, y;
         for(int i=0; i<this->m; i++) {
@@ -18,10 +41,65 @@ __host__ void PillBox2D::buildKernel(float amp, float x0, float y0, float sigma_
         this->copyKerneltoGPU();
 };
 
-__host__ float PillBox2D::GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha)
+__host__ void PillBox2D::buildKernel()
+{
+        this->setKernelMemory();
+        float limit_x = (this->m/2.0f) * this->sigma_x;
+        float limit_y = (this->n/2.0f) * this->sigma_y;
+
+        float x, y;
+        for(int i=0; i<this->m; i++) {
+                for(int j=0; j<this->n; j++) {
+                        y = (i-this->support_y)*this->sigma_y;
+                        x = (j-this->support_x)*this->sigma_x;
+                        this->kernel[this->n*i+j] = pillBox2D(this->amp, x, y, limit_x, limit_y);
+                }
+        }
+
+        this->copyKerneltoGPU();
+};
+
+__host__ void PillBox2D::buildGCF(float amp, float x0, float y0, float sigma_x, float sigma_y)
+{
+        this->setKernelMemory();
+        float limit_x = (this->m/2.0f) * sigma_x;
+        float limit_y = (this->n/2.0f) * sigma_y;
+
+        float x, y;
+        for(int i=0; i<this->m; i++) {
+                for(int j=0; j<this->n; j++) {
+                        y = (i-this->support_y)*sigma_y;
+                        x = (j-this->support_x)*sigma_x;
+                        this->kernel[this->n*i+j] = GCF(amp, x, y, x0, y0, sigma_x, sigma_y);
+                }
+        }
+
+        this->copyKerneltoGPU();
+};
+
+__host__ void PillBox2D::buildGCF()
+{
+        this->setKernelMemory();
+        float limit_x = (this->m/2.0f) * this->sigma_x;
+        float limit_y = (this->n/2.0f) * this->sigma_y;
+
+        float x, y;
+        for(int i=0; i<this->m; i++) {
+                for(int j=0; j<this->n; j++) {
+                        y = (i-this->support_y)*this->sigma_y;
+                        x = (j-this->support_x)*this->sigma_x;
+                        this->kernel[this->n*i+j] = GCF(this->amp, x, y, this->x0, this->y0, this->sigma_x, this->sigma_y);
+                }
+        }
+
+        this->copyKerneltoGPU();
+};
+
+__host__ float PillBox2D::GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y)
 {
         return 1.0f;
-}
+};
+
 
 namespace {
 CKernel* CreateCKernel()
