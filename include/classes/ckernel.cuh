@@ -11,13 +11,15 @@ __host__ virtual float GCF(float amp, float x, float y, float x0, float y0, floa
 __host__ virtual float GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y, float w, float alpha){return;};
 __host__ virtual void buildGCF(float amp, float x0, float y0, float sigma_x, float sigma_y) {};
 __host__ virtual void buildGCF() {};
-__host__ virtual CKernel * getGCF(){return gcf;};
+__host__ virtual CKernel * getGCF(){return this->gcf;};
 __host__ virtual void fillGCFvalues(float amp, float x0, float y0, float sigma_x, float sigma_y){this->gcf->buildGCF(amp, x0, y0, sigma_x, sigma_y);};
 __host__ virtual void createMemberGCF(){};
 __host__ virtual void setGCF(CKernel * gcf){this->gcf = gcf;};
 __host__ virtual float * getGCFGPUValues(){return this->gcf->getGPUKernel();};
 __host__ virtual std::vector<float> getGCFCPUValues(){return this->gcf->getKernel();};
 __host__ virtual float* getGCFCPUPointer(){return this->gcf->getKernelPointer();};
+__host__ virtual void printGCFCPU(){return this->gcf->printCKernel();};
+__host__ virtual void printGCFGPU(){return this->gcf->printGPUCKernel();};
 
 __host__ CKernel()
 {
@@ -31,6 +33,7 @@ __host__ CKernel()
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -46,6 +49,7 @@ __host__ CKernel(int m, int n)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -61,6 +65,7 @@ __host__ CKernel(int m, int n, Io *imageHandler)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = imageHandler;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -76,6 +81,7 @@ __host__ CKernel(int m, int n, float dx, float dy)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -91,6 +97,7 @@ __host__ CKernel(int m, int n, float dx, float dy, Io *imageHandler)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = imageHandler;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -107,6 +114,7 @@ __host__ CKernel(int m, int n, float w)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -123,6 +131,7 @@ __host__ CKernel(int m, int n, float w, Io *imageHandler)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = imageHandler;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -139,6 +148,7 @@ __host__ CKernel(int m, int n, float dx, float dy, float w)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = NULL;
+        this->gcf = NULL;
         this->name = "";
 };
 
@@ -155,14 +165,17 @@ __host__ CKernel(int m, int n, float dx, float dy, float w, Io *imageHandler)
         this->setm_times_n();
         this->setSupports();
         this->ioImageHandler = imageHandler;
+        this->gcf = NULL;
         this->name = "";
 };
 
 __host__ ~CKernel() {
         this->kernel.clear();
         this->freeGPUKernel();
-        this->gcf->kernel.clear();
-        this->gcf->freeGPUKernel();
+        if(this->gcf != NULL){
+          this->gcf->kernel.clear();
+          this->gcf->freeGPUKernel();
+        }
 };
 
 __host__ float getAmp(){
@@ -262,11 +275,17 @@ __host__ void setIoImageHandler(Io *imageHandler){
         this->ioImageHandler = imageHandler;
 };
 __host__ void printCKernel(){
-        this->ioImageHandler->printImage(this->getKernelPointer(), "ckernel.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), false);
+        if(this->ioImageHandler != NULL && this->ioImageHandler->getPrintImages())
+            this->ioImageHandler->printImage(this->getKernelPointer(), "ckernel.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), false);
+        else
+            std::cout << "No IO Image object to print the image" << std::endl;
 };
 
 __host__ void printGPUCKernel(){
-        this->ioImageHandler->printImage(this->getGPUKernel(), "ckernel_gpu.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), true);
+        if(this->ioImageHandler != NULL && this->ioImageHandler->getPrintImages())
+            this->ioImageHandler->printImage(this->getGPUKernel(), "ckernel_gpu.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), true);
+        else
+            std::cout << "No IO Image object to print the image" << std::endl;
 };
 
 private:
@@ -299,9 +318,11 @@ float sigma_y;
 float w;
 std::vector<float> kernel;
 float *gpu_kernel;
+// Image IO handler to print images if necessary
 Io *ioImageHandler = NULL;
 // Gridding correction function (GCF)
 CKernel *gcf = NULL;
+// Name of the Convolution Kernel
 std::string name;
 
 
