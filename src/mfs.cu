@@ -419,10 +419,11 @@ void MFS::configure(int argc, char **argv)
         this->scheme->apply(datasets);
         if(gridding) {
                 printf("Doing gridding\n");
-                printf("Building Antialiasing Kernel\n");
                 this->ckernel->setSigmas(fabs(deltau), fabs(deltav));
                 this->ckernel->buildKernel();
-                ckernel->printCKernel();
+                this->ckernel->printCKernel();
+                this->ckernel->initializeGCF(M, N, fabs(deltax), fabs(deltay));
+                this->ckernel->printGCF();
                 printf("Using an antialiasing kernel %s of size (%d, %d) and support (%d, %d)\n", this->ckernel->getName().c_str(), this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);

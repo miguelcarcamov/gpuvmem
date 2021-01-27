@@ -21,6 +21,34 @@ __host__ virtual float* getGCFCPUPointer(){return this->gcf->getKernelPointer();
 __host__ virtual void printGCFCPU(){return this->gcf->printCKernel();};
 __host__ virtual void printGCFGPU(){return this->gcf->printGPUCKernel();};
 
+// Virtual functions for Gaussian and GaussianSinc
+__host__ virtual float getAlpha(){return;};
+__host__ virtual void setAlpha(float alpha){};
+
+__host__ virtual float getW2(){return;};
+__host__ virtual void setW2(float w2){};
+
+// Clone virtual function
+__host__ virtual CKernel* clone() const = 0;
+
+// Virtual functions to initialize GCF
+__host__ virtual void initializeGCF(){this->gcf = this->clone();};
+__host__ virtual void initializeGCF(int m, int n, float dx, float dy){
+        this->gcf = this->clone();
+        this->gcf->setmn(m, n);
+        this->gcf->setSigmas(dx, dy);
+        this->gcf->setW(m);
+        this->gcf->buildGCF();
+};
+__host__ virtual void initializeGCF(int m, int n, float dx, float dy, float w){
+        this->gcf = this->clone();
+        this->gcf->setmn(m, n);
+        this->gcf->setSigmas(dx, dy);
+        this->gcf->setW(w);
+        this->gcf->buildGCF();
+};
+
+
 __host__ CKernel()
 {
         this->amp = 1.0f;
@@ -53,6 +81,22 @@ __host__ CKernel(int m, int n)
         this->name = "";
 };
 
+__host__ CKernel(int m, int n, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->m = m;
+        this->n = n;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = NULL;
+        this->gcf = gcf;
+        this->name = "";
+};
+
 __host__ CKernel(int m, int n, Io *imageHandler)
 {
         this->amp = 1.0f;
@@ -66,6 +110,22 @@ __host__ CKernel(int m, int n, Io *imageHandler)
         this->setSupports();
         this->ioImageHandler = imageHandler;
         this->gcf = NULL;
+        this->name = "";
+};
+
+__host__ CKernel(int m, int n, Io *imageHandler, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->m = m;
+        this->n = n;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
+        this->gcf = gcf;
         this->name = "";
 };
 
@@ -85,6 +145,22 @@ __host__ CKernel(int m, int n, float dx, float dy)
         this->name = "";
 };
 
+__host__ CKernel(int m, int n, float dx, float dy, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->m = m;
+        this->n = n;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = NULL;
+        this->gcf = gcf;
+        this->name = "";
+};
+
 __host__ CKernel(int m, int n, float dx, float dy, Io *imageHandler)
 {
         this->amp = 1.0f;
@@ -98,6 +174,22 @@ __host__ CKernel(int m, int n, float dx, float dy, Io *imageHandler)
         this->setSupports();
         this->ioImageHandler = imageHandler;
         this->gcf = NULL;
+        this->name = "";
+};
+
+__host__ CKernel(int m, int n, float dx, float dy, Io *imageHandler, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->m = m;
+        this->n = n;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
+        this->gcf = gcf;
         this->name = "";
 };
 
@@ -118,6 +210,24 @@ __host__ CKernel(int m, int n, float w)
         this->name = "";
 };
 
+__host__ CKernel(int m, int n, float w, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->n = m;
+        this->n = n;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = NULL;
+        this->gcf = gcf;
+        this->name = "";
+};
+
+
 __host__ CKernel(int m, int n, float w, Io *imageHandler)
 {
         this->amp = 1.0f;
@@ -132,6 +242,23 @@ __host__ CKernel(int m, int n, float w, Io *imageHandler)
         this->setSupports();
         this->ioImageHandler = imageHandler;
         this->gcf = NULL;
+        this->name = "";
+};
+
+__host__ CKernel(int m, int n, float w, Io *imageHandler, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->n = m;
+        this->n = n;
+        this->sigma_x = 1.0f;
+        this->sigma_y = 1.0f;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
+        this->gcf = gcf;
         this->name = "";
 };
 
@@ -152,6 +279,23 @@ __host__ CKernel(int m, int n, float dx, float dy, float w)
         this->name = "";
 };
 
+__host__ CKernel(int m, int n, float dx, float dy, float w, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->n = m;
+        this->n = n;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = NULL;
+        this->gcf = gcf;
+        this->name = "";
+};
+
 __host__ CKernel(int m, int n, float dx, float dy, float w, Io *imageHandler)
 {
         this->amp = 1.0f;
@@ -166,6 +310,23 @@ __host__ CKernel(int m, int n, float dx, float dy, float w, Io *imageHandler)
         this->setSupports();
         this->ioImageHandler = imageHandler;
         this->gcf = NULL;
+        this->name = "";
+};
+
+__host__ CKernel(int m, int n, float dx, float dy, float w, Io *imageHandler, CKernel *gcf)
+{
+        this->amp = 1.0f;
+        this->n = m;
+        this->n = n;
+        this->sigma_x = dx;
+        this->sigma_y = dy;
+        this->x0 = 0.0f;
+        this->y0 = 0.0f;
+        this->w = w;
+        this->setm_times_n();
+        this->setSupports();
+        this->ioImageHandler = imageHandler;
+        this->gcf = gcf;
         this->name = "";
 };
 
@@ -244,6 +405,9 @@ __host__ float* getGPUKernel()
 __host__ std::string getName(){
         return this->name;
 };
+__host__ Io* getImageHandler(){
+        return this->ioImageHandler;
+};
 
 __host__ void setName(std::string name){
         this->name = name;
@@ -274,6 +438,14 @@ __host__  void setW(float w){
 __host__ void setIoImageHandler(Io *imageHandler){
         this->ioImageHandler = imageHandler;
 };
+
+__host__ void printGCF(){
+        if(this->gcf->getImageHandler() != NULL && this->gcf->getImageHandler()->getPrintImages())
+            this->gcf->getImageHandler()->printImage(this->gcf->getKernelPointer(), "GCF.fits", "", 0, 0, 1.0f, this->gcf->getm(), this->gcf->getn(), false);
+        else
+            std::cout << "No IO Image object to print the image" << std::endl;
+};
+
 __host__ void printCKernel(){
         if(this->ioImageHandler != NULL && this->ioImageHandler->getPrintImages())
             this->ioImageHandler->printImage(this->getKernelPointer(), "ckernel.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), false);
@@ -284,6 +456,13 @@ __host__ void printCKernel(){
 __host__ void printGPUCKernel(){
         if(this->ioImageHandler != NULL && this->ioImageHandler->getPrintImages())
             this->ioImageHandler->printImage(this->getGPUKernel(), "ckernel_gpu.fits", "", 0, 0, 1.0f, this->getm(), this->getn(), true);
+        else
+            std::cout << "No IO Image object to print the image" << std::endl;
+};
+
+__host__ void printGPUGCF(){
+        if(this->gcf->getImageHandler() != NULL && this->gcf->getImageHandler()->getPrintImages())
+            this->gcf->getImageHandler()->printImage(this->gcf->getGPUKernel(), "ckernel_gpu.fits", "", 0, 0, 1.0f, this->gcf->getm(), this->gcf->getn(), true);
         else
             std::cout << "No IO Image object to print the image" << std::endl;
 };

@@ -13,14 +13,73 @@ __host__ float pillBox2D(float amp, float x, float y, float limit_x, float limit
         return pillBox1D(amp, x, limit_x)*pillBox1D(amp, y, limit_y);
 };
 
-__host__ PillBox2D::PillBox2D() : CKernel(){
-        this->name = "Pill Box";
-        this->setmn(1, 1);
+/*
+      Pill Box constructors and functions
+*/
 
+__host__ PillBox2D::PillBox2D() : CKernel(){
+        this->nameSelf();
+        this->setmn(1, 1);
 };
 
 __host__ PillBox2D::PillBox2D(int m, int n) : CKernel(m, n){
-        this->name = "Pill Box";
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float w) : CKernel(m, n, w){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, CKernel *gcf): CKernel(m, n, gcf){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, Io *imageHandler) : CKernel(m, n, imageHandler){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, Io *imageHandler, CKernel *gcf) : CKernel(m, n, imageHandler, gcf){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy) : CKernel(m, n, dx, dy){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy, CKernel *gcf) : CKernel(m, n, dx, dy, gcf){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy, Io *imageHandler) : CKernel(m, n, dx, dy, imageHandler){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy, Io *imageHandler, CKernel *gcf) : CKernel(m, n, dx, dy, imageHandler, gcf){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float w, CKernel *gcf) : CKernel(m, n, w, gcf){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float w, Io *imageHandler, CKernel *gcf) : CKernel(m, n, w, imageHandler, gcf){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy, float w) : CKernel(m, n, dx, dy, w){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy, float w, CKernel *gcf) : CKernel(m, n, dx, dy, w, gcf){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy, float w, Io *imageHandler) : CKernel(m, n, dx, dy, w, imageHandler){
+        this->nameSelf();
+};
+
+__host__ PillBox2D::PillBox2D(int m, int n, float dx, float dy, float w, Io *imageHandler, CKernel *gcf) : CKernel(m, n, dx, dy, w, imageHandler, gcf){
+        this->nameSelf();
 };
 
 __host__ void PillBox2D::buildKernel(float amp, float x0, float y0, float sigma_x, float sigma_y)
@@ -98,6 +157,14 @@ __host__ void PillBox2D::buildGCF()
 __host__ float PillBox2D::GCF(float amp, float x, float y, float x0, float y0, float sigma_x, float sigma_y)
 {
         return 1.0f;
+};
+
+__host__ CKernel* PillBox2D::clone() const{
+        return new PillBox2D(*this);
+};
+
+__host__ void PillBox2D::nameSelf(){
+        this->name = "Pill Box";
 };
 
 
