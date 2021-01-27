@@ -228,6 +228,7 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
 {
         int status_header = 0;
         int status_noise = 0;
+        float aux_noise;
 
         headerValues h_values;
         int bitpix;
@@ -243,19 +244,19 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
         fits_read_key(hdu_in, TDOUBLE, "BMAJ", &h_values.beam_bmaj, NULL, &status_header);
         fits_read_key(hdu_in, TDOUBLE, "BMIN", &h_values.beam_bmin, NULL, &status_header);
         fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL, &status_header);
-        fits_read_key(hdu_in, TFLOAT, "NOISE", &h_values.beam_noise, NULL, &status_noise);
+        fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
         h_values.type = fits_get_img_type(hdu_in, &bitpix, &status_header);
         h_values.bitpix = bitpix;
 
 
         if (status_header) {
                 fits_report_error(stderr, status_header); /* print error message */
-                //exit(0);
+                exit(0);
         }
 
-        //if(status_noise) {
-        //        c_vars.beam_noise = b_noise_aux;
-        //}
+        if(!status_noise) {
+                h_values.beam_noise = aux_noise;
+        }
 
         h_values.DELTAX = fabs(h_values.DELTAX);
         h_values.DELTAY *= -1.0;
@@ -269,6 +270,8 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
 __host__ headerValues readFITSHeader(const char *filename)
 {
         int status_header = 0;
+        int status_noise = 0;
+        float aux_noise;
 
         headerValues h_values;
         int bitpix;
@@ -286,6 +289,7 @@ __host__ headerValues readFITSHeader(const char *filename)
         fits_read_key(hdu_in, TDOUBLE, "BMAJ", &h_values.beam_bmaj, NULL, &status_header);
         fits_read_key(hdu_in, TDOUBLE, "BMIN", &h_values.beam_bmin, NULL, &status_header);
         fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL, &status_header);
+        fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
         h_values.type = fits_get_img_type(hdu_in, &bitpix, &status_header);
         h_values.bitpix = bitpix;
 
@@ -293,6 +297,10 @@ __host__ headerValues readFITSHeader(const char *filename)
         if (status_header) {
                 fits_report_error(stderr, status_header); /* print error message */
                 exit(0);
+        }
+
+        if(!status_noise) {
+                h_values.beam_noise = aux_noise;
         }
 
         h_values.DELTAX = fabs(h_values.DELTAX);

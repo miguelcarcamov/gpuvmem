@@ -138,7 +138,7 @@ typedef struct header_values {
         double crpix1, crpix2;
         long M, N;
         double beam_bmaj, beam_bmin, beam_bpa;
-        float beam_noise;
+        float beam_noise = -1.0f;
         int type;
         int bitpix;
 }headerValues;

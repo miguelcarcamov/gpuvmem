@@ -1579,6 +1579,24 @@ __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_c
         image[N*i+j] = make_cuComplex(image[N*i+j].x * atten * fg_scale, 0.0);
 }
 
+__global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, float *gcf, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY, int primary_beam)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
+
+        image[N*i+j] = make_cuComplex(image[N*i+j].x * gcf[N*i+j] * atten * fg_scale, 0.0);
+}
+
+__global__ void apply_GCF(cufftComplex *image, float *gcf, long N)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        image[N*i+j] = make_cuComplex(image[N*i+j].x * gcf[N*i+j], 0.0);
+}
+
 
 /*--------------------------------------------------------------------
  * Phase rotate the visibility data in "image" to refer phase to point
@@ -2569,13 +2587,40 @@ __global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW
         }
 }
 
-
-__global__ void DPhi(float *dphi, float *dchi2, float *dH, long N)
+__global__ void DChi2(float *noise, float *gcf, float *dChi2, cufftComplex *Vr, double3 *UVW, float *w, long N, long numVisibilities, float fg_scale, float noise_cut, float ref_xobs, float ref_yobs, float phs_xobs, float phs_yobs, double DELTAX, double DELTAY, float antenna_diameter, float pb_factor, float pb_cutoff, float freq, int primary_beam)
 {
+
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        dphi[N*i+j] = dchi2[N*i+j] + dH[N*i+j];
+        int x0 = phs_xobs;
+        int y0 = phs_yobs;
+        double x = (j - x0) * DELTAX * RPDEG_D;
+        double y = (i - y0) * DELTAY * RPDEG_D;
+        //double z = sqrt(1-x*x-y*y)-1;
+
+        float Ukv, Vkv, Wkv, cosk, sink, atten;
+
+        atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
+
+        float dchi2 = 0.0;
+        if(noise[N*i+j] < noise_cut) {
+                for(int v=0; v<numVisibilities; v++) {
+                        Ukv = x * UVW[v].x;
+                        Vkv = y * UVW[v].y;
+                        //Wkv = z * UVW[v].z;
+                        #if (__CUDA_ARCH__ >= 300 )
+                        sincospif(2.0*(Ukv+Vkv), &sink, &cosk);
+                        #else
+                        cosk = cospif(2.0*(Ukv+Vkv));
+                        sink = sinpif(2.0*(Ukv+Vkv));
+                        #endif
+                        dchi2 += w[v]*((Vr[v].x * cosk) - (Vr[v].y * sink));
+                }
+
+                dchi2 *= fg_scale * atten * gcf[N*i+j];
+                dChi2[N*i+j] = dchi2;
+        }
 }
 
 __global__ void AddToDPhi(float *dphi, float *dgi, long N, long M, int index)

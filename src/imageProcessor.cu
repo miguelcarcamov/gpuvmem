@@ -1,6 +1,5 @@
 #include "imageProcessor.cuh"
 
-extern int image_count;
 extern long N, M;
 
 ImageProcessor::ImageProcessor()
@@ -36,9 +35,9 @@ void ImageProcessor::clipWNoise(float *I)
                 linkClipWNoise2I(I);
 };
 
-void ImageProcessor::configure(int I)
+void ImageProcessor::configure(int i)
 {
-        this->image_count = I;
+        this->image_count = i;
         if(image_count > 1)
         {
                 checkCudaErrors(cudaMalloc((void**)&chain, sizeof(float)*M*N*image_count));

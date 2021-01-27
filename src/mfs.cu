@@ -164,18 +164,18 @@ void MFS::configure(int argc, char **argv)
         /*
            Read FITS header
          */
-        headerValues canvas_vars = ioImageHandler->readHeader(modinput);
+        headerValues header_vars = ioImageHandler->readHeader(modinput);
         //canvas_vars.beam_noise = iohandler->readHeaderKeyword<float>(strdup(modinput.c_str()), "NOISE", TFLOAT);
-        M = canvas_vars.M;
-        N = canvas_vars.N;
+        M = header_vars.M;
+        N = header_vars.N;
         ioImageHandler->setMN(M,N);
-        DELTAX = canvas_vars.DELTAX;
-        DELTAY = canvas_vars.DELTAY;
-        ra = canvas_vars.ra;
-        dec = canvas_vars.dec;
-        crpix1 = canvas_vars.crpix1;
-        crpix2 = canvas_vars.crpix2;
-        beam_noise = canvas_vars.beam_noise;
+        DELTAX = header_vars.DELTAX;
+        DELTAY = header_vars.DELTAY;
+        ra = header_vars.ra;
+        dec = header_vars.dec;
+        crpix1 = header_vars.crpix1;
+        crpix2 = header_vars.crpix2;
+        beam_noise = header_vars.beam_noise;
 
         ckernel->setIoImageHandler(ioImageHandler);
         //printf("Beam size canvas: %lf x %lf (arcsec)/ %lf (degrees)\n", canvas_vars.beam_bmaj*3600.0, canvas_vars.beam_bmin*3600.0, canvas_vars.beam_bpa);
