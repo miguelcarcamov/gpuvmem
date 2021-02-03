@@ -2488,9 +2488,9 @@ __global__ void restartDPhi(float *dphi, float *dChi2, float *dH, long N)
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        dphi[N*i+j] = 0.0;
-        dChi2[N*i+j] = 0.0;
-        dH[N*i+j] = 0.0;
+        dphi[N*i+j] = 0.0f;
+        dChi2[N*i+j] = 0.0f;
+        dH[N*i+j] = 0.0f;
 
 }
 
