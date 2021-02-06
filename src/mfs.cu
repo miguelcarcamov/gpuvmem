@@ -800,7 +800,7 @@ void MFS::clearRun()
 void MFS::run()
 {
         printf("\n\nStarting optimizer\n");
-        optimizer->getObjectiveFuntion()->setIo(ioImageHandler);
+    optimizer->getObjectiveFunction()->setIo(ioImageHandler);
 
 
         if(this->Order == NULL) {
@@ -824,7 +824,7 @@ void MFS::run()
         }
 
         if(gridding){
-            std::vector<Fi*> fis = this->getOptimizator()->getObjectiveFuntion()->getFi();
+            std::vector<Fi*> fis = this->getOptimizator()->getObjectiveFunction()->getFi();
 
             for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
               (*it)->setCKernel(this->ckernel);

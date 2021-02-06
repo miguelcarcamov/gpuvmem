@@ -10,13 +10,13 @@ __host__ virtual void deallocateMemoryGpu() = 0;
 __host__ virtual void optimize() = 0;
 //__host__ virtual void configure() = 0;
 
-__host__ Optimizer::Optimizer(){
+__host__ Optimizer(){
         this->tolerance = 1E-12;
         this->total_iterations = 500;
         this->current_iteration = 0;
 };
 
-__host__ Optimizer::Optimizer(int total_iterations, float tolerance){
+__host__ Optimizer(int total_iterations, float tolerance){
         this->tolerance = tolerance;
         this->total_iterations = total_iterations;
         this->current_iteration = 0;
@@ -48,7 +48,7 @@ void setTotalIterations(int iterations){
     this->total_iterations = iterations;
 };
 
-ObjectiveFunction* getObjectiveFuntion(){
+ObjectiveFunction* getObjectiveFunction(){
         return this->of;
 };
 protected:

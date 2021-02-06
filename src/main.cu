@@ -59,7 +59,7 @@ std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer)
 {
 
         int cter = 0;
-        std::vector<Fi*> fis = synthesizer->getOptimizator()->getObjectiveFuntion()->getFi();
+        std::vector<Fi*> fis = synthesizer->getOptimizator()->getObjectiveFunction()->getFi();
         for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
         {
                 if(cter)
@@ -69,7 +69,7 @@ std::vector<float> runGpuvmem(std::vector<float> args, Synthesizer *synthesizer)
 
         synthesizer->clearRun();
         synthesizer->run();
-        std::vector<float> fi_values = synthesizer->getOptimizator()->getObjectiveFuntion()->get_fi_values();
+        std::vector<float> fi_values = synthesizer->getOptimizator()->getObjectiveFunction()->get_fi_values();
         std::vector<float> lambdas(fi_values.size(), 1.0f);
 
         for(int i=0; i < fi_values.size(); i++)
