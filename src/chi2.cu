@@ -65,6 +65,10 @@ void Chi2::addToDphi(float *device_dphi)
         }
 };
 
+void Chi2::setCKernel(CKernel *ckernel){
+        this->ip->setCKernel(ckernel);
+};
+
 namespace {
 Fi* CreateChi2()
 {

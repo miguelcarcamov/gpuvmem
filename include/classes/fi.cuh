@@ -2,6 +2,7 @@
 #define FI_CUH
 
 #include <cuda_runtime.h>
+#include "ckernel.cuh"
 
 extern long M, N;
 extern int image_count;
@@ -27,6 +28,7 @@ virtual void setPrior(float prior){
 };
 virtual void setPrior(float *prior){
 };
+virtual void setCKernel(CKernel *ckernel){};
 
 float get_fivalue(){
         return this->fi_value;

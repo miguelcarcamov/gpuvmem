@@ -1,6 +1,8 @@
 #ifndef CKERNEL_CUH
 #define CKERNEL_CUH
 
+#include "io.cuh"
+
 class CKernel
 {
 public:

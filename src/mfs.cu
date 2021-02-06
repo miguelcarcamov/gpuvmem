@@ -424,6 +424,7 @@ void MFS::configure(int argc, char **argv)
                 this->ckernel->printCKernel();
                 this->ckernel->initializeGCF(M, N, fabs(deltax), fabs(deltay));
                 this->ckernel->printGCF();
+
                 printf("Using an antialiasing kernel %s of size (%d, %d) and support (%d, %d)\n", this->ckernel->getName().c_str(), this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
                         do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
@@ -801,6 +802,7 @@ void MFS::run()
         printf("\n\nStarting optimizer\n");
         optimizer->getObjectiveFuntion()->setIo(ioImageHandler);
 
+
         if(this->Order == NULL) {
                 if(imagesChanged)
                 {
@@ -819,6 +821,14 @@ void MFS::run()
                 }
         }else{
                 (this->Order)(optimizer, image);
+        }
+
+        if(gridding){
+            std::vector<Fi*> fis = this->getOptimizator()->getObjectiveFuntion()->getFi();
+
+            for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
+              (*it)->setCKernel(this->ckernel);
+
         }
 
         t = clock() - t;
