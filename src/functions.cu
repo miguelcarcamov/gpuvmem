@@ -1898,7 +1898,8 @@ __global__ void chi2Vector(float *chi2, cufftComplex *Vr, float *w, long numVisi
         const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
         if (i < numVisibilities) {
-                chi2[i] =  w[i] * ((Vr[i].x * Vr[i].x) + (Vr[i].y * Vr[i].y));
+                //chi2[i] =  w[i] * ((Vr[i].x * Vr[i].x) + (Vr[i].y * Vr[i].y));
+                chi2[i] =  1.0f * ((Vr[i].x * Vr[i].x) + (Vr[i].y * Vr[i].y));
         }
 
 }
@@ -2579,7 +2580,7 @@ __global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW
                         cosk = cospif(2.0*(Ukv+Vkv));
                         sink = sinpif(2.0*(Ukv+Vkv));
                         #endif
-                        dchi2 += w[v]*((Vr[v].x * cosk) - (Vr[v].y * sink));
+                        dchi2 += 1.0f*((Vr[v].x * cosk) - (Vr[v].y * sink));
                 }
 
                 dchi2 *= fg_scale * atten;
@@ -2615,7 +2616,7 @@ __global__ void DChi2(float *noise, float *gcf, float *dChi2, cufftComplex *Vr, 
                         cosk = cospif(2.0*(Ukv+Vkv));
                         sink = sinpif(2.0*(Ukv+Vkv));
                         #endif
-                        dchi2 += w[v]*((Vr[v].x * cosk) - (Vr[v].y * sink));
+                        dchi2 += 1.0f*((Vr[v].x * cosk) - (Vr[v].y * sink));
                 }
 
                 dchi2 *= fg_scale * atten * gcf[N*i+j];
