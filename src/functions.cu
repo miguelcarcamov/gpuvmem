@@ -2911,38 +2911,39 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
                                 checkCudaErrors(cudaDeviceSynchronize());
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
-                                        if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+                                    if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY){
+                                          if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
 
-                                                checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0, sizeof(float)*max_number_vis));
-                                                // BILINEAR INTERPOLATION
-                                                vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                  checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0, sizeof(float)*max_number_vis));
+                                                  // BILINEAR INTERPOLATION
+                                                  vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                          datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                  (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                  checkCudaErrors(cudaDeviceSynchronize());
 
-                                                // RESIDUAL CALCULATION
-                                                residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                  // RESIDUAL CALCULATION
+                                                  residual <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                          datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                  (datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].Vm, datasets[d].fields[f].device_visibilities[i][s].Vo, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                  checkCudaErrors(cudaDeviceSynchronize());
 
-                                                ////chi2 VECTOR
-                                                chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                        datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>> (vars_gpu[gpu_idx].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                                checkCudaErrors(cudaDeviceSynchronize());
+                                                  ////chi2 VECTOR
+                                                  chi2Vector <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                          datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>> (vars_gpu[gpu_idx].device_chi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].weight, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                                                  checkCudaErrors(cudaDeviceSynchronize());
 
 
-                                                result = deviceReduce<float>(vars_gpu[gpu_idx].device_chi2,
-                                                                             datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
-                                                //REDUCTIONS
-                                                //chi2
-                                                resultchi2 += result;
-                                        }
-                                }
+                                                  result = deviceReduce<float>(vars_gpu[gpu_idx].device_chi2,
+                                                                               datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
+                                                  //REDUCTIONS
+                                                  //chi2
+                                                  resultchi2 += result;
+                                          }
+                                    }
+                              }
                         }
                 }
         }
-
 
         cudaSetDevice(firstgpu);
 
