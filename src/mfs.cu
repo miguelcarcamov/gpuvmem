@@ -85,6 +85,7 @@ void MFS::configure(int argc, char **argv)
         eta = variables.eta;
         gridding = variables.gridding;
         ioVisibilitiesHandler->setGridding(gridding);
+        this->setGriddingThreads(gridding);
         nu_0 = variables.nu_0;
         robust_param = variables.robust_param;
         threshold = variables.threshold * 5.0;
@@ -417,7 +418,7 @@ void MFS::configure(int argc, char **argv)
 
         this->scheme->configure(&robust_param);
         this->scheme->apply(datasets);
-        if(gridding) {
+        if(this->gridding) {
                 printf("Doing gridding\n");
                 this->ckernel->setSigmas(fabs(deltau), fabs(deltav));
                 this->ckernel->buildKernel();
@@ -427,7 +428,7 @@ void MFS::configure(int argc, char **argv)
 
                 printf("Using an antialiasing kernel %s of size (%d, %d) and support (%d, %d)\n", this->ckernel->getName().c_str(), this->ckernel->getm(), this->ckernel->getn(), this->ckernel->getSupportX(), this->ckernel->getSupportY());
                 for(int d=0; d<nMeasurementSets; d++)
-                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, gridding);
+                        do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N, this->ckernel, this->getGriddingThreads());
         }
 }
 
@@ -440,7 +441,7 @@ void MFS::setDevice()
 
         if(verbose_flag) {
                 printf("MS files reading ");
-                if(gridding) {
+                if(this->gridding) {
                         printf("and gridding ");
                 }
                 printf("OK!\n");
@@ -450,7 +451,7 @@ void MFS::setDevice()
         }
 
         // Estimates the noise in JY/BEAM, beam major, minor axis and angle in degrees.
-        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, gridding, &beam_bmaj, &beam_bmin, &beam_bpa);
+        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, this->getGriddingThreads(), &beam_bmaj, &beam_bmin, &beam_bpa);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
 
@@ -823,7 +824,7 @@ void MFS::run()
                 (this->Order)(optimizer, image);
         }
 
-        if(gridding){
+        if(this->gridding){
             std::vector<Fi*> fis = this->getOptimizator()->getObjectiveFunction()->getFi();
 
             for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
@@ -913,7 +914,7 @@ void MFS::writeResiduals()
 {
         //Restoring the weights to the original
         printf("Transferring residuals to host memory\n");
-        if(!gridding)
+        if(!this->gridding)
         {
                 this->scheme->restoreWeights(datasets);
                 //Saving residuals to disk
@@ -987,7 +988,7 @@ void MFS::unSetDevice()
                                                 datasets[d].fields[f].visibilities[i][s].Vo.clear();
                                                 datasets[d].fields[f].visibilities[i][s].Vm.clear();
 
-                                                if(gridding) {
+                                                if(this->gridding) {
                                                         datasets[d].fields[f].backup_visibilities[i][s].uvw.clear();
                                                         datasets[d].fields[f].backup_visibilities[i][s].weight.clear();
                                                         datasets[d].fields[f].backup_visibilities[i][s].Vo.clear();

@@ -60,7 +60,25 @@ Optimizer* getOptimizator(){
 
 __host__ void setGriddingKernel(CKernel *ckernel){
         this->ckernel = ckernel;
-}
+};
+
+__host__ bool getGridding(){
+        return this->gridding;
+};
+
+__host__ void setGridding(bool gridding){
+        this->gridding = gridding;
+};
+
+__host__ int getGriddingThreads(){
+        return this->griddingThreads;
+};
+
+__host__ void setGriddingThreads(int griddingThreads){
+        this->griddingThreads = griddingThreads;
+        if(this->griddingThreads > 0)
+          this->gridding = true;
+};
 
 protected:
 cufftComplex *device_I;
@@ -71,7 +89,8 @@ Io *ioImageHandler = NULL;
 Io *ioVisibilitiesHandler = NULL;
 Visibilities *visibilities;
 Error *error = NULL;
-int griddingMode = 0;
+int griddingThreads = 0;
+bool gridding = false;
 void (*Order)(Optimizer *o, Image *I) = NULL;
 int imagesChanged = 0;
 void (*IoOrderIterations)(float *I, Io *io) = NULL;
