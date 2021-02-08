@@ -80,6 +80,14 @@ __host__ void setGriddingThreads(int griddingThreads){
           this->gridding = true;
 };
 
+__host__ float getVisNoise(){
+        return this->vis_noise;
+};
+
+__host__ void setVisNoise(float noise){
+        this->vis_noise = noise;
+};
+
 protected:
 cufftComplex *device_I;
 Image *image;
@@ -91,6 +99,7 @@ Visibilities *visibilities;
 Error *error = NULL;
 int griddingThreads = 0;
 bool gridding = false;
+float vis_noise = 0.0;
 void (*Order)(Optimizer *o, Image *I) = NULL;
 int imagesChanged = 0;
 void (*IoOrderIterations)(float *I, Io *io) = NULL;

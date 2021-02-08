@@ -5,7 +5,7 @@
 long M, N, numVisibilities;
 
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
-float beam_noise, b_noise_aux, noise_cut, MINPIX, minpix, lambda, random_probability = 1.0;
+float noise_cut, MINPIX, minpix, lambda, random_probability = 1.0;
 float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
@@ -78,7 +78,7 @@ void MFS::configure(int argc, char **argv)
         ioImageHandler->setPath(variables.path);
         optimizer->setTotalIterations(variables.it_max);
         total_visibilities = 0;
-        b_noise_aux = variables.noise;
+        this->setVisNoise(variables.noise);
         noise_cut = variables.noise_cut;
         random_probability = variables.randoms;
         ioVisibilitiesHandler->setRandomProbability(random_probability);
@@ -176,7 +176,9 @@ void MFS::configure(int argc, char **argv)
         dec = header_vars.dec;
         crpix1 = header_vars.crpix1;
         crpix2 = header_vars.crpix2;
-        beam_noise = header_vars.beam_noise;
+        if(header_vars.beam_noise > 0.0f){
+                this->setVisNoise(header_vars.beam_noise);
+        }
 
         ckernel->setIoImageHandler(ioImageHandler);
         //printf("Beam size canvas: %lf x %lf (arcsec)/ %lf (degrees)\n", canvas_vars.beam_bmaj*3600.0, canvas_vars.beam_bmin*3600.0, canvas_vars.beam_bpa);
@@ -445,13 +447,13 @@ void MFS::setDevice()
                         printf("and gridding ");
                 }
                 printf("OK!\n");
-                if(beam_noise == -1) {
+                if(this->getVisNoise() == 0.0f) {
                         printf("Beam noise wasn't provided by the user... Calculating...\n");
                 }
         }
 
         // Estimates the noise in JY/BEAM, beam major, minor axis and angle in degrees.
-        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, this->getGriddingThreads(), &beam_bmaj, &beam_bmin, &beam_bpa);
+        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, this->getGriddingThreads(), &beam_bmaj, &beam_bmin, &beam_bpa, &this->vis_noise);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
 
@@ -526,7 +528,7 @@ void MFS::setDevice()
         printf("gpuvmem estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*1200.0, beam_bmin*1200.0, beam_bpa); // ~ A third of the clean beam
         beam_bmaj = beam_bmaj / fabs(DELTAX); // Beam major axis to pixels
         beam_bmin = beam_bmin / fabs(DELTAX); // Beam minor axis to pixels
-        noise_jypix = beam_noise / (PI_D * beam_bmaj * beam_bmin / (4.0 * log(2.0) )); // Estimating noise at FWHM
+        noise_jypix = this->getVisNoise() / (PI_D * beam_bmaj * beam_bmin / (4.0 * log(2.0) )); // Estimating noise at FWHM
 
         /////////////////////////////////////////////////////CALCULATE DIRECTION COSINES/////////////////////////////////////////////////
         double raimage = ra * RPDEG_D;
