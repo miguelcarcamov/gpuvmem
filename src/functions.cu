@@ -1031,7 +1031,7 @@ __host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv)
 }
 
 
-__host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, int gridding, double *bmaj, double *bmin, double *bpa, float *noise)
+__host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *total_visibilities, int blockSizeV, double *bmaj, double *bmin, double *bpa, float *noise)
 {
         //Declaring block size and number of blocks for visibilities
         float variance;
@@ -1109,16 +1109,16 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
-        if(*noise <= 0.0 || gridding > 0)
+        if(*noise <= 0.0)
         {
                 *noise = sqrt(variance);
                 if(verbose_flag) {
-                        printf("No NOISE keyword detected in header or you might be using gridding\n");
+                        printf("No NOISE keyword entered or detected in header\n");
                         printf("Using NOISE: %e ...\n", *noise);
                 }
         }else{
-                printf("Using header keyword or entered NOISE anyway...\n");
-                printf("Keyword NOISE = %e\n", *noise);
+                printf("Using header keyword or entered NOISE...\n");
+                printf("NOISE = %e\n", *noise);
         }
 
         return sum_weights;

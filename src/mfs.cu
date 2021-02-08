@@ -453,7 +453,7 @@ void MFS::setDevice()
         }
 
         // Estimates the noise in JY/BEAM, beam major, minor axis and angle in degrees.
-        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, this->getGriddingThreads(), &beam_bmaj, &beam_bmin, &beam_bpa, &this->vis_noise);
+        sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities, variables.blockSizeV, &beam_bmaj, &beam_bmin, &beam_bpa, &this->vis_noise);
 
         this->visibilities->setTotalVisibilities(total_visibilities);
 
