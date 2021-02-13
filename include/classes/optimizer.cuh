@@ -15,13 +15,11 @@ __host__ virtual void setK(int K){};
 __host__ Optimizer(){
         this->tolerance = 1E-12;
         this->total_iterations = 500;
-        this->current_iteration = 0;
 };
 
 __host__ Optimizer(int total_iterations, float tolerance){
         this->tolerance = tolerance;
         this->total_iterations = total_iterations;
-        this->current_iteration = 0;
 };
 
 __host__ float getTolerance(){
@@ -58,7 +56,7 @@ ObjectiveFunction *of;
 Image *image;
 int flag;
 int total_iterations;
-int current_iteration;
+int current_iteration = 0;
 float tolerance;
 };
 

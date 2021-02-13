@@ -9,6 +9,7 @@ GEntropy::GEntropy(){
         this->name = "GEntropy";
         this->prior = NULL;
         this->normalization_factor = 1.0f;
+        this->eta = -1.0f;
 };
 
 GEntropy::GEntropy(std::vector<float> prior){
@@ -16,6 +17,7 @@ GEntropy::GEntropy(std::vector<float> prior){
         this->normalization_factor = 1.0f;
         checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float)*M*N));
         checkCudaErrors(cudaMemcpy(this->prior, prior.data(), M*N, cudaMemcpyHostToDevice));
+        this->eta = -1.0f;
 };
 
 GEntropy::GEntropy(float *prior, float normalization_factor){
@@ -23,6 +25,15 @@ GEntropy::GEntropy(float *prior, float normalization_factor){
         this->prior = prior;
         this->normalization_factor = normalization_factor;
         this->normalizePrior();
+        this->eta = -1.0f;
+};
+
+GEntropy::GEntropy(float *prior, float normalization_factor, float eta){
+        this->name = "GEntropy";
+        this->prior = prior;
+        this->normalization_factor = normalization_factor;
+        this->normalizePrior();
+        this->eta = eta;
 };
 
 GEntropy::GEntropy(std::vector<float> prior, float normalization_factor){
@@ -31,12 +42,23 @@ GEntropy::GEntropy(std::vector<float> prior, float normalization_factor){
         checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float)*M*N));
         checkCudaErrors(cudaMemcpy(this->prior, prior.data(), M*N, cudaMemcpyHostToDevice));
         this->normalizePrior();
+        this->eta = -1.0f;
+};
+
+GEntropy::GEntropy(std::vector<float> prior, float normalization_factor, float eta){
+        this->name = "GEntropy";
+        this->normalization_factor = normalization_factor;
+        checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float)*M*N));
+        checkCudaErrors(cudaMemcpy(this->prior, prior.data(), M*N, cudaMemcpyHostToDevice));
+        this->normalizePrior();
+        this->eta = eta;
 };
 
 GEntropy::GEntropy(float *prior){
         this->name = "GEntropy";
         this->prior = prior;
         this->normalization_factor = 1.0f;
+        this->eta = -1.0f;
 };
 
 GEntropy::~GEntropy() {
@@ -51,6 +73,14 @@ void GEntropy::setNormalizationFactor(float normalization_factor){
         this->normalization_factor = normalization_factor;
 };
 
+float GEntropy::getEta(){
+        return this->eta;
+};
+
+void GEntropy::setEta(float eta){
+        this->eta = eta;
+};
+
 void GEntropy::setPrior(float *prior){
         cudaFree(this->prior);
         this->prior = prior;
@@ -59,14 +89,14 @@ void GEntropy::setPrior(float *prior){
 float GEntropy::calcFi(float *p)
 {
         float result = 0.0f;
-        this->set_fivalue(SGEntropy(p, device_S, this->prior, penalization_factor, mod, order, imageIndex, this->iteration));
+        this->set_fivalue(SGEntropy(p, device_S, this->prior, this->eta, penalization_factor, mod, order, imageIndex, this->iteration));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 };
 
 void GEntropy::calcGi(float *p, float *xi)
 {
-        DGEntropy(p, device_DS, this->prior, penalization_factor, mod, order, imageIndex, this->iteration);
+        DGEntropy(p, device_DS, this->prior, this->eta, penalization_factor, mod, order, imageIndex, this->iteration);
 };
 
 

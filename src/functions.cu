@@ -3129,7 +3129,7 @@ __host__ void DGL1Norm(float *I, float *prior, float *dgi, float penalization_fa
 };
 
 
-__host__ float SEntropy(float *I, float * ds, float prior_value, float penalization_factor, int mod, int order, int index, int iter)
+__host__ float SEntropy(float *I, float * ds, float prior_value, float eta, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3144,7 +3144,7 @@ __host__ float SEntropy(float *I, float * ds, float prior_value, float penalizat
         return resultS;
 };
 
-__host__ void DEntropy(float *I, float *dgi, float prior_value, float penalization_factor, int mod, int order, int index, int iter)
+__host__ void DEntropy(float *I, float *dgi, float prior_value, float eta, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3157,7 +3157,7 @@ __host__ void DEntropy(float *I, float *dgi, float prior_value, float penalizati
         }
 };
 
-__host__ float SGEntropy(float *I, float * ds, float *prior, float penalization_factor, int mod, int order, int index, int iter)
+__host__ float SGEntropy(float *I, float * ds, float *prior, float eta, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 
@@ -3172,7 +3172,7 @@ __host__ float SGEntropy(float *I, float * ds, float *prior, float penalization_
         return resultS;
 };
 
-__host__ void DGEntropy(float *I, float *dgi, float *prior, float penalization_factor, int mod, int order, int index, int iter)
+__host__ void DGEntropy(float *I, float *dgi, float *prior, float eta, float penalization_factor, int mod, int order, int index, int iter)
 {
         cudaSetDevice(firstgpu);
 

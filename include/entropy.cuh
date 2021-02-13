@@ -9,11 +9,15 @@ class Entropy : public Fi
 {
 private:
 float prior_value;
+float eta;
 public:
 Entropy();
 Entropy(float prior_value);
+Entropy(float prior_value, float eta);
 float getPrior();
 void setPrior(float prior_value) override;
+float getEta() override;
+void setEta(float eta) override;
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
 void restartDGi();

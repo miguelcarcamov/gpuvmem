@@ -24,11 +24,19 @@ virtual float calcFi(float *p) = 0;
 virtual void calcGi(float *p, float *xi) = 0;
 virtual void restartDGi() = 0;
 virtual void addToDphi(float *device_dphi) = 0;
-virtual void setPrior(float prior){
-};
-virtual void setPrior(float *prior){
-};
+virtual void setPrior(float prior){};
+virtual void setPrior(float *prior){};
+virtual float getEta(){};
+virtual void setEta(float eta){};
 virtual void setCKernel(CKernel *ckernel){};
+
+std::string getName(){
+        return this->name;
+};
+
+std::string setName(std::string name){
+        this->name = name;
+};
 
 float get_fivalue(){
         return this->fi_value;
@@ -100,7 +108,7 @@ int imageIndex;
 int iteration;
 int mod;
 int order;
-char *name;;
+std::string name;;
 cufftComplex * Inu;
 int imageToAdd;
 };

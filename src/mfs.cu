@@ -68,6 +68,7 @@ void MFS::configure(int argc, char **argv)
                 ioVisibilitiesHandler = createObject<Io, std::string>("IoMS");
         }
 
+        total_visibilities = 0;
         variables = getOptions(argc, argv);
         msinput = variables.input;
         msoutput = variables.output;
@@ -77,7 +78,6 @@ void MFS::configure(int argc, char **argv)
         ioImageHandler->setOutput(out_image);
         ioImageHandler->setPath(variables.path);
         optimizer->setTotalIterations(variables.it_max);
-        total_visibilities = 0;
         this->setVisNoise(variables.noise);
         noise_cut = variables.noise_cut;
         random_probability = variables.randoms;
@@ -802,10 +802,23 @@ void MFS::clearRun()
 
 void MFS::run()
 {
+
+        optimizer->getObjectiveFunction()->setIo(ioImageHandler);
+
+        if(this->gridding)
+        {
+            std::vector<Fi*> fis = optimizer->getObjectiveFunction()->getFi();
+
+            for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++){
+              if((*it)->getName() == "Chi2"){
+                  std::cout << "Setting CKernel in Chi2 function" << std::endl;
+                  (*it)->setCKernel(this->ckernel);
+              }
+            }
+
+        }
+
         printf("\n\nStarting optimizer\n");
-    optimizer->getObjectiveFunction()->setIo(ioImageHandler);
-
-
         if(this->Order == NULL) {
                 if(imagesChanged)
                 {
@@ -824,14 +837,6 @@ void MFS::run()
                 }
         }else{
                 (this->Order)(optimizer, image);
-        }
-
-        if(this->gridding){
-            std::vector<Fi*> fis = this->getOptimizator()->getObjectiveFunction()->getFi();
-
-            for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++)
-              (*it)->setCKernel(this->ckernel);
-
         }
 
         t = clock() - t;

@@ -8,11 +8,19 @@ extern int nPenalizators;
 Entropy::Entropy(){
         this->name = "Entropy";
         this->prior_value = 1.0f;
+        this->eta = -1.0f;
 };
 
 Entropy::Entropy(float prior_value){
         this->name = "Entropy";
         this->prior_value = prior_value;
+        this->eta = -1.0f;
+};
+
+Entropy::Entropy(float prior_value, float eta){
+        this->name = "Entropy";
+        this->prior_value = prior_value;
+        this->eta = eta;
 };
 
 float Entropy::getPrior(){
@@ -23,17 +31,25 @@ void Entropy::setPrior(float prior_value){
         this->prior_value = prior_value;
 };
 
+float Entropy::getEta(){
+        return this->eta;
+};
+
+void Entropy::setEta(float eta){
+        this->eta = eta;
+};
+
 float Entropy::calcFi(float *p)
 {
         float result = 0.0f;
-        this->set_fivalue(SEntropy(p, device_S, this->prior_value, penalization_factor, mod, order, imageIndex, this->iteration));
+        this->set_fivalue(SEntropy(p, device_S, this->prior_value, this->eta, penalization_factor, mod, order, imageIndex, this->iteration));
         result = (penalization_factor)*( this->get_fivalue() );
         return result;
 };
 
 void Entropy::calcGi(float *p, float *xi)
 {
-        DEntropy(p, device_DS, this->prior_value, penalization_factor, mod, order, imageIndex, this->iteration);
+        DEntropy(p, device_DS, this->prior_value, this->eta, penalization_factor, mod, order, imageIndex, this->iteration);
 };
 
 
