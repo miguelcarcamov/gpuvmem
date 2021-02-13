@@ -2598,10 +2598,10 @@ __global__ void DChi2(float *noise, float *gcf, float *dChi2, cufftComplex *Vr, 
         double y = (i - y0) * DELTAY * RPDEG_D;
         //double z = sqrt(1-x*x-y*y)-1;
 
-        float Ukv, Vkv, Wkv, cosk, sink, atten;
+        float Ukv, Vkv, Wkv, cosk, sink, atten, gcf_i;
 
         atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
-
+        gcf_i = gcf[N*i+j];
         float dchi2 = 0.0;
         if(noise[N*i+j] < noise_cut) {
                 for(int v=0; v<numVisibilities; v++) {
@@ -2617,7 +2617,7 @@ __global__ void DChi2(float *noise, float *gcf, float *dChi2, cufftComplex *Vr, 
                         dchi2 += w[v]*((Vr[v].x * cosk) - (Vr[v].y * sink));
                 }
 
-                dchi2 *= fg_scale * atten * gcf[N*i+j];
+                dchi2 *= fg_scale * atten * gcf_i;
                 dChi2[N*i+j] = dchi2;
         }
 }
