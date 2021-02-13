@@ -11,7 +11,6 @@ __host__ void allocateMemoryGpu();
 __host__ void deallocateMemoryGpu();
 __host__ void optimize();
 private:
-float ftol = 0;
 float fret = 0;
 float gg, dgg, gam, fp;
 float *device_g, *device_h, *xi;

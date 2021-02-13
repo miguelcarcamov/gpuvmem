@@ -155,11 +155,11 @@ __host__ void LBFGS::optimize()
 
                 for(int i=0; i < image->getImageCount(); i++)
                 {
-                        calculateSandY<<<numBlocksNN, threadsPerBlockNN>>>(d_y, d_s, image->getImage(), xi, p_old, xi_old, (this->current_iteration-1)%K, M, N, i);
+                        calculateSandY<<<numBlocksNN, threadsPerBlockNN>>>(d_y, d_s, image->getImage(), xi, p_old, xi_old, (this->current_iteration-1)%this->K, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
                 }
 
-                LBFGS_recursion(d_y, d_s, xi, std::min(K,this->current_iteration), (this->current_iteration-1)%K, M, N);
+                LBFGS_recursion(d_y, d_s, xi, std::min(this->K,this->current_iteration), (this->current_iteration-1)%this->K, M, N);
 
                 end = omp_get_wtime();
                 double wall_time = end-start;
