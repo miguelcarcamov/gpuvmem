@@ -811,7 +811,7 @@ void MFS::run()
 
             for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++){
               if((*it)->getName() == "Chi2"){
-                  std::cout << "Setting CKernel in Chi2 function" << std::endl;
+                  std::cout << "Setting CKernel in" << (*it)->getName() <<" function" << std::endl;
                   (*it)->setCKernel(this->ckernel);
               }
             }
