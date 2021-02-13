@@ -8,6 +8,8 @@ public:
 __host__ virtual void allocateMemoryGpu() = 0;
 __host__ virtual void deallocateMemoryGpu() = 0;
 __host__ virtual void optimize() = 0;
+__host__ virtual int getK(){};
+__host__ virtual void setK(int K){};
 //__host__ virtual void configure() = 0;
 
 __host__ Optimizer(){

@@ -5,6 +5,8 @@
 class LBFGS : public Optimizer
 {
 public:
+__host__ int getK() override;
+__host__ void setK(int K) override;
 __host__ void allocateMemoryGpu();
 __host__ void deallocateMemoryGpu();
 __host__ void optimize();

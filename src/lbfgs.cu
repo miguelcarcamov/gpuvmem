@@ -49,6 +49,14 @@ extern int flag_opt;
 
 #define FREEALL cudaFree(d_y); cudaFree(d_s); cudaFree(xi); cudaFree(xi_old); cudaFree(p_old); cudaFree(norm_vector);
 
+__host__ int LBFGS::getK(){
+        return this->K;
+};
+
+__host__ void LBFGS::setK(int K){
+        this->K = K;
+};
+
 __host__ void LBFGS::allocateMemoryGpu()
 {
         checkCudaErrors(cudaMalloc((void**)&d_y, sizeof(float)*M*N*K*image->getImageCount()));
