@@ -30,6 +30,7 @@
 #include <fitsio.h>
 #include "rngs.cuh"
 #include "rvgs.cuh"
+#include "complexOps.cuh"
 #include <boost/math/special_functions/bessel.hpp>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>

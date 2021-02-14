@@ -200,7 +200,7 @@ __host__ void OCopyFITSCufftComplex(cufftComplex *I, const char *original_filena
         for(int i=0; i < M; i++) {
                 for(int j=0; j < N; j++) {
                         /*Amplitude*/
-                        image2D[N*i+j] = cuCabsf(host_IFITS[N*i+j]);
+                        image2D[N*i+j] = amplitude(host_IFITS[N*i+j]);
                         /* Phase in degrees */
                         //image2D[N*i+j] = phaseDegrees<cufftComplex, float>(host_IFITS[N*i+j]);
                         /*Real part*/
