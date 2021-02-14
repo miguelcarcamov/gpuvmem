@@ -105,13 +105,13 @@ typedef struct field {
         float phs_xobs, phs_yobs;
         float *atten_image;
         std::vector<float> nu;
-        std::vector<std::vector<long> > numVisibilitiesPerFreqPerStoke;
+        std::vector<std::vector<long>> numVisibilitiesPerFreqPerStoke;
         std::vector<long> numVisibilitiesPerFreq;
-        std::vector<std::vector<long> > backup_numVisibilitiesPerFreqPerStoke;
+        std::vector<std::vector<long>> backup_numVisibilitiesPerFreqPerStoke;
         std::vector<long> backup_numVisibilitiesPerFreq;
-        std::vector<std::vector<HVis> > visibilities;
-        std::vector<std::vector<DVis> > device_visibilities;
-        std::vector<std::vector<HVis> > backup_visibilities;
+        std::vector<std::vector<HVis>> visibilities;
+        std::vector<std::vector<DVis>> device_visibilities;
+        std::vector<std::vector<HVis>> backup_visibilities;
 }Field;
 
 typedef struct MSAntenna {

@@ -983,8 +983,11 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
         }
 
 
-        for(int f=0; f < data.nfields; f++)
-                std::fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
+        for(int f=0; f < data.nfields; f++){
+          for (auto &i : fields[f].numVisibilitiesPerFreqPerStoke)
+            std::fill(i.begin(), i.end(), 0);
+            //std::fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
+        }
 
 
         int g = 0;
@@ -1024,6 +1027,7 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
                                         for (int sto=0; sto < data.nstokes; sto++) {
                                                 if(flagCol(sto,j) == false && weights[sto] > 0.0f) {
                                                         c = fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto];
+                                                        printf("C: %d\n", c);
 
                                                         if(sim && noise) {
                                                                 vis = addNoiseToVis(fields[f].visibilities[g+j][sto].Vm[c], weights[sto]);
@@ -1035,7 +1039,7 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
                                                         }
 
                                                         dataCol(sto,j) = casacore::Complex(vis.x, vis.y);
-                                                        //weights[sto] = fields[f].visibilities[g+j][sto].weight[c];
+                                                        weights[sto] = fields[f].visibilities[g+j][sto].weight[c];
                                                         fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto]++;
                                                 }
                                         }
