@@ -239,7 +239,7 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
                 checkCudaErrors(cudaDeviceSynchronize());
                 yy = deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
 
-                if(yy!=0.0)
+                if(yy!=0.0f)
                         sy_yy += sy/yy;
                 else
                         sy_yy += 0.0f;
@@ -263,7 +263,7 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi, int par_
                         //Calculate rho
                         rho_den = deviceReduce<float>(aux_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                         if(rho_den != 0.0f)
-                                rho = 1.0/rho_den;
+                                rho = 1.0f/rho_den;
                         else
                                 rho = 0.0f;
                         //beta = rho * y_k' * r;
