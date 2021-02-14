@@ -1027,7 +1027,6 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
                                         for (int sto=0; sto < data.nstokes; sto++) {
                                                 if(flagCol(sto,j) == false && weights[sto] > 0.0f) {
                                                         c = fields[f].numVisibilitiesPerFreqPerStoke[g+j][sto];
-                                                        printf("C: %d\n", c);
 
                                                         if(sim && noise) {
                                                                 vis = addNoiseToVis(fields[f].visibilities[g+j][sto].Vm[c], weights[sto]);
