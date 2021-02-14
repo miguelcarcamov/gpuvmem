@@ -316,7 +316,7 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
         float real_n = Normal(0,1);
         float imag_n = Normal(0,1);
 
-        noise_vis = make_cuFloatComplex(vis.x + real_n * (1/sqrt(weights)), vis.y + imag_n * (1/sqrt(weights)));
+        noise_vis = make_cuFloatComplex(vis.x + real_n * (1/sqrtf(weights)), vis.y + imag_n * (1/sqrtf(weights)));
 
         return noise_vis;
 }
