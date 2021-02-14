@@ -344,7 +344,7 @@ __global__ void reduceSumKernel(T *g_idata, T *g_odata, unsigned int n)
         unsigned int tid = threadIdx.x;
         unsigned int gridSize = blockSize*gridDim.x;
 
-        T mySum = 0;
+        T mySum = (T)0;
 
         // we reduce multiple elements per thread.  The number is determined by the
         // number of active thread blocks (via gridDim).  More blocks will result
@@ -417,6 +417,180 @@ __global__ void reduceSumKernel(T *g_idata, T *g_odata, unsigned int n)
 
         // write result for this block to global mem
         if (cta.thread_rank() == 0) g_odata[blockIdx.x] = mySum;
+}
+
+template <int blockSize, bool nIsPow2>
+__global__ void reduceMinKernel(float *g_idata, float *g_odata, unsigned int n)
+{
+        // Handle to thread block group
+        cg::thread_block cta = cg::this_thread_block();
+        float *sdata = SharedMemory<float>();
+
+        // perform first level of reduction,
+        // reading from global memory, writing to shared memory
+        unsigned int tid = threadIdx.x;
+        unsigned int gridSize = blockSize*gridDim.x;
+
+        float myMin = FLT_MAX;
+
+        // we reduce multiple elements per thread.  The number is determined by the
+        // number of active thread blocks (via gridDim).  More blocks will result
+        // in a larger gridSize and therefore fewer elements per thread
+        if (nIsPow2)
+        {
+                unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
+                gridSize = gridSize << 1;
+
+                while (i < n)
+                {
+                        myMin = fminf(myMin, g_idata[i]);
+                        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+                        if ((i + blockSize) < n)
+                        {
+                                myMin = fminf(myMin, g_idata[i+blockSize]);
+                        }
+                        i += gridSize;
+                }
+        }
+        else
+        {
+                unsigned int i = blockIdx.x*blockSize + threadIdx.x;
+                while (i < n)
+                {
+                        myMin = fminf(myMin, g_idata[i]);
+                        i += gridSize;
+                }
+        }
+
+        // each thread puts its local sum into shared memory
+        sdata[tid] = myMin;
+        cg::sync(cta);
+
+
+        // do reduction in shared mem
+        if ((blockSize >= 512) && (tid < 256))
+        {
+                sdata[tid] = myMin = fminf(myMin, sdata[tid + 256]);
+        }
+
+        cg::sync(cta);
+
+        if ((blockSize >= 256) &&(tid < 128))
+        {
+                sdata[tid] = myMin = fminf(myMin, sdata[tid + 128]);
+        }
+
+        cg::sync(cta);
+
+        if ((blockSize >= 128) && (tid <  64))
+        {
+                sdata[tid] = myMin = fminf(myMin, sdata[tid +  64]);
+        }
+
+        cg::sync(cta);
+
+        cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
+
+        if (cta.thread_rank() < 32)
+        {
+                // Fetch final intermediate sum from 2nd warp
+                if (blockSize >=  64) myMin = fminf(myMin, sdata[tid + 32]);
+                // Reduce final warp using shuffle
+                for (int offset = tile32.size()/2; offset > 0; offset /= 2)
+                {
+                        myMin = fminf(myMin, tile32.shfl_down(myMin, offset));
+                }
+        }
+
+        // write result for this block to global mem
+        if (cta.thread_rank() == 0) g_odata[blockIdx.x] = myMin;
+}
+
+template <int blockSize, bool nIsPow2>
+__global__ void reduceMaxKernel(float *g_idata, float *g_odata, unsigned int n)
+{
+        // Handle to thread block group
+        cg::thread_block cta = cg::this_thread_block();
+        float *sdata = SharedMemory<float>();
+
+        // perform first level of reduction,
+        // reading from global memory, writing to shared memory
+        unsigned int tid = threadIdx.x;
+        unsigned int gridSize = blockSize*gridDim.x;
+
+        float myMax = FLT_MIN;
+
+        // we reduce multiple elements per thread.  The number is determined by the
+        // number of active thread blocks (via gridDim).  More blocks will result
+        // in a larger gridSize and therefore fewer elements per thread
+        if (nIsPow2)
+        {
+                unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
+                gridSize = gridSize << 1;
+
+                while (i < n)
+                {
+                        myMax = fmaxf(myMax, g_idata[i]);
+                        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+                        if ((i + blockSize) < n)
+                        {
+                                myMax = fmaxf(myMax, g_idata[i+blockSize]);
+                        }
+                        i += gridSize;
+                }
+        }
+        else
+        {
+                unsigned int i = blockIdx.x*blockSize + threadIdx.x;
+                while (i < n)
+                {
+                        myMax = fmaxf(myMax, g_idata[i]);
+                        i += gridSize;
+                }
+        }
+
+        // each thread puts its local sum into shared memory
+        sdata[tid] = myMax;
+        cg::sync(cta);
+
+
+        // do reduction in shared mem
+        if ((blockSize >= 512) && (tid < 256))
+        {
+                sdata[tid] = myMax = fmaxf(myMax, sdata[tid + 256]);
+        }
+
+        cg::sync(cta);
+
+        if ((blockSize >= 256) &&(tid < 128))
+        {
+                sdata[tid] = myMax = fmaxf(myMax, sdata[tid + 128]);
+        }
+
+        cg::sync(cta);
+
+        if ((blockSize >= 128) && (tid <  64))
+        {
+                sdata[tid] = myMax = fmaxf(myMax, sdata[tid +  64]);
+        }
+
+        cg::sync(cta);
+
+        cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
+
+        if (cta.thread_rank() < 32)
+        {
+                // Fetch final intermediate sum from 2nd warp
+                if (blockSize >=  64) myMax = fmaxf(myMax, sdata[tid + 32]);
+                // Reduce final warp using shuffle
+                for (int offset = tile32.size()/2; offset > 0; offset /= 2)
+                {
+                        myMax = fmaxf(myMax, tile32.shfl_down(myMax, offset));
+                }
+        }
+
+        // write result for this block to global mem
+        if (cta.thread_rank() == 0) g_odata[blockIdx.x] = myMax;
 }
 
 template <class T>
@@ -541,6 +715,252 @@ __host__ T deviceReduce(T *in, long N, int input_threads)
         cudaFree(d_odata);
         free(h_odata);
         return sum;
+}
+
+__host__ float deviceMaxReduce(float *in, long N, int input_threads)
+{
+        float  max = FLT_MIN;
+        float  *d_odata = NULL;
+        int maxThreads = input_threads;
+        int maxBlocks = iDivUp(N, maxThreads);
+
+        int threads = 0;
+        int blocks = 0;
+
+        getNumBlocksAndThreads(N, maxBlocks, maxThreads, blocks, threads, true);
+
+        int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
+        dim3 dimBlock(threads, 1, 1);
+        dim3 dimGrid(blocks, 1, 1);
+
+        float *h_odata = (float *) malloc(blocks*sizeof(float));
+        checkCudaErrors(cudaMalloc((void **) &d_odata, blocks*sizeof(float)));
+
+        if (isPow2(N))
+        {
+                switch (threads)
+                {
+                case 512:
+                        reduceMaxKernel<512, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 256:
+                        reduceMaxKernel<256, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 128:
+                        reduceMaxKernel<128, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 64:
+                        reduceMaxKernel<64, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 32:
+                        reduceMaxKernel<32, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 16:
+                        reduceMaxKernel<16, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  8:
+                        reduceMaxKernel<8, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  4:
+                        reduceMaxKernel<4, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  2:
+                        reduceMaxKernel<2, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  1:
+                        reduceMaxKernel<1, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+                }
+        }
+        else
+        {
+                switch (threads)
+                {
+                case 512:
+                        reduceMaxKernel<512, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 256:
+                        reduceMaxKernel<256, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 128:
+                        reduceMaxKernel<128, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 64:
+                        reduceMaxKernel<64, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 32:
+                        reduceMaxKernel<32, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 16:
+                        reduceMaxKernel<16, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  8:
+                        reduceMaxKernel<8, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  4:
+                        reduceMaxKernel<4, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  2:
+                        reduceMaxKernel<2, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  1:
+                        reduceMaxKernel<1, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+                }
+        }
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        checkCudaErrors(cudaMemcpy(h_odata, d_odata, blocks*sizeof(float), cudaMemcpyDeviceToHost));
+
+        for (int i=0; i<blocks; i++)
+        {
+                max = std::max(max, h_odata[i]);
+        }
+
+        cudaFree(d_odata);
+        free(h_odata);
+        return max;
+}
+
+__host__ float deviceMinReduce(float *in, long N, int input_threads)
+{
+        float  min = FLT_MAX;
+        float  *d_odata = NULL;
+        int maxThreads = input_threads;
+        int maxBlocks = iDivUp(N, maxThreads);
+
+        int threads = 0;
+        int blocks = 0;
+
+        getNumBlocksAndThreads(N, maxBlocks, maxThreads, blocks, threads, true);
+
+        int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
+        dim3 dimBlock(threads, 1, 1);
+        dim3 dimGrid(blocks, 1, 1);
+
+        float *h_odata = (float *) malloc(blocks*sizeof(float));
+        checkCudaErrors(cudaMalloc((void **) &d_odata, blocks*sizeof(float)));
+
+        if (isPow2(N))
+        {
+                switch (threads)
+                {
+                case 512:
+                        reduceMinKernel<512, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 256:
+                        reduceMinKernel<256, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 128:
+                        reduceMinKernel<128, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 64:
+                        reduceMinKernel<64, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 32:
+                        reduceMinKernel<32, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 16:
+                        reduceMinKernel<16, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  8:
+                        reduceMinKernel<8, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  4:
+                        reduceMinKernel<4, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  2:
+                        reduceMinKernel<2, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  1:
+                        reduceMinKernel<1, true><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+                }
+        }
+        else
+        {
+                switch (threads)
+                {
+                case 512:
+                        reduceMinKernel<512, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 256:
+                        reduceMinKernel<256, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 128:
+                        reduceMinKernel<128, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 64:
+                        reduceMinKernel<64, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 32:
+                        reduceMinKernel<32, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case 16:
+                        reduceMinKernel<16, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  8:
+                        reduceMinKernel<8, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  4:
+                        reduceMinKernel<4, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  2:
+                        reduceMinKernel<2, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+
+                case  1:
+                        reduceMinKernel<1, false><<< dimGrid, dimBlock, smemSize >>>(in, d_odata, N);
+                        break;
+                }
+        }
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        checkCudaErrors(cudaMemcpy(h_odata, d_odata, blocks*sizeof(float), cudaMemcpyDeviceToHost));
+
+        for (int i=0; i<blocks; i++)
+        {
+                min = std::min(min, h_odata[i]);
+        }
+
+        cudaFree(d_odata);
+        free(h_odata);
+        return min;
 }
 
 __global__ void fftshift_2D(cufftComplex *data, int N1, int N2)
@@ -2424,6 +2844,14 @@ __global__ void getDot_LBFGS_ff(float *aux_vector, float *vec_1, float *vec_2, i
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         aux_vector[N*i+j] = vec_1[M*N*image*k + M*N*image + (N*i+j)]*vec_2[M*N*image*h + M*N*image + (N*i+j)];
+}
+
+__global__ void normArray(float *result, float *array, int M, int N, int image)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        result[N*i+j] = fabsf(array[M*N*image + (N*i+j)]);
 }
 
 __global__ void updateQ (float *d_q, float alpha, float *d_y, int k, int M, int N, int image)

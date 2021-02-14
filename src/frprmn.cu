@@ -103,7 +103,7 @@ __host__ void ConjugateGradient::optimize()
                         printf("\n\n********** Iteration %d **********\n\n", i);
                 }
                 linmin(image->getImage(), xi, &fret, NULL);
-                if (2.0*fabs(fret-fp) <= this->tolerance*(fabs(fret)+fabs(fp)+EPS)) {
+                if (2.0f*fabsf(fret-fp) <= this->ftol*(fabsf(fret)+fabsf(fp)+EPS)) {
                         printf("Exit due to tolerance\n");
                         of->calcFunction(I->getImage());
                         deallocateMemoryGpu();

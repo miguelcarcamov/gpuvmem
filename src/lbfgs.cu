@@ -125,7 +125,7 @@ __host__ void LBFGS::optimize()
 
                 linmin(image->getImage(), xi, &fret, NULL);
 
-                if (2.0*fabs(fret-fp) <= this->tolerance*(fabs(fret)+fabs(fp)+EPS)) {
+                if((fp - fret)/std::max({fabsf(fret), fabsf(fp), 1.0f}) <= this->ftol){
                         printf("Exit due to tolerance\n");
                         of->calcFunction(I->getImage());
                         deallocateMemoryGpu();
@@ -134,13 +134,13 @@ __host__ void LBFGS::optimize()
 
                 for(int i=0; i < image->getImageCount(); i++)
                 {
-                        getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, xi, 0, 0, M, N, i);
+                        normArray<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
                         norm += deviceReduce<float>(norm_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                 }
 
-                if(norm <= this->tolerance) {
-                        printf("Exit due to norm = 0\n");
+                if(norm <= this->gtol) {
+                        printf("Exit due to gnorm ~ 0\n");
                         of->calcFunction(image->getImage());
                         deallocateMemoryGpu();
                         return;
