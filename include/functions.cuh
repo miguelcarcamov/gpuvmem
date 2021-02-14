@@ -49,6 +49,8 @@ template<class T>
 __host__ T reduceCPU(T *data, int size);
 template <class T>
 __host__ T deviceReduce(T *in, long N, int input_threads);
+__host__ float deviceMaxReduce(float *in, long N, int input_threads);
+__host__ float deviceMinReduce(float *in, long N, int input_threads);
 __host__ float chi2(float *I, VirtualImageProcessor *ip);
 __host__ void linkRestartDGi(float *dgi);
 __host__ void linkAddToDPhi(float *dphi, float *dgi, int index);
@@ -85,6 +87,8 @@ __device__ float AiryDiskBeam(float distance, float lambda, float antenna_diamet
 __device__ float GaussianBeam(float distance, float lambda, float antenna_diameter, float pb_factor);
 __device__ float attenuation(float antenna_diameter, float pb_factor, float pb_cutoff, float freq, float xobs, float yobs, double DELTAX, double DELTAY, int primary_beam);
 
+__global__ void reduceMaxKernel(float *g_idata, float *g_odata, unsigned int n);
+__global__ void reduceMinKernel(float *g_idata, float *g_odata, unsigned int n);
 __global__ void deviceReduceKernel(float *g_idata, float *g_odata, unsigned int n);
 __global__ void clipWNoise(cufftComplex *fg_image, float *noise, float *I, long N, float noise_cut, float MINPIX);
 __global__ void getGandDGG(float *gg, float *dgg, float *xi, float *g, long N);

@@ -115,7 +115,7 @@ __host__ void LBFGS::optimize()
         for(int i=1; i <= this->total_iterations; i++) {
                 start = omp_get_wtime();
                 this->current_iteration = i;
-                norm = 0.0f;
+                max_per_it = 0.0f;
                 if(verbose_flag) {
                         printf("\n\n********** Iteration %d **********\n\n", i);
                 }
@@ -136,10 +136,10 @@ __host__ void LBFGS::optimize()
                 {
                         normArray<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
-                        norm += deviceReduce<float>(norm_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
+                        max_per_it = std::max(max_per_it, deviceMaxReduce(norm_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y));
                 }
 
-                if(norm <= this->gtol) {
+                if(max_per_it <= this->gtol) {
                         printf("Exit due to gnorm ~ 0\n");
                         of->calcFunction(image->getImage());
                         deallocateMemoryGpu();

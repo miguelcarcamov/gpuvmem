@@ -19,7 +19,7 @@ float *device_gg_vector, *device_dgg_vector;
 int configured = 1;
 float *d_s;
 float *d_y, *xi, *xi_old, *norm_vector, *d_r;
-float norm;
+float max_per_it;
 float *p_old;
 int K = 100;
 };
