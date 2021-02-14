@@ -986,14 +986,12 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
         for(int f=0; f < data.nfields; f++){
           for (auto &i : fields[f].numVisibilitiesPerFreqPerStoke)
             std::fill(i.begin(), i.end(), 0);
-            //std::fill(fields[f].numVisibilitiesPerFreqPerStoke.begin(), fields[f].numVisibilitiesPerFreqPerStoke.end(), std::vector<long>(data.nstokes,0));
         }
 
 
         int g = 0;
         long c;
         cufftComplex vis;
-        float real_n, imag_n;
         SelectStream(0);
         PutSeed(-1);
 
