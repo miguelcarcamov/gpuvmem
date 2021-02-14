@@ -1,5 +1,5 @@
-#ifndef GPUVMEM_SYNTHESIZER_CUH
-#define GPUVMEM_SYNTHESIZER_CUH
+#ifndef SYNTHESIZER_CUH
+#define SYNTHESIZER_CUH
 class Synthesizer
 {
 public:

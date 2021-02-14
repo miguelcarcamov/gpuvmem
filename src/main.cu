@@ -31,9 +31,9 @@
  * -------------------------------------------------------------------------
  */
 
-#include "frprmn.cuh"
 #include "directioncosines.cuh"
 #include "pillBox2D.cuh"
+#include "pswf_12D.cuh"
 #include "gaussianSinc2D.cuh"
 #include "gaussian2D.cuh"
 #include "sinc2D.cuh"

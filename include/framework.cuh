@@ -11,6 +11,7 @@
 #include <numeric>
 #include <cstdint>
 #include "device_launch_parameters.h"
+#include <cufft.h>
 #include <math_constants.h>
 #include <float.h>
 #include <unistd.h>
@@ -34,6 +35,7 @@
 #include <synthesizer.cuh>
 #include <factory.cuh>
 #include <flags.cuh>
+#include <complexOps.cuh>
 #include <boost/algorithm/string.hpp>
 
 extern long M, N;

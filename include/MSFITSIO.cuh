@@ -4,11 +4,11 @@
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
-#include "complexOps.cuh"
 #include <cuda.h>
 #include <helper_functions.h>
 #include <helper_cuda.h>
 #include <math_constants.h>
+#include <cufft.h>
 #include <string>
 #include <tables/Tables/Table.h>
 #include <tables/Tables/TableRow.h>

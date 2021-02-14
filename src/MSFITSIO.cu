@@ -200,7 +200,7 @@ __host__ void OCopyFITSCufftComplex(cufftComplex *I, const char *original_filena
         for(int i=0; i < M; i++) {
                 for(int j=0; j < N; j++) {
                         /*Amplitude*/
-                        image2D[N*i+j] = amplitude<cufftComplex, float>(host_IFITS[N*i+j]);
+                        image2D[N*i+j] = cuCabsf(host_IFITS[N*i+j]);
                         /* Phase in degrees */
                         //image2D[N*i+j] = phaseDegrees<cufftComplex, float>(host_IFITS[N*i+j]);
                         /*Real part*/
@@ -316,7 +316,7 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights){
         float real_n = Normal(0,1);
         float imag_n = Normal(0,1);
 
-        noise_vis = make_cuComplex(vis.x + real_n * (1/sqrt(weights)), vis.y + imag_n * (1/sqrt(weights)));
+        noise_vis = make_cuFloatComplex(vis.x + real_n * (1/sqrt(weights)), vis.y + imag_n * (1/sqrt(weights)));
 
         return noise_vis;
 }
@@ -563,7 +563,7 @@ __host__ void readMS(const char *MS_name, std::vector<MSAntenna>& antennas, std:
 
                                                         fields[f].visibilities[g+j][sto].uvw.push_back(MS_uvw);
 
-                                                        MS_vis = make_cuComplex(dataCol(sto,j).real(), dataCol(sto,j).imag());
+                                                        MS_vis = make_cuFloatComplex(dataCol(sto,j).real(), dataCol(sto,j).imag());
 
                                                         if(noise)
                                                                 fields[f].visibilities[g+j][sto].Vo.push_back(addNoiseToVis(MS_vis, weights[sto]));
@@ -590,7 +590,7 @@ __host__ void readMS(const char *MS_name, std::vector<MSAntenna>& antennas, std:
                                  *
                                  * We will allocate memory for model visibilities using the size of the observed visibilities vector.
                                  */
-                                fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), complexZero<cufftComplex>());
+                                fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), make_cuFloatComplex(0.0f,0.0f));
                         }
                 }
         }
@@ -853,7 +853,7 @@ __host__ void readMS(const char *MS_name, std::string data_column, std::vector<M
 
                                                         fields[f].visibilities[g+j][sto].uvw.push_back(MS_uvw);
 
-                                                        MS_vis = make_cuComplex(dataCol(sto,j).real(), dataCol(sto,j).imag());
+                                                        MS_vis = make_cuFloatComplex(dataCol(sto,j).real(), dataCol(sto,j).imag());
 
                                                         if(noise)
                                                                 fields[f].visibilities[g+j][sto].Vo.push_back(addNoiseToVis(MS_vis, weights[sto]));
@@ -880,7 +880,7 @@ __host__ void readMS(const char *MS_name, std::string data_column, std::vector<M
                                  *
                                  * We will allocate memory for model visibilities using the size of the observed visibilities vector.
                                  */
-                                fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), complexZero<cufftComplex>());
+                                fields[f].visibilities[i][sto].Vm.assign(fields[f].visibilities[i][sto].Vo.size(), make_cuFloatComplex(0.0f,0.0f));
                         }
                 }
         }
@@ -1031,8 +1031,7 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
                                                         }else if(sim) {
                                                                 vis = fields[f].visibilities[g+j][sto].Vm[c];
                                                         }else{
-                                                                vis = make_cuComplex(fields[f].visibilities[g+j][sto].Vo[c].x - fields[f].visibilities[g+j][sto].Vm[c].x,
-                                                                                     fields[f].visibilities[g+j][sto].Vo[c].y - fields[f].visibilities[g+j][sto].Vm[c].y);
+                                                                vis = cuCsubf(fields[f].visibilities[g+j][sto].Vo[c], fields[f].visibilities[g+j][sto].Vm[c]);
                                                         }
 
                                                         dataCol(sto,j) = casacore::Complex(vis.x, vis.y);

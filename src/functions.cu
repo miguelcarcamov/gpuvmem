@@ -727,7 +727,7 @@ __host__ TD *convolutionComplexRealFFT(TD *data, T *kernel, int M, int N, int m,
 
         FFT2D(kernel_spectrum_device, padded_kernel_complex, fftPlan, padding_M, padding_N, fftfwd, false);
 
-        multArrayComplexComplex<TD><<<blocks_data, threads>>>(data_spectrum_device, kernel_spectrum_device, padding_M, padding_N);
+        mulArrayComplexComplex<<<blocks_data, threads>>>(data_spectrum_device, kernel_spectrum_device, padding_M, padding_N);
         checkCudaErrors(cudaDeviceSynchronize());
 
         FFT2D(padded_data_complex, data_spectrum_device, fftPlan, padding_M, padding_N, fftinv, false);
@@ -790,7 +790,7 @@ __global__ void DFT2D(cufftComplex *Vm, cufftComplex *I, double3 *UVW, float *no
                                         cosk = cospif(2.0*(Ukv+Vkv+Wkv));
                                         sink = sinpif(2.0*(Ukv+Vkv+Wkv));
                     #endif
-                                        Vmodel = make_cuComplex(Vmodel.x + I_sky * cosk, Vmodel.y + I_sky * sink);
+                                        Vmodel = make_cuFloatComplex(Vmodel.x + I_sky * cosk, Vmodel.y + I_sky * sink);
                                 }
                         }
                 }
@@ -804,7 +804,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
         std::vector<float> g_weights_aux(M*N);
         std::vector<cufftComplex> g_Vo(M*N);
         std::vector<double3> g_uvw(M*N);
-        cufftComplex complex_zero = complexZero<cufftComplex>();
+        cufftComplex complex_zero = floatComplexZero();
 
         double3 double3_zero;
         double3_zero.x = 0.0;
@@ -855,7 +855,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                         if (uvw.x < 0.0) {
                                                 uvw.x *= -1.0;
                                                 uvw.y *= -1.0;
-                                                Vo.y *= -1.0;
+                                                Vo = cuConjf(Vo);
                                         }
 
                                         grid_pos_x = uvw.x / fabs(deltau);
@@ -959,8 +959,7 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
                                                 if (weight > 0.0f) {
                                                         fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
                                                         fields[f].visibilities[i][s].uvw[l].y = g_uvw[N * k + j].y;
-                                                        fields[f].visibilities[i][s].Vo[l].x = g_Vo[N * k + j].x;
-                                                        fields[f].visibilities[i][s].Vo[l].y = g_Vo[N * k + j].y;
+                                                        fields[f].visibilities[i][s].Vo[l] = make_cuFloatComplex(g_Vo[N * k + j].x, g_Vo[N * k + j].y);
                                                         fields[f].visibilities[i][s].weight[l] = g_weights[N * k + j];
                                                         l++;
                                                 }
@@ -1131,7 +1130,7 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
         double deltau_meters = fabs(deltau) * lambda;
         double deltav_meters = fabs(deltav) * lambda;
 
-        cufftComplex complex_zero = complexZero<cufftComplex>();
+        cufftComplex complex_zero = floatComplexZero();
 
         std::fill_n(Vm_gridded.begin(), M*N, complex_zero);
 
@@ -1390,7 +1389,7 @@ __global__ void degriddingGPU(double3 *uvw, cufftComplex *Vm, cufftComplex *Vm_g
         int shifted_k, shifted_j;
         int kernel_i, kernel_j;
         int herm_j, herm_k;
-        cufftComplex degrid_val = complexZero<cufftComplex>();
+        cufftComplex degrid_val = floatComplexZero();
         float ckernel_result;
 
         if(i < visibilities)
@@ -1433,7 +1432,8 @@ __global__ void hermitianSymmetry(double3 *UVW, cufftComplex *Vo, float freq, in
                 if(UVW[i].x < 0.0) {
                         UVW[i].x *= -1.0;
                         UVW[i].y *= -1.0;
-                        Vo[i].y *= -1.0;
+                        //UVW[i].z *= -1.0;
+                        Vo[i].y *= -1.0f;
                 }
                 UVW[i].x = metres_to_lambda(UVW[i].x, freq);
                 UVW[i].y = metres_to_lambda(UVW[i].y, freq);
@@ -1512,8 +1512,7 @@ __device__ cufftComplex WKernel(double w, float xobs, float yobs, double DELTAX,
         sink = sinpif(arg);
     #endif
 
-        Wk.x = cosk;
-        Wk.y = -sink;
+        Wk = make_cuFloatComplex(cosk, -sink);
 
 
 }
@@ -1575,7 +1574,7 @@ __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_c
 
         float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
-        image[N*i+j] = make_cuComplex(image[N*i+j].x * atten * fg_scale, 0.0);
+        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * atten * fg_scale, 0.0);
 }
 
 __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, float *gcf, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY, int primary_beam)
@@ -1585,7 +1584,7 @@ __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_c
 
         float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
-        image[N*i+j] = make_cuComplex(image[N*i+j].x * gcf[N*i+j] * atten * fg_scale, 0.0);
+        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * gcf[N*i+j] * atten * fg_scale, 0.0);
 }
 
 __global__ void apply_GCF(cufftComplex *image, float *gcf, long N)
@@ -1593,7 +1592,7 @@ __global__ void apply_GCF(cufftComplex *image, float *gcf, long N)
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        image[N*i+j] = make_cuComplex(image[N*i+j].x * gcf[N*i+j], 0.0);
+        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * gcf[N*i+j], 0.0);
 }
 
 
@@ -1632,7 +1631,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
         s = sinpif(phase);
     #endif
 
-        data[N*i+j] = multComplexComplex<cufftComplex>(data[N*i+j], make_cuComplex(c, s));
+        data[N*i+j] = cuCmulf(data[N*i+j], make_cuFloatComplex(c, s));
 }
 
 
@@ -1682,7 +1681,7 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                                 Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
                                 Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
 
-                                Vm[i] = make_cuComplex(Zreal, Zimag);
+                                Vm[i] = make_cuFloatComplex(Zreal, Zimag);
                         }else{
                                 weight[i] = 0.0f;
                         }
@@ -1737,7 +1736,7 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
 __global__ void residual(cufftComplex *Vr, cufftComplex *Vm, cufftComplex *Vo, long numVisibilities){
         const int i = threadIdx.x + blockDim.x * blockIdx.x;
         if (i < numVisibilities) {
-                Vr[i] = make_cuComplex(Vm[i].x - Vo[i].x, Vm[i].y - Vo[i].y);
+                Vr[i] = cuCsubf(Vm[i], Vo[i]);
         }
 }
 
@@ -1759,7 +1758,7 @@ __global__ void clipWNoise(cufftComplex *fg_image, float *noise, float *I, long 
 
         }
 
-        fg_image[N*i+j] = make_cuComplex(I[N*i+j], 0.0);
+        fg_image[N*i+j] = make_cuFloatComplex(I[N*i+j], 0.0);
 }
 
 __global__ void clip2IWNoise(float *noise, float *I, long N, long M, float noise_cut, float MINPIX, float alpha_start, float eta, float threshold, int schedule)

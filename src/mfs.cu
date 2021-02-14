@@ -686,6 +686,7 @@ void MFS::setDevice()
                                         cudaGetDevice(&gpu_id);
                                         gpu_idx = 0;
                                 }
+                                
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                         if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                                 hermitianSymmetry << < datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
