@@ -149,7 +149,7 @@ __host__ void ConjugateGradient::optimize()
                 ////getSums (Reductions) of gg dgg
                 gg = deviceReduce<float>(device_gg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                 dgg = deviceReduce<float>(device_dgg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
-                if(gg == 0.0) {
+                if(gg == 0.0f) {
                         printf("Exit due to gg = 0\n");
                         of->calcFunction(image->getImage());
                         deallocateMemoryGpu();
