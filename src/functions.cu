@@ -2851,7 +2851,15 @@ __global__ void normArray(float *result, float *array, int M, int N, int image)
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        result[N*i+j] = fabsf(array[M*N*image + (N*i+j)]);
+        result[M*N*image + (N*i+j)] = fabsf(array[M*N*image + (N*i+j)]);
+}
+
+__global__ void CGGradCondition(float *temp, float *xi, float *p, float den, int M, int N, int image)
+{
+        const int j = threadIdx.x + blockDim.x * blockIdx.x;
+        const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+        temp[M*N*image + (N*i+j)] = fabsf(xi[M*N*image + (N*i+j)]) * fmaxf(fabsf(p[M*N*image + (N*i+j)]), 1.0f)/den;
 }
 
 __global__ void updateQ (float *d_q, float alpha, float *d_y, int k, int M, int N, int image)

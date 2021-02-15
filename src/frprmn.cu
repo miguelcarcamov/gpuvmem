@@ -47,7 +47,7 @@ int flag_opt;
 
 #define EPS 1.0e-10
 
-#define FREEALL cudaFree(device_gg_vector); cudaFree(device_dgg_vector); cudaFree(xi); cudaFree(device_h); cudaFree(device_g);
+#define FREEALL cudaFree(device_gg_vector); cudaFree(device_dgg_vector); cudaFree(xi); cudaFree(device_h); cudaFree(device_g); cudaFree(temp);
 
 __host__ void ConjugateGradient::allocateMemoryGpu()
 {
@@ -57,6 +57,8 @@ __host__ void ConjugateGradient::allocateMemoryGpu()
         checkCudaErrors(cudaMemset(device_h, 0, sizeof(float)*M*N*image->getImageCount()));
         checkCudaErrors(cudaMalloc((void**)&xi, sizeof(float)*M*N*image->getImageCount()));
         checkCudaErrors(cudaMemset(xi, 0, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMalloc((void**)&temp, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMemset(temp, 0, sizeof(float)*M*N*image->getImageCount()));
 
         checkCudaErrors(cudaMalloc((void**)&device_gg_vector, sizeof(float)*M*N));
         checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
@@ -73,6 +75,8 @@ __host__ void ConjugateGradient::optimize()
 {
         printf("\n\nStarting Fletcher Reeves Polak Ribiere method (Conj. Grad.)\n\n");
         double start, end;
+        float den;
+        float gmax;
         I = image;
         flag_opt = this->flag;
         allocateMemoryGpu();
@@ -95,7 +99,7 @@ __host__ void ConjugateGradient::optimize()
                 searchDirection<<<numBlocksNN, threadsPerBlockNN>>>(device_g, xi, device_h, N, M, i); //Search direction
                 checkCudaErrors(cudaDeviceSynchronize());
         }
-        ////////////////////////////////////////////////////////////////
+
         for(int i=1; i <= this->total_iterations; i++) {
                 start = omp_get_wtime();
                 this->current_iteration = i;
@@ -115,7 +119,24 @@ __host__ void ConjugateGradient::optimize()
                         printf("Function value = %f\n", fp);
                 }
                 of->calcGradient(image->getImage(),xi, i);
-                dgg = gg = 0.0;
+
+                den = std::max(fp, 1.0f);
+
+                for(int i=0; i < image->getImageCount(); i++)
+                {
+                        CGGradCondition<<<numBlocksNN, threadsPerBlockNN>>>(temp, xi, image->getImage(), den, N, M, i);
+                        checkCudaErrors(cudaDeviceSynchronize());
+                }
+
+                gmax = deviceMaxReduce(temp, M*N*image->getImageCount(), threadsPerBlockNN.x * threadsPerBlockNN.y);
+                if(gmax < this->gtol){
+                        printf("Exit due to gradient tolerance\n");
+                        of->calcFunction(I->getImage());
+                        deallocateMemoryGpu();
+                        return;
+                }
+
+                dgg = gg = 0.0f;
                 ////gg = g*g
                 ////dgg = (xi+g)*xi
                 checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
@@ -134,7 +155,7 @@ __host__ void ConjugateGradient::optimize()
                         deallocateMemoryGpu();
                         return;
                 }
-                gam = fmax(0.0f, dgg/gg);
+                gam = std::max(0.0f, dgg/gg);
                 //printf("Gamma = %f\n", gam);
                 //g=-xi
                 //xi=h=g+gam*h;

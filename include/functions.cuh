@@ -139,6 +139,7 @@ __global__ void getR (float *d_r, float *d_q, float scalar, int M, int N, int im
 __global__ void updateQ (float *d_q, float alpha, float *d_y, int k, int M, int N, int image);
 __global__ void getDot_LBFGS_ff(float *aux_vector, float *vec_1, float *vec_2, int k, int h, int M, int N, int image);
 __global__ void normArray(float *result, float *array, int M, int N, int image);
+__global__ void CGGradCondition(float *temp, float *xi, float *p, float den, int M, int N, int image);
 __global__ void searchDirection_LBFGS(float *xi, long N, long M, int image);
 __global__ void fftshift_2D(cufftComplex *data, int N1, int N2);
 __global__ void do_griddingGPU(float3 *uvw, cufftComplex *Vo, cufftComplex *Vo_g, float *w, float *w_g, int* count, double deltau, double deltav, int visibilities, int M, int N);

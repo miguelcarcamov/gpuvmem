@@ -13,7 +13,7 @@ __host__ void optimize();
 private:
 float fret = 0;
 float gg, dgg, gam, fp;
-float *device_g, *device_h, *xi;
+float *device_g, *device_h, *xi, *temp;
 float *device_gg_vector, *device_dgg_vector;
 int configured = 1;
 };

@@ -74,8 +74,8 @@ __host__ void LBFGS::allocateMemoryGpu()
         checkCudaErrors(cudaMalloc((void**)&xi_old, sizeof(float)*M*N*image->getImageCount()));
         checkCudaErrors(cudaMemset(xi_old, 0, sizeof(float)*M*N*image->getImageCount()));
 
-        checkCudaErrors(cudaMalloc((void**)&norm_vector, sizeof(float)*M*N));
-        checkCudaErrors(cudaMemset(norm_vector, 0, sizeof(float)*M*N));
+        checkCudaErrors(cudaMalloc((void**)&norm_vector, sizeof(float)*M*N*image->getImageCount()));
+        checkCudaErrors(cudaMemset(norm_vector, 0, sizeof(float)*M*N*image->getImageCount()));
 };
 __host__ void LBFGS::deallocateMemoryGpu()
 {
@@ -136,8 +136,9 @@ __host__ void LBFGS::optimize()
                 {
                         normArray<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
-                        this->max_per_it = std::max(this->max_per_it, deviceMaxReduce(norm_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y));
                 }
+                
+                this->max_per_it = std::max(this->max_per_it, deviceMaxReduce(norm_vector, M*N*image->getImageCount(), threadsPerBlockNN.x * threadsPerBlockNN.y));
 
                 if(this->max_per_it <= this->gtol) {
                         printf("Exit due to gnorm ~ 0\n");
