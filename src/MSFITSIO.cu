@@ -532,7 +532,7 @@ __host__ void readMS(const char *MS_name, std::vector<MSAntenna>& antennas, std:
                         dataCol.resize(data->nstokes, data->channels[i]);
                         flagCol.resize(data->nstokes, data->channels[i]);
 
-                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data->n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
+                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data->n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW and ANY(!FLAG)";
                         if(W_projection && random_prob < 1.0)
                         {
                                 query += " and RAND()<"+std::to_string(random_prob)+" ORDERBY ASC UVW[2]";
@@ -822,7 +822,7 @@ __host__ void readMS(const char *MS_name, std::string data_column, std::vector<M
                         dataCol.resize(data->nstokes, data->channels[i]);
                         flagCol.resize(data->nstokes, data->channels[i]);
 
-                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data->n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
+                        query = "select UVW,WEIGHT,"+data_column+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data->n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW and ANY(!FLAG)";
                         if(W_projection && random_prob < 1.0)
                         {
                                 query += " and RAND()<"+std::to_string(random_prob)+" ORDERBY ASC UVW[2]";
@@ -1006,7 +1006,7 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
                         dataCol.resize(data.nstokes, data.channels[i]);
                         flagCol.resize(data.nstokes, data.channels[i]);
 
-                        query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data.n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
+                        query = "select WEIGHT,"+column_name+",FLAG from "+dir+" where DATA_DESC_ID="+std::to_string(data.n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW and ANY(!FLAG)";
 
                         if(W_projection)
                                 query += " ORDERBY ASC UVW[2]";
@@ -1046,7 +1046,7 @@ __host__ void writeMS(const char *outfile, const char *out_col, std::vector<Fiel
 
                         query_tab.flush();
 
-                        string sub_query = "select from "+dir+" where DATA_DESC_ID="+std::to_string(data.n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW";
+                        string sub_query = "select from "+dir+" where DATA_DESC_ID="+std::to_string(data.n_internal_frequencies_ids[i])+" and FIELD_ID="+std::to_string(fields[f].id)+" and !FLAG_ROW and ANY(!FLAG)";
                         if(W_projection)
                                 sub_query += " ORDERBY ASC UVW[2]";
 
