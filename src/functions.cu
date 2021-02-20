@@ -1620,7 +1620,7 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields, MSData dat
                       int threadsV, blocksV;
                       long UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                       threads1D = 512;
-                      blocks1D = iDivUp(NearestPowerOf2(UVpow2, threads1D);
+                      blocks1D = iDivUp(UVpow2, threads1D);
                       getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
                       fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
                       fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
@@ -1713,7 +1713,7 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                       int threadsV, blocksV;
                       long UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                       threads1D = 512;
-                      blocks1D = iDivUp(NearestPowerOf2(UVpow2, threads1D);
+                      blocks1D = iDivUp(UVpow2, threads1D);
                       getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
                       fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
                       fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
