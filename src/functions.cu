@@ -1648,11 +1648,11 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
 
                                         //fitsOutputCufftComplex(vars_gpu[0].device_V, mod_in, "amp.fits", "./", 0, 1.0, M, N, 0, true);
                                         // Interpolation / Degridding
-                                        vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        (fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                        //degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                        //            fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
+                                        //vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                        //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                        //(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                                         checkCudaErrors(cudaDeviceSynchronize());
                                 }
 
@@ -1739,11 +1739,11 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                         // Interpolation / Degridding
-                                        vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        (fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                        //degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                        //            fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
+                                        //vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                        //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                        //(fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                        degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
+                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
                                         checkCudaErrors(cudaDeviceSynchronize());
 
                                 }
