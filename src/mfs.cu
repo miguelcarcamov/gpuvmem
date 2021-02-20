@@ -458,13 +458,11 @@ void MFS::setDevice()
 
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-                        if(num_gpus == 1) {
                                 cudaSetDevice(firstgpu);
                                 checkCudaErrors(cudaMalloc((void**)&datasets[d].fields[f].atten_image, sizeof(float)*M*N));
                                 checkCudaErrors(cudaMemset(datasets[d].fields[f].atten_image, 0, sizeof(float)*M*N));
                                 for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                        if(num_gpus > 1)
-                                                cudaSetDevice((i % num_gpus) + firstgpu);
+                                        cudaSetDevice((i % num_gpus) + firstgpu);
                                         for(int s=0; s<datasets[d].data.nstokes; s++) {
                                                 checkCudaErrors(cudaMalloc(&datasets[d].fields[f].device_visibilities[i][s].uvw,
                                                                            sizeof(double3) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
@@ -495,9 +493,7 @@ void MFS::setDevice()
                                                                            sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
                                         }
                                 }
-
-                        }
-                }
+              }
         }
 
 
@@ -593,12 +589,12 @@ void MFS::setDevice()
 
         host_I = (float*)malloc(M*N*sizeof(float)*image_count);
 
-        for(int i=0; i<M; i++) {
-                for(int j=0; j<N; j++) {
-                        for(int k=0; k<image_count; k++) {
-                                host_I[N*M*k+N*i+j] = initial_values[k];
-                        }
-                }
+        for(int k=0; k<image_count; k++) {
+          for(int i=0; i<M; i++) {
+                  for(int j=0; j<N; j++) {
+                    host_I[N*M*k+N*i+j] = initial_values[k];
+                  }
+          }
         }
 
         ////////////////////////////////////////////////CUDA MEMORY ALLOCATION FOR DEVICE///////////////////////////////////////////////////
@@ -778,8 +774,8 @@ void MFS::clearRun()
 
         for(int g=0; g<num_gpus; g++) {
                 cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N*image_count));
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N*image_count));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N));
 
         }
 
