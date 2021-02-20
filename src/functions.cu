@@ -36,7 +36,7 @@ namespace cg = cooperative_groups;
 
 extern long M, N;
 extern int iterations, iter, image_count, \
-           status_mod_in, flag_opt, num_gpus, selected, multigpu, firstgpu, reg_term, gridding;
+           status_mod_in, flag_opt, num_gpus, multigpu, firstgpu, reg_term, gridding;
 
 extern cufftHandle plan1GPU;
 extern cufftComplex *device_V, *device_fg_image, *device_I_nu;
@@ -1571,187 +1571,95 @@ __host__ void degridding(std::vector<Field>& fields, MSData data, double deltau,
 
         std::vector<std::vector<cufftComplex> > gridded_visibilities(num_gpus, std::vector<cufftComplex> (M*N));
 
-        if(num_gpus == 1) {
-                cudaSetDevice(selected);
-                for(int f=0; f<data.nfields; f++) {
-                        for(int i=0; i<data.total_frequencies; i++) {
-                                for(int s=0; s<data.nstokes; s++) {
-                                        // Put gridded visibilities in a M*N grid
-                                        griddedTogrid(gridded_visibilities[0], fields[f].visibilities[i][s].Vm,
-                                                      fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i], M, N,
-                                                      fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+        for(int f=0; f<data.nfields; f++) {
+          #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
+          for (int i = 0; i < data.total_frequencies; i++)
+          {
+            unsigned int j = omp_get_thread_num();
+            unsigned int num_cpu_threads = omp_get_num_threads();
+            int gpu_idx = i%num_gpus;
+            cudaSetDevice(gpu_idx + firstgpu);
+            int gpu_id = -1;
+            cudaGetDevice(&gpu_id);
 
-                                        /*
-                                           Model visibilities and original (u,v) positions to GPU.
-                                         */
+            for(int s=0; s<data.nstokes; s++) {
+              // Put gridded visibilities in a M*N grid
+              griddedTogrid(gridded_visibilities[gpu_idx], fields[f].visibilities[i][s].Vm,
+                            fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i], M, N,
+                            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              /*
+              Model visibilities and original (u,v) positions to GPU.
+              */
+              // Now the number of visibilities will be the original one.
+              fields[f].numVisibilitiesPerFreqPerStoke[i][s] = fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
 
-                                        // Now the number of visibilities will be the original one.
+              fields[f].visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              fields[f].visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
-                                        fields[f].numVisibilitiesPerFreqPerStoke[i][s] = fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
+              checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
+                                          sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+              checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
+                                          sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
-                                        //  We allocate memory for arrays using the original number of visibilities
-                                        fields[f].visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
-                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
-                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+              checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].uvw,
+                                          sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+              checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
+                                          sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+              checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].weight,
+                                          sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].uvw,
-                                                                   sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
-                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].weight,
-                                                                   sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+              // Copy original Vo visibilities to host
+              fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
 
-                                        // Copy original Vo visibilities to host
-                                        fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
+              // Copy gridded model visibilities to device
+              checkCudaErrors(cudaMemcpy(vars_gpu[gpu_idx].device_V, gridded_visibilities[gpu_idx].data(),
+                                          sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
 
-                                        // Copy gridded model visibilities to device
-                                        checkCudaErrors(cudaMemcpy(vars_gpu[0].device_V, gridded_visibilities[0].data(), sizeof(cufftComplex) * M * N,
-                                                                   cudaMemcpyHostToDevice));
+              // Copy original (u,v) positions and weights to host and device
 
-                                        // Copy original (u,v) positions and weights to host and device
-                                        fields[f].visibilities[i][s].uvw.assign(fields[f].backup_visibilities[i][s].uvw.begin(), fields[f].backup_visibilities[i][s].uvw.end());
-                                        fields[f].visibilities[i][s].weight.assign(fields[f].backup_visibilities[i][s].weight.begin(), fields[f].backup_visibilities[i][s].weight.end());
+              fields[f].visibilities[i][s].uvw.assign(fields[f].backup_visibilities[i][s].uvw.begin(), fields[f].backup_visibilities[i][s].uvw.end());
+              fields[f].visibilities[i][s].weight.assign(fields[f].backup_visibilities[i][s].weight.begin(), fields[f].backup_visibilities[i][s].weight.end());
 
-                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
-                                                                   sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
-                                                                   cudaMemcpyHostToDevice));
-                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].Vo, fields[f].backup_visibilities[i][s].Vo.data(),
-                                                                   sizeof(cufftComplex) * fields[f].backup_visibilities[i][s].Vo.size(),
-                                                                   cudaMemcpyHostToDevice));
-                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
-                                                                   sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
-                                        UVpow2 = NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
+                                          sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
+                                          cudaMemcpyHostToDevice));
+              checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].Vo, fields[f].backup_visibilities[i][s].Vo.data(),
+                                          sizeof(cufftComplex) * fields[f].backup_visibilities[i][s].Vo.size(),
+                                          cudaMemcpyHostToDevice));
+              checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
+                                          sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
 
-                                        if(blockSizeV == -1) {
-                                                int threads1D, blocks1D;
-                                                int threadsV, blocksV;
-                                                threads1D = 512;
-                                                blocks1D = iDivUp(UVpow2, threads1D);
-                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
-                                                fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
-                                        }else{
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                                fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
-                                        }
+              if(blockSizeV == -1) {
+                      int threads1D, blocks1D;
+                      int threadsV, blocksV;
+                      threads1D = 512;
+                      blocks1D = iDivUp(UVpow2, threads1D);
+                      getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
+                      fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
+                      fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
+              }else{
+                      fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
+                      fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
+              }
 
-                                        hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        checkCudaErrors(cudaDeviceSynchronize());
+              hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
+                      fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+              (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              checkCudaErrors(cudaDeviceSynchronize());
 
+              // Interpolation / Degridding
+              vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
+                      fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+              (fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+              //degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
+              //            fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
+              checkCudaErrors(cudaDeviceSynchronize());
 
-                                        //fitsOutputCufftComplex(vars_gpu[0].device_V, mod_in, "amp.fits", "./", 0, 1.0, M, N, 0, true);
-                                        // Interpolation / Degridding
-                                        //vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                        //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        //(fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                        degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[0].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
-                                        checkCudaErrors(cudaDeviceSynchronize());
-                                }
-
-                        }
-                }
-        }else{
-                for(int f=0; f<data.nfields; f++) {
-                        #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
-                        for (int i = 0; i < data.total_frequencies; i++)
-                        {
-                                unsigned int j = omp_get_thread_num();
-                                //unsigned int num_cpu_threads = omp_get_num_threads();
-                                // set and check the CUDA device for this CPU thread
-                                int gpu_id = -1;
-                                cudaSetDevice((i%num_gpus) + firstgpu); // "% num_gpus" allows more CPU threads than GPU devices
-                                cudaGetDevice(&gpu_id);
-                                for(int s=0; s<data.nstokes; s++) {
-                                        // Put gridded visibilities in a M*N grid
-                                        griddedTogrid(gridded_visibilities[i%num_gpus], fields[f].visibilities[i][s].Vm,
-                                                      fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i], M, N,
-                                                      fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-
-                                        /*
-                                           Model visibilities and original (u,v) positions to GPU.
-                                         */
-
-                                        // Now the number of visibilities will be the original one.
-                                        fields[f].numVisibilitiesPerFreqPerStoke[i][s] = fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
-
-                                        fields[f].visibilities[i][s].uvw.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].visibilities[i][s].weight.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].visibilities[i][s].Vm.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        fields[f].visibilities[i][s].Vo.resize(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
-                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        checkCudaErrors(cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
-                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].uvw,
-                                                                   sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
-                                                                   sizeof(cufftComplex) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-                                        checkCudaErrors(cudaMalloc(&fields[f].device_visibilities[i][s].weight,
-                                                                   sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-
-                                        // Copy original Vo visibilities to host
-                                        fields[f].visibilities[i][s].Vo.assign(fields[f].backup_visibilities[i][s].Vo.begin(), fields[f].backup_visibilities[i][s].Vo.end());
-
-                                        // Copy gridded model visibilities to device
-                                        checkCudaErrors(cudaMemcpy(vars_gpu[i % num_gpus].device_V, gridded_visibilities[i%num_gpus].data(),
-                                                                   sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
-
-                                        // Copy original (u,v) positions and weights to host and device
-
-                                        fields[f].visibilities[i][s].uvw.assign(fields[f].backup_visibilities[i][s].uvw.begin(), fields[f].backup_visibilities[i][s].uvw.end());
-                                        fields[f].visibilities[i][s].weight.assign(fields[f].backup_visibilities[i][s].weight.begin(), fields[f].backup_visibilities[i][s].weight.end());
-
-                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].uvw, fields[f].backup_visibilities[i][s].uvw.data(),
-                                                                   sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
-                                                                   cudaMemcpyHostToDevice));
-                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].Vo, fields[f].backup_visibilities[i][s].Vo.data(),
-                                                                   sizeof(cufftComplex) * fields[f].backup_visibilities[i][s].Vo.size(),
-                                                                   cudaMemcpyHostToDevice));
-                                        checkCudaErrors(cudaMemcpy(fields[f].device_visibilities[i][s].weight, fields[f].backup_visibilities[i][s].weight.data(),
-                                                                   sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(), cudaMemcpyHostToDevice));
-
-                                        if(blockSizeV == -1) {
-                                                int threads1D, blocks1D;
-                                                int threadsV, blocksV;
-                                                threads1D = 512;
-                                                blocks1D = iDivUp(UVpow2, threads1D);
-                                                getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV, false);
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
-                                                fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
-                                        }else{
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-                                                fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(UVpow2, blockSizeV);
-                                        }
-
-                                        hermitianSymmetry <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        (fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vo, fields[f].nu[i], fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        checkCudaErrors(cudaDeviceSynchronize());
-
-                                        // Interpolation / Degridding
-                                        //vis_mod2 <<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                        //        fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                        //(fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
-                                        degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-                                                    fields[f].device_visibilities[i][s].threadsPerBlockUV >>>(fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].Vm, vars_gpu[i % num_gpus].device_V, ckernel->getGPUKernel(), deltau, deltav, fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N, ckernel->getm(), ckernel->getn(), ckernel->getSupportX(), ckernel->getSupportY());
-                                        checkCudaErrors(cudaDeviceSynchronize());
-
-                                }
-                        }
-                }
+            }
+          }
         }
-
-
 }
 
 __host__ void initFFT(varsPerGPU *vars_gpu, long M, long N, int firstgpu, int num_gpus)
@@ -3315,20 +3223,10 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 float result = 0.0;
                                 unsigned int j = omp_get_thread_num();
                                 unsigned int num_cpu_threads = omp_get_num_threads();
-                                int gpu_idx;
-
-                                if(num_cpu_threads > 1) {
-                                        // set and check the CUDA device for this CPU thread
-                                        int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu);           // "% num_gpus" allows more CPU threads than GPU devices
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = i%num_gpus;
-                                }else{
-                                        int gpu_id = -1;
-                                        cudaSetDevice(selected);
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = 0;
-                                }
+                                int gpu_idx = i%num_gpus;
+                                cudaSetDevice(gpu_idx + firstgpu);
+                                int gpu_id = -1;
+                                cudaGetDevice(&gpu_id);
 
                                 ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I, datasets[d].fields[f].nu[i]);
 
@@ -3339,7 +3237,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                     apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
                                 }
                                 //FFT 2D
-                                FFT2D(vars_gpu[i % num_gpus].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[i % num_gpus].plan, M, N, CUFFT_FORWARD, false);
+                                FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
 
                                 //PHASE_ROTATE
                                 phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
@@ -3398,20 +3296,10 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                         {
                                 unsigned int j = omp_get_thread_num();
                                 unsigned int num_cpu_threads = omp_get_num_threads();
-                                int gpu_idx;
-
-                                if(num_cpu_threads > 1) {
-                                        // set and check the CUDA device for this CPU thread
-                                        int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu);   // "% num_gpus" allows more CPU threads than GPU devices
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = i%num_gpus;
-                                }else{
-                                        int gpu_id = -1;
-                                        cudaSetDevice(selected);
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = 0;
-                                }
+                                int gpu_idx = i%num_gpus;
+                                cudaSetDevice(gpu_idx + firstgpu);
+                                int gpu_id = -1;
+                                cudaGetDevice(&gpu_id);
 
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                         if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
@@ -3424,7 +3312,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                         }else{
                                                             DChi2 <<< numBlocksNN, threadsPerBlockNN >>> (device_noise_image, vars_gpu[gpu_idx].device_dchi2, datasets[d].fields[f].device_visibilities[i][s].Vr, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, N, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs, DELTAX, DELTAY, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
                                                         }
-                                                        //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[i%num_gpus].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
+                                                        //DChi2<<<numBlocksNN, threadsPerBlockNN, shared_memory>>>(device_noise_image, vars_gpu[gpu_idx].device_dchi2, fields[f].device_visibilities[i][s].Vr, fields[f].device_visibilities[i][s].uvw, fields[f].device_visibilities[i][s].weight, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale, noise_cut, fields[f].ref_xobs, fields[f].ref_yobs, fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY, antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
                                                         checkCudaErrors(cudaDeviceSynchronize());
 
 
@@ -3749,20 +3637,10 @@ __host__ void calculateErrors(Image *image){
                         {
                                 unsigned int j = omp_get_thread_num();
                                 unsigned int num_cpu_threads = omp_get_num_threads();
-                                int gpu_idx;
-
-                                if(num_cpu_threads > 1) {
-                                        // set and check the CUDA device for this CPU thread
-                                        int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu);         // "% num_gpus" allows more CPU threads than GPU devices
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = i%num_gpus;
-                                }else{
-                                        int gpu_id = -1;
-                                        cudaSetDevice(selected);
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = 0;
-                                }
+                                int gpu_idx = i%num_gpus;
+                                cudaSetDevice(gpu_idx + firstgpu);
+                                int gpu_id = -1;
+                                cudaGetDevice(&gpu_id);
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                         if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY) {
                                                 if (datasets[d].fields[f].numVisibilitiesPerFreq[i] > 0) {

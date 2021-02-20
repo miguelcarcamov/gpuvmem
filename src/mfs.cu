@@ -14,7 +14,7 @@ dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
 
 int gridding, status_mod_in;
-int multigpu, firstgpu, selected, reg_term, total_visibilities, image_count, nPenalizators, nMeasurementSets=0, max_number_vis;
+int multigpu, firstgpu, reg_term, total_visibilities, image_count, nPenalizators, nMeasurementSets=0, max_number_vis;
 
 std::string msinput, msoutput, modinput, mempath, out_image, output;
 float nu_0, threshold;
@@ -234,8 +234,8 @@ void MFS::configure(int argc, char **argv)
         }
 
 
-        if(selected > num_gpus-1 || selected < 0) {
-                printf("ERROR. The selected GPU ID does not exist\n");
+        if(firstgpu > num_gpus-1 || firstgpu < 0) {
+                printf("ERROR. The selected GPU IDs don't exist\n");
                 exit(-1);
         }
 
@@ -299,11 +299,10 @@ void MFS::configure(int argc, char **argv)
 
         if(count_gpus == 0) {
                 multigpu = 0;
-                selected = 0;
+                firstgpu = 0;
         }else if(count_gpus == 1) {
                 multigpu = 0;
-                selected = std::stoi(string_values[0]);
-                firstgpu = selected;
+                firstgpu = std::stoi(string_values[0]);
         }else{
                 multigpu = count_gpus;
                 firstgpu = std::stoi(string_values[0]);
@@ -672,20 +671,10 @@ void MFS::setDevice()
                         {
                                 unsigned int j = omp_get_thread_num();
                                 unsigned int num_cpu_threads = omp_get_num_threads();
-                                int gpu_idx;
-
-                                if(num_cpu_threads > 1) {
-                                        // set and check the CUDA device for this CPU thread
-                                        int gpu_id = -1;
-                                        cudaSetDevice((i%num_gpus) + firstgpu);             // "% num_gpus" allows more CPU threads than GPU devices
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = i%num_gpus;
-                                }else{
-                                        int gpu_id = -1;
-                                        cudaSetDevice(selected);
-                                        cudaGetDevice(&gpu_id);
-                                        gpu_idx = 0;
-                                }
+                                int gpu_idx = i%num_gpus;
+                                cudaSetDevice(gpu_idx + firstgpu);
+                                int gpu_id = -1;
+                                cudaGetDevice(&gpu_id);
 
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                         if(datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
@@ -774,10 +763,7 @@ void MFS::clearRun()
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-                                if(num_gpus > 1)
-                                        cudaSetDevice(selected);
-                                else
-                                        cudaSetDevice((i % num_gpus) + firstgpu);
+                                cudaSetDevice((i % num_gpus) + firstgpu);
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                         checkCudaErrors(cudaMemset(datasets[d].fields[f].device_visibilities[i][s].Vr, 0,
                                                                    sizeof(cufftComplex) * datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
@@ -964,9 +950,7 @@ void MFS::unSetDevice()
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i<datasets[d].data.total_frequencies; i++) {
 
-                                if(num_gpus > 1) {
-                                        cudaSetDevice((i%num_gpus) + firstgpu);
-                                }
+                                cudaSetDevice((i%num_gpus) + firstgpu);
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                         cudaFree(datasets[d].fields[f].device_visibilities[i][s].uvw);
                                         cudaFree(datasets[d].fields[f].device_visibilities[i][s].weight);
