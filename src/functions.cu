@@ -3282,6 +3282,58 @@ __global__ void noise_reduction(float *noise_I, long N, long M){
                 noise_I[N*M+N*i+j] = 0.0f;
 }
 
+__host__ void simulation(float *I, VirtualImageProcessor *ip)
+{
+
+        cudaSetDevice(firstgpu);
+
+        ip->clipWNoise(I);
+
+        for(int d=0; d<nMeasurementSets; d++) {
+                for(int f=0; f<datasets[d].data.nfields; f++) {
+
+                        #pragma omp parallel for schedule(static,1) num_threads(num_gpus)
+                        for (int i = 0; i < datasets[d].data.total_frequencies; i++)
+                        {
+                                float result = 0.0;
+                                unsigned int j = omp_get_thread_num();
+                                unsigned int num_cpu_threads = omp_get_num_threads();
+                                int gpu_idx = i%num_gpus;
+                                cudaSetDevice(gpu_idx + firstgpu);
+                                int gpu_id = -1;
+                                cudaGetDevice(&gpu_id);
+
+                                ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I, datasets[d].fields[f].nu[i]);
+
+                                ip->apply_beam(vars_gpu[gpu_idx].device_I_nu, datasets[d].antennas[0].antenna_diameter, datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff, datasets[d].fields[f].ref_xobs,
+                                               datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
+
+                                if(NULL!= ip->getCKernel()){
+                                    apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
+                                }
+                                //FFT 2D
+                                FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
+
+                                //PHASE_ROTATE
+                                phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
+                                checkCudaErrors(cudaDeviceSynchronize());
+                                for(int s=0; s<datasets[d].data.nstokes; s++) {
+                                    if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY){
+                                          if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
+
+                                                  checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0, sizeof(float)*max_number_vis));
+                                                  // BILINEAR INTERPOLATION
+                                                  vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                          datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                  (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                  checkCudaErrors(cudaDeviceSynchronize());
+                                          }
+                                    }
+                              }
+                        }
+                }
+        }
+};
 
 __host__ float chi2(float *I, VirtualImageProcessor *ip)
 {
