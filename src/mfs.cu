@@ -6,7 +6,7 @@ long M, N, numVisibilities;
 
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
 float noise_cut, MINPIX, minpix, lambda, random_probability = 1.0;
-float noise_jypix, fg_scale, final_S, eta, robust_param;
+float noise_jypix, fg_scale, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
 
@@ -823,10 +823,15 @@ void MFS::run()
         }
 
         float chi2_final;
+        float final_S;
         std::vector<Fi*> fis = optimizer->getObjectiveFunction()->getFi();
         for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++){
           if((*it)->getName() == "Chi2"){
               chi2_final = (*it)->get_fivalue();
+          }else{
+            if((*it)->getName() == "Entropy"){
+              final_S = (*it)->get_fivalue();
+            }
           }
         }
 

@@ -44,7 +44,7 @@ extern float *device_I;
 
 extern float *device_dphi, *device_S, *device_dchi2_total, *device_dS, *device_noise_image;
 extern float noise_jypix, fg_scale, noise_cut, MINPIX, \
-             minpix, lambda, random_probability, final_S, eta;
+             minpix, lambda, random_probability, eta;
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 
@@ -3591,7 +3591,6 @@ __host__ float SEntropy(float *I, float * ds, float prior_value, float eta, floa
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
-        final_S = resultS;
         return resultS;
 };
 
@@ -3619,7 +3618,6 @@ __host__ float SGEntropy(float *I, float * ds, float *prior, float eta, float pe
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
-        final_S = resultS;
         return resultS;
 };
 
@@ -3674,7 +3672,6 @@ __host__ float quadraticP(float *I, float * ds, float penalization_factor, int m
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
-        final_S = resultS;
         return resultS;
 };
 
@@ -3702,7 +3699,6 @@ __host__ float totalvariation(float *I, float * ds, float epsilon, float penaliz
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
-        final_S = resultS;
         return resultS;
 };
 
@@ -3730,7 +3726,6 @@ __host__ float TotalSquaredVariation(float *I, float * ds, float penalization_fa
                 checkCudaErrors(cudaDeviceSynchronize());
                 resultS  = deviceReduce<float>(ds, M*N, threadsPerBlockNN.x*threadsPerBlockNN.y);
         }
-        final_S = resultS;
         return resultS;
 };
 
