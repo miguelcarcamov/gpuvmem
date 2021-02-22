@@ -3364,7 +3364,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                                datasets[d].fields[f].ref_yobs, datasets[d].fields[f].nu[i], datasets[d].antennas[0].primary_beam);
 
                                 if(NULL!= ip->getCKernel()){
-                                    printf("Caigo AQUÍ!!!!\n");
                                     apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
                                 }
                                 //FFT 2D
