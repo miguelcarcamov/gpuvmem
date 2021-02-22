@@ -11,6 +11,7 @@ public:
 Chi2();
 float calcFi(float *p);
 void calcGi(float *p, float *xi);
+void simulateModel(float *p) override;
 void restartDGi();
 void addToDphi(float *device_dphi);
 void configure(int penalizatorIndex, int imageIndex, int imageToAdd) override;

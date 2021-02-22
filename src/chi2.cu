@@ -50,6 +50,11 @@ void Chi2::calcGi(float *p, float *xi)
         dchi2(p, xi, result_dchi2, ip);
 };
 
+void Chi2::simulateModel(float *p)
+{
+        simulate(p, ip);
+};
+
 void Chi2::restartDGi()
 {
         checkCudaErrors(cudaMemset(result_dchi2, 0, sizeof(float)*M*N*image_count));

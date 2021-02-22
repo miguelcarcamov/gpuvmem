@@ -932,7 +932,7 @@ void MFS::writeResiduals()
                 }
                 Fi *chi2 =  optimizer->getObjectiveFunction()->getFiByName("Chi2");
                 chi2->setCKernel(NULL);
-                chi2->calcFi(image->getImage());
+                chi2->simulateModel(image->getImage());
 
                 for(int d=0; d<nMeasurementSets; d++)
                         modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
