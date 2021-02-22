@@ -44,7 +44,7 @@ extern float *device_I;
 
 extern float *device_dphi, *device_S, *device_dchi2_total, *device_dS, *device_noise_image;
 extern float noise_jypix, fg_scale, noise_cut, MINPIX, \
-             minpix, lambda, random_probability, eta;
+             minpix, random_probability, eta;
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 

@@ -5,7 +5,7 @@
 long M, N, numVisibilities;
 
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
-float noise_cut, MINPIX, minpix, lambda, random_probability = 1.0;
+float noise_cut, MINPIX, minpix, random_probability = 1.0;
 float noise_jypix, fg_scale, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
@@ -824,6 +824,7 @@ void MFS::run()
 
         float chi2_final;
         float final_S;
+        float lambda_S;
         std::vector<Fi*> fis = optimizer->getObjectiveFunction()->getFi();
         for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++){
           if((*it)->getName() == "Chi2"){
@@ -831,6 +832,7 @@ void MFS::run()
           }else{
             if((*it)->getName() == "Entropy"){
               final_S = (*it)->get_fivalue();
+              lambda_S = (*it)->getPenalizationFactor();
             }
           }
         }
@@ -850,7 +852,7 @@ void MFS::run()
         }else{
                 printf("Normalized S: %f\n", final_S/(M*M*N*N));
         }
-        printf("lambda*S: %f\n\n", lambda*final_S);
+        printf("lambda*S: %f\n\n", lambda_S*final_S);
         double time_taken = ((double)t)/CLOCKS_PER_SEC;
         double wall_time = end-start;
         printf("Total CPU time: %lf\n", time_taken);
@@ -876,7 +878,7 @@ void MFS::run()
                 }else{
                         fprintf(outfile, "Normalized S: %f\n", final_S/(M*M*N*N));
                 }
-                fprintf(outfile, "lambda*S: %f\n", lambda*final_S);
+                fprintf(outfile, "lambda*S: %f\n", lambda_S*final_S);
                 fprintf(outfile, "Wall time: %lf", wall_time);
                 fclose(outfile);
         }
