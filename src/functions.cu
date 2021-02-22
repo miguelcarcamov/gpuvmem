@@ -44,7 +44,7 @@ extern float *device_I;
 
 extern float *device_dphi, *device_S, *device_dchi2_total, *device_dS, *device_noise_image;
 extern float noise_jypix, fg_scale, noise_cut, MINPIX, \
-             minpix, lambda, random_probability, final_chi2, final_S, eta;
+             minpix, lambda, random_probability, final_S, eta;
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 
@@ -3408,8 +3408,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
         }
 
         cudaSetDevice(firstgpu);
-
-        final_chi2 = resultchi2;
 
         return 0.5f * resultchi2;
 };

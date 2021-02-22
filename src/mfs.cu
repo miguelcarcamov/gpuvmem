@@ -6,7 +6,7 @@ long M, N, numVisibilities;
 
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S, *device_noise_image, *device_weight_image, *device_distance_image;
 float noise_cut, MINPIX, minpix, lambda, random_probability = 1.0;
-float noise_jypix, fg_scale, final_chi2, final_S, eta, robust_param;
+float noise_jypix, fg_scale, final_S, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
 
@@ -822,15 +822,23 @@ void MFS::run()
                 (this->Order)(optimizer, image);
         }
 
+        float chi2_final;
+        std::vector<Fi*> fis = optimizer->getObjectiveFunction()->getFi();
+        for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++){
+          if((*it)->getName() == "Chi2"){
+              chi2_final = (*it)->get_fivalue();
+          }
+        }
+
         t = clock() - t;
         end = omp_get_wtime();
         printf("Minimization ended successfully\n\n");
         printf("Iterations: %d\n", optimizer->getCurrentIteration());
-        printf("chi2: %f\n", final_chi2);
-        printf("0.5*chi2: %f\n", 0.5*final_chi2);
+        printf("chi2: %f\n", 2.0f*chi2_final);
+        printf("0.5*chi2: %f\n", chi2_final);
         printf("Total visibilities: %d\n", total_visibilities);
-        printf("Reduced-chi2 (Num visibilities): %f\n", (0.5*final_chi2)/total_visibilities);
-        printf("Reduced-chi2 (Weights sum): %f\n", (0.5*final_chi2)/sum_weights);
+        printf("Reduced-chi2 (Num visibilities): %f\n", chi2_final/total_visibilities);
+        printf("Reduced-chi2 (Weights sum): %f\n", chi2_final/sum_weights);
         printf("S: %f\n", final_S);
         if(reg_term != 1) {
                 printf("Normalized S: %f\n", final_S/(M*N));
@@ -852,11 +860,11 @@ void MFS::run()
                 }
 
                 fprintf(outfile, "Iterations: %d\n", optimizer->getCurrentIteration());
-                fprintf(outfile, "chi2: %f\n", final_chi2);
-                fprintf(outfile, "0.5*chi2: %f\n", 0.5*final_chi2);
+                fprintf(outfile, "chi2: %f\n", 2.0f*chi2_final);
+                fprintf(outfile, "0.5*chi2: %f\n", chi2_final);
                 fprintf(outfile, "Total visibilities: %d\n", total_visibilities);
-                fprintf(outfile, "Reduced-chi2 (Num visibilities): %f\n", (0.5*final_chi2)/total_visibilities);
-                fprintf(outfile, "Reduced-chi2 (Weights sum): %f\n", (0.5*final_chi2)/sum_weights);
+                fprintf(outfile, "Reduced-chi2 (Num visibilities): %f\n", chi2_final/total_visibilities);
+                fprintf(outfile, "Reduced-chi2 (Weights sum): %f\n", chi2_final/sum_weights);
                 fprintf(outfile, "S: %f\n", final_S);
                 if(reg_term != 1) {
                         fprintf(outfile, "Normalized S: %f\n", final_S/(M*N));
