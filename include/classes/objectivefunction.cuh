@@ -67,6 +67,20 @@ void copyDphiToXi(float *xi)
 std::vector<Fi*> getFi(){
         return this->fis;
 };
+
+Fi * getFiByName(std::string fi_name){
+        Fi * found_fi;
+        for(std::vector<Fi*>::iterator it = this->fis.begin(); it != this->fis.end(); it++){
+            if((*it)->getName() == fi_name){
+                found_fi = (*it);
+                break;
+            }else{
+                found_fi = NULL;
+            }
+        }
+        return found_fi;
+};
+
 void setN(long N){
         this->N = N;
 }

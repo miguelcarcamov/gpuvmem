@@ -790,15 +790,8 @@ void MFS::run()
 
         if(this->gridding)
         {
-            std::vector<Fi*> fis = optimizer->getObjectiveFunction()->getFi();
-
-            for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++){
-              if((*it)->getName() == "Chi2"){
-                  std::cout << "Setting CKernel in " << (*it)->getName() <<" function" << std::endl;
-                  (*it)->setCKernel(this->ckernel);
-              }
-            }
-
+            Fi *chi2 =  optimizer->getObjectiveFunction()->getFiByName("Chi2");
+            chi2->setCKernel(this->ckernel);
         }
 
         printf("\n\nStarting optimizer\n");
@@ -822,20 +815,19 @@ void MFS::run()
                 (this->Order)(optimizer, image);
         }
 
-        float chi2_final;
-        float final_S;
-        float lambda_S;
-        std::vector<Fi*> fis = optimizer->getObjectiveFunction()->getFi();
-        for(std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++){
-          if((*it)->getName() == "Chi2"){
-              chi2_final = (*it)->get_fivalue();
-          }else{
-            if((*it)->getName() == "Entropy"){
-              final_S = (*it)->get_fivalue();
-              lambda_S = (*it)->getPenalizationFactor();
-            }
-          }
+        float chi2_final = 0.0f;
+        float final_S = 0.0f;
+        float lambda_S = 0.0f;
+        Fi *chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+        if (NULL != chi2){
+          chi2_final = chi2->get_fivalue();
         }
+        Fi *entropy = optimizer->getObjectiveFunction()->getFiByName("Entropy");
+        if (NULL != entropy){
+          final_S = entropy->get_fivalue();
+          lambda_S = entropy->getPenalizationFactor();
+        }
+
 
         t = clock() - t;
         end = omp_get_wtime();
