@@ -1969,7 +1969,7 @@ __global__ void noise_image(float *noise_image, float *weight_image, float max_w
 
         float noise_squared = noise_jypix * noise_jypix;
         float normalized_weight = (weight_image[N*i+j]/max_weight)/noise_squared;
-        float noiseval = sqrtf(1.0/normalized_weight);
+        float noiseval = sqrtf(1.0f/normalized_weight);
         noise_image[N*i+j] = noiseval;
 }
 
@@ -1980,7 +1980,7 @@ __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_c
 
         float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
-        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * atten * fg_scale, 0.0);
+        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * atten * fg_scale, 0.0f);
 }
 
 __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_cutoff, float *gcf, cufftComplex *image, long N, float xobs, float yobs, float fg_scale, float freq, double DELTAX, double DELTAY, int primary_beam)
@@ -1990,7 +1990,7 @@ __global__ void apply_beam2I(float antenna_diameter, float pb_factor, float pb_c
 
         float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs, yobs, DELTAX, DELTAY, primary_beam);
 
-        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * gcf[N*i+j] * atten * fg_scale, 0.0);
+        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * gcf[N*i+j] * atten * fg_scale, 0.0f);
 }
 
 __global__ void apply_GCF(cufftComplex *image, float *gcf, long N)
@@ -1998,7 +1998,7 @@ __global__ void apply_GCF(cufftComplex *image, float *gcf, long N)
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * gcf[N*i+j], 0.0);
+        image[N*i+j] = make_cuFloatComplex(image[N*i+j].x * gcf[N*i+j], 0.0f);
 }
 
 
@@ -2051,8 +2051,7 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
         double du, dv;
         double2 uv;
         cufftComplex v11, v12, v21, v22;
-        float Zreal;
-        float Zimag;
+        cufftComplex Z;
 
         if (i < numVisibilities) {
 
@@ -2084,10 +2083,9 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                                 v21 = V[N*j1 + i2]; /* [i2, j1] */
                                 v22 = V[N*j2 + i2]; /* [i2, j2] */
 
-                                Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
-                                Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
-
-                                Vm[i] = make_cuFloatComplex(Zreal, Zimag);
+                                Z = make_cuFloatComplex((1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x,\
+                                                        (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y);
+                                Vm[i] = Z;
                         }else{
                                 weight[i] = 0.0f;
                         }
@@ -2142,7 +2140,8 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
 __global__ void residual(cufftComplex *Vr, cufftComplex *Vm, cufftComplex *Vo, long numVisibilities){
         const int i = threadIdx.x + blockDim.x * blockIdx.x;
         if (i < numVisibilities) {
-                Vr[i] = cuCsubf(Vm[i], Vo[i]);
+                //Vr[i] = cuCsubf(Vm[i], Vo[i]);
+                Vr[i] = make_cuFloatComplex(Vm[i].x - Vo[i].x, Vm[i].y - Vo[i].y);
         }
 }
 
@@ -3109,8 +3108,8 @@ __global__ void calculateInu(cufftComplex *I_nu, float* I, float nu, float nu_0,
 
         I_nu[N*i+j].x = I_nu_0 * nudiv_pow_alpha;
 
-        if(I_nu[N*i+j].x < -1.0*eta*MINPIX) {
-                I_nu[N*i+j].x = -1.0*eta*MINPIX;
+        if(I_nu[N*i+j].x < -1.0f*eta*MINPIX) {
+                I_nu[N*i+j].x = -1.0f*eta*MINPIX;
         }
 
         I_nu[N*i+j].y = 0.0f;
@@ -3272,12 +3271,12 @@ __global__ void noise_reduction(float *noise_I, long N, long M){
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(noise_I[N*i+j] > 0.0f)
-                noise_I[N*i+j] = 1/sqrt(noise_I[N*i+j]);
+                noise_I[N*i+j] = 1.0f/sqrt(noise_I[N*i+j]);
         else
                 noise_I[N*i+j] = 0.0f;
 
         if(noise_I[N*M+N*i+j] > 0.0f)
-                noise_I[N*M+N*i+j] = 1/sqrt(noise_I[N*M+N*i+j]);
+                noise_I[N*M+N*i+j] = 1.0f/sqrt(noise_I[N*M+N*i+j]);
         else
                 noise_I[N*M+N*i+j] = 0.0f;
 }
@@ -3320,8 +3319,6 @@ __host__ void simulate(float *I, VirtualImageProcessor *ip)
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                     if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY){
                                           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-
-                                                  checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0, sizeof(float)*max_number_vis));
                                                   // BILINEAR INTERPOLATION
                                                   vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                                                           datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
@@ -3444,7 +3441,7 @@ __host__ void dchi2(float *I, float *dxi2, float *result_dchi2, VirtualImageProc
                                                         checkCudaErrors(cudaDeviceSynchronize());
 
 
-                                                                #pragma omp critical
+                                                        #pragma omp critical
                                                         {
                                                                 if (flag_opt % 2 == 0)
                                                                         DChi2_total_I_nu_0 <<< numBlocksNN, threadsPerBlockNN >>>
@@ -3755,7 +3752,7 @@ __host__ void calculateErrors(Image *image){
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
 
-                          #pragma omp parallel for private(sum_weights) num_threads(num_gpus) schedule(static,1)
+                        #pragma omp parallel for private(sum_weights) num_threads(num_gpus) schedule(static,1)
                         for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                         {
                                 unsigned int j = omp_get_thread_num();

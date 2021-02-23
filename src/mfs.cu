@@ -523,7 +523,7 @@ void MFS::setDevice()
         printf("gpuvmem estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*1200.0, beam_bmin*1200.0, beam_bpa); // ~ A third of the clean beam
         beam_bmaj = beam_bmaj / fabs(DELTAX); // Beam major axis to pixels
         beam_bmin = beam_bmin / fabs(DELTAX); // Beam minor axis to pixels
-        noise_jypix = this->getVisNoise() / (PI_D * beam_bmaj * beam_bmin / (4.0 * log(2.0) )); // Estimating noise at FWHM
+        noise_jypix = this->getVisNoise() / (PI_D * beam_bmaj * beam_bmin / (4.0 * logf(2.0) )); // Estimating noise at FWHM
 
         /////////////////////////////////////////////////////CALCULATE DIRECTION COSINES/////////////////////////////////////////////////
         double raimage = ra * RPDEG_D;
