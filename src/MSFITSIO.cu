@@ -934,7 +934,7 @@ __host__ void modelToHost(std::vector<Field>& fields, MSData data, int num_gpus,
                                 checkCudaErrors(cudaMemcpy(fields[f].visibilities[i][s].Vm.data(), fields[f].device_visibilities[i][s].Vm, sizeof(cufftComplex)*fields[f].numVisibilitiesPerFreqPerStoke[i][s], cudaMemcpyDeviceToHost));
                                 for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s]; j++) {
                                         if (fields[f].visibilities[i][s].uvw[j].x < 0) {
-                                                fields[f].visibilities[i][s].Vm[j].y *= -1.0f;
+                                                fields[f].visibilities[i][s].Vm[j] = cuConjf(fields[f].visibilities[i][s].Vm[j]);
                                         }
                                 }
                         }
