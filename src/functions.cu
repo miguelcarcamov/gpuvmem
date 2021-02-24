@@ -2060,7 +2060,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                  uv.x = UVW[i].x/fabs(deltau);
                  uv.y = UVW[i].y/fabs(deltav);
 
-                 if (fabs(uv.x) <= (N/2)+0.5 && fabs(uv.y) <= (N/2)+0.5) {
+                 if (fabs(uv.x) < N/2 && fabs(uv.y) < N/2) {
 
                          if(uv.x < 0.0)
                                  uv.x = uv.x+N;
@@ -2069,10 +2069,12 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                          if(uv.y < 0.0)
                                  uv.y = uv.y+N;
 
+                         uv.x = round(uv.x);
                          i1 = (int)uv.x;
                          i2 = (i1+1)%N;
                          du = uv.x - i1;
 
+                         uv.y = round(uv.y);
                          j1 = (int)uv.y;
                          j2 = (j1+1)%N;
                          dv = uv.y - j1;

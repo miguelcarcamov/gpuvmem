@@ -259,7 +259,7 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
         }
 
         h_values.DELTAX = fabs(h_values.DELTAX);
-        h_values.DELTAY *= -1.0;
+        //h_values.DELTAY *= -1.0;
 
         if(close_fits)
                 closeFITS(hdu_in);
