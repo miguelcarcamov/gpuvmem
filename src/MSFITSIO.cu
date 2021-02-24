@@ -304,7 +304,7 @@ __host__ headerValues readFITSHeader(const char *filename)
         }
 
         h_values.DELTAX = fabs(h_values.DELTAX);
-        h_values.DELTAY *= -1.0;
+        //h_values.DELTAY *= -1.0;
 
         closeFITS(hdu_in);
         return h_values;
