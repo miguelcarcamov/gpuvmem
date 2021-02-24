@@ -10,7 +10,7 @@ virtual void apply(std::vector<MSDataset>& d) = 0;
 virtual void configure(void* params) = 0;
 
 WeightingScheme(){
-    this->threads = omp_get_max_threads() - 1;
+    this->threads = omp_get_max_threads() - 2;
 };
 
 WeightingScheme(int threads){
