@@ -2070,15 +2070,15 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                         if(uv.y < 0.0)
                                 uv.y += N;
 
-                        round_uv.x = round(uv.x);
-                        round_uv.y = round(uv.y);
+                        round_uv.x = floor(uv.x);
+                        round_uv.y = floor(uv.y);
 
                         i1 = (int)round_uv.x;
-                        i2 = (i1+1);
+                        i2 = i1+1;
                         du = round_uv.x - i1;
 
                         j1 = (int)round_uv.y;
-                        j2 = (j1+1);
+                        j2 = j1+1;
                         dv = round_uv.y - j1;
 
                         if (i1 >= 0 && i1 < N && i2 >= 0 && i2 < N && j1 >= 0 && j1 < N && j2 >= 0 && j2 < N) {
