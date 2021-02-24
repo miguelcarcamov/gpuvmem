@@ -2069,12 +2069,10 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                          if(uv.y < 0.0)
                                  uv.y = uv.y+N;
 
-                         uv.x = round(uv.x);
                          i1 = (int)uv.x;
                          i2 = (i1+1)%N;
                          du = uv.x - i1;
 
-                         uv.y = round(uv.y);
                          j1 = (int)uv.y;
                          j2 = (j1+1)%N;
                          dv = uv.y - j1;
@@ -2127,9 +2125,9 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
                 if (j < N && k < N && j+1 < N && k+1 < N) {
                         /* Bilinear interpolation */
                         // Real part
-                        Z.x = (1.0-f_j)*(1.0-f_k)*V[N*k+j].x + f_j*(1.0-f_k)*V[N*k+(j+1)].x + (1.0-f_j)*f_k*V[N*(k+1)+j].x + f_j*f_k*V[N*(k+1)+j+1].x;
+                        Z.x = (1-f_j)*(1-f_k)*V[N*k+j].x + f_j*(1-f_k)*V[N*k+(j+1)].x + (1-f_j)*f_k*V[N*(k+1)+j].x + f_j*f_k*V[N*(k+1)+j+1].x;
                         // Imaginary part
-                        Z.y = (1.0-f_j)*(1.0-f_k)*V[N*k+j].y + f_j*(1.0-f_k)*V[N*k+(j+1)].y + (1.0-f_j)*f_k*V[N*(k+1)+j].y + f_j*f_k*V[N*(k+1)+j+1].y;
+                        Z.y = (1-f_j)*(1-f_k)*V[N*k+j].y + f_j*(1-f_k)*V[N*k+(j+1)].y + (1-f_j)*f_k*V[N*(k+1)+j].y + f_j*f_k*V[N*(k+1)+j+1].y;
 
                         Vm[i] = Z;
                 }else{
