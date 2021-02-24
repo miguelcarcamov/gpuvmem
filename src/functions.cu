@@ -2059,7 +2059,7 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
         if (i < numVisibilities) {
 
                 uv.x = UVW[i].x/fabs(deltau);
-                uv.y = UVW[i].y/deltav;
+                uv.y = UVW[i].y/fabs(deltav);
 
                 if (fabs(uv.x) < N/2 && fabs(uv.y) < N/2) {
 
