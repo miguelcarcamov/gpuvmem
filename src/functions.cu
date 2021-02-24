@@ -2051,6 +2051,7 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
         int i1, i2, j1, j2;
         double du, dv;
         double2 uv;
+        double2 round_uv;
         cufftComplex v11, v12, v21, v22;
         float Zreal;
         float Zimag;
@@ -2060,23 +2061,25 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                 uv.x = UVW[i].x/fabs(deltau);
                 uv.y = UVW[i].y/deltav;
 
-                if (fabs(uv.x) <= (N/2)+0.5 && fabs(uv.y) <= (N/2)+0.5) {
+                if (fabs(uv.x) < N/2 && fabs(uv.y) < N/2) {
 
                         if(uv.x < 0.0)
-                                uv.x = floor(uv.x+N);
+                                uv.x += N;
 
 
                         if(uv.y < 0.0)
-                                uv.y = floor(uv.y+N);
+                                uv.y += N;
 
+                        round_uv.x = round(uv.x);
+                        round_uv.y = round(uv.y);
 
-                        i1 = (int)uv.x;
-                        i2 = (i1+1)%N;
-                        du = uv.x - i1;
+                        i1 = (int)round_uv.x;
+                        i2 = (i1+1);
+                        du = round_uv.x - i1;
 
-                        j1 = (int)uv.y;
-                        j2 = (j1+1)%N;
-                        dv = uv.y - j1;
+                        j1 = (int)round_uv.y;
+                        j2 = (j1+1);
+                        dv = round_uv.y - j1;
 
                         if (i1 >= 0 && i1 < N && i2 >= 0 && i2 < N && j1 >= 0 && j1 < N && j2 >= 0 && j2 < N) {
                                 /* Bilinear interpolation */
@@ -2085,8 +2088,8 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                                 v21 = V[N*j1 + i2]; /* [i2, j1] */
                                 v22 = V[N*j2 + i2]; /* [i2, j2] */
 
-                                Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
-                                Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
+                                Zreal = (1.0-du)*(1.0-dv)*v11.x + (1.0-du)*dv*v12.x + du*(1.0-dv)*v21.x + du*dv*v22.x;
+                                Zimag = (1.0-du)*(1.0-dv)*v11.y + (1.0-du)*dv*v12.y + du*(1.0-dv)*v21.y + du*dv*v22.y;
                                 Vm[i] = make_cuFloatComplex(Zreal, Zimag);
                         }else{
                                 weight[i] = 0.0f;
@@ -2125,9 +2128,9 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
                 if (j < N && k < N && j+1 < N && k+1 < N) {
                         /* Bilinear interpolation */
                         // Real part
-                        Z.x = (1-f_j)*(1-f_k)*V[N*k+j].x + f_j*(1-f_k)*V[N*k+(j+1)].x + (1-f_j)*f_k*V[N*(k+1)+j].x + f_j*f_k*V[N*(k+1)+j+1].x;
+                        Z.x = (1.0-f_j)*(1.0-f_k)*V[N*k+j].x + f_j*(1.0-f_k)*V[N*k+(j+1)].x + (1.0-f_j)*f_k*V[N*(k+1)+j].x + f_j*f_k*V[N*(k+1)+j+1].x;
                         // Imaginary part
-                        Z.y = (1-f_j)*(1-f_k)*V[N*k+j].y + f_j*(1-f_k)*V[N*k+(j+1)].y + (1-f_j)*f_k*V[N*(k+1)+j].y + f_j*f_k*V[N*(k+1)+j+1].y;
+                        Z.y = (1.0-f_j)*(1.0-f_k)*V[N*k+j].y + f_j*(1.0-f_k)*V[N*k+(j+1)].y + (1.0-f_j)*f_k*V[N*(k+1)+j].y + f_j*f_k*V[N*(k+1)+j+1].y;
 
                         Vm[i] = Z;
                 }else{
