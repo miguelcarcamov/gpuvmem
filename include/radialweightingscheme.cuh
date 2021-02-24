@@ -4,7 +4,6 @@
 #include "framework.cuh"
 #include "functions.cuh"
 
-extern int gridding;
 extern long M;
 extern long N;
 extern double deltau;
@@ -14,6 +13,7 @@ class RadialWeightingScheme : public WeightingScheme
 {
 public:
 RadialWeightingScheme();
+RadialWeightingScheme(int threads);
 void apply(std::vector<MSDataset>& d);
 void configure(void *params){};
 };

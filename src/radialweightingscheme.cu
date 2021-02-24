@@ -1,10 +1,13 @@
 #include "radialweightingscheme.cuh"
 
-RadialWeightingScheme::RadialWeightingScheme(){
-};
+RadialWeightingScheme::RadialWeightingScheme(): WeightingScheme(){};
+
+RadialWeightingScheme::RadialWeightingScheme(int threads) : WeightingScheme(threads){};
+
 
 void RadialWeightingScheme::apply(std::vector<MSDataset>& d)
 {
+        printf("Running weighting scheme with %d threads\n", this->threads);
         float w;
         double3 uvw;
         for(int j=0; j < d.size(); j++) {
@@ -14,7 +17,7 @@ void RadialWeightingScheme::apply(std::vector<MSDataset>& d)
                                         d[j].fields[f].backup_visibilities[i][s].weight.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
 
-                                        #pragma omp parallel for schedule(static, 1) num_threads(gridding) private(uvw, w)
+                                        #pragma omp parallel for schedule(static, 1) num_threads(this->threads) private(uvw, w)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
                                                 uvw = d[j].fields[f].visibilities[i][s].uvw[z];

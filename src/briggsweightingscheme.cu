@@ -1,11 +1,7 @@
 #include "briggsweightingscheme.cuh"
 
-BriggsWeightingScheme::BriggsWeightingScheme() : WeightingScheme(){
-  printf("Running weighting scheme with %d threads\n", this->threads);
-};
-BriggsWeightingScheme::BriggsWeightingScheme(int threads) : WeightingScheme(threads){
-  printf("Running weighting scheme with %d threads\n", this->threads);
-};
+BriggsWeightingScheme::BriggsWeightingScheme() : WeightingScheme(){};
+BriggsWeightingScheme::BriggsWeightingScheme(int threads) : WeightingScheme(threads){};
 
 float BriggsWeightingScheme::getRobustParam(){
         return this->robust_param;
@@ -29,7 +25,7 @@ void BriggsWeightingScheme::configure(void *params){
 
 void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
 {
-
+        printf("Running weighting scheme with %d threads\n", this->threads);
         float w;
         double3 uvw;
         std::vector<float> g_weights(M*N);

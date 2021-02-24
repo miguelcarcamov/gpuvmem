@@ -13,7 +13,7 @@ double beam_bmaj, beam_bmin, beam_bpa;
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
 
-int gridding, status_mod_in;
+int status_mod_in;
 int multigpu, firstgpu, reg_term, total_visibilities, image_count, nPenalizators, nMeasurementSets=0, max_number_vis;
 
 std::string msinput, msoutput, modinput, mempath, out_image, output;
@@ -83,11 +83,8 @@ void MFS::configure(int argc, char **argv)
         random_probability = variables.randoms;
         ioVisibilitiesHandler->setRandomProbability(random_probability);
         eta = variables.eta;
-        gridding = variables.gridding;
-        printf("Gridding threads %d\n", variables.gridding);
-        exit(-1);
-        ioVisibilitiesHandler->setGridding(gridding);
-        this->setGriddingThreads(gridding);
+        ioVisibilitiesHandler->setGridding(variables.gridding);
+        this->setGriddingThreads(variables.gridding);
         nu_0 = variables.nu_0;
         robust_param = variables.robust_param;
         threshold = variables.threshold * 5.0;

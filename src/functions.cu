@@ -36,7 +36,7 @@ namespace cg = cooperative_groups;
 
 extern long M, N;
 extern int iterations, iter, image_count, \
-           status_mod_in, flag_opt, num_gpus, multigpu, firstgpu, reg_term, gridding;
+           status_mod_in, flag_opt, num_gpus, multigpu, firstgpu, reg_term;
 
 extern cufftHandle plan1GPU;
 extern cufftComplex *device_V, *device_fg_image, *device_I_nu;

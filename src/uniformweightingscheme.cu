@@ -1,15 +1,12 @@
 #include "uniformweightingscheme.cuh"
 
-UniformWeightingScheme::UniformWeightingScheme() : WeightingScheme(){
-  printf("Running weighting scheme with %d threads\n", this->threads);
-};
-UniformWeightingScheme::UniformWeightingScheme(int threads) : WeightingScheme(threads){
-  printf("Running weighting scheme with %d threads\n", this->threads);
-};
+UniformWeightingScheme::UniformWeightingScheme() : WeightingScheme(){};
+UniformWeightingScheme::UniformWeightingScheme(int threads) : WeightingScheme(threads){};
 
 void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
 {
 
+        printf("Running weighting scheme with %d threads\n", this->threads);
         float w;
         double3 uvw;
         std::vector<float> g_weights(M*N);
