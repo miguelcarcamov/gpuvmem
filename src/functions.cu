@@ -215,11 +215,11 @@ __host__ Vars getOptions(int argc, char **argv) {
         flags.Var(variables.randoms, 'r', "random_sampling", 1.0f, "Percentage of data used when random sampling", "Optional");
         flags.Var(variables.robust_param, 'R', "robust_parameter", 2.0f, "Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0 for natural weighting and 0.0 for a tradeoff between these two.");
         flags.Var(variables.ofile, 'f', "output_file", std::string("NULL"), "Output file where final objective function values are saved", "Optional");
-        flags.Var(variables.blockSizeX, 'X', "blockSizeX", -1, "GPU block X Size for image/Fourier plane (Needs to be pow of 2)");
-        flags.Var(variables.blockSizeY, 'Y', "blockSizeY", -1, "GPU block Y Size for image/Fourier plane (Needs to be pow of 2)");
-        flags.Var(variables.blockSizeV, 'V', "blockSizeV", -1, "GPU block V Size for visibilities (Needs to be pow of 2)");
-        flags.Var(variables.it_max, 't', "iterations", 500, "Number of iterations for optimization");
-        flags.Var(variables.gridding, 'g', "gridding", 0, "Use gridded visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)");
+        flags.Var(variables.blockSizeX, 'X', "blockSizeX", int32_t(-1), "GPU block X Size for image/Fourier plane (Needs to be pow of 2)");
+        flags.Var(variables.blockSizeY, 'Y', "blockSizeY", int32_t(-1), "GPU block Y Size for image/Fourier plane (Needs to be pow of 2)");
+        flags.Var(variables.blockSizeV, 'V', "blockSizeV", int32_t(-1), "GPU block V Size for visibilities (Needs to be pow of 2)");
+        flags.Var(variables.it_max, 't', "iterations", int32_t(500), "Number of iterations for optimization");
+        flags.Var(variables.gridding, 'g', "gridding", int32_t(0), "Use gridded visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)");
         flags.Var(variables.initial_values, 'z', "initial_values", std::string("NULL"), "Initial values for image/s");
         flags.Var(variables.penalization_factors, 'Z', "regularization_factors", std::string("NULL"), "Regularization factors for each regularization (separated by a comma)");
         flags.Bool(verbose_flag, 'v', "verbose", "Shows information through all the execution", "Flags");
@@ -252,7 +252,7 @@ __host__ Vars getOptions(int argc, char **argv) {
                 exit(EXIT_SUCCESS);
         }
 
-        if(variables.randoms > 1.0) {
+        if(variables.randoms > 1.0 || variables.randoms < 0.0) {
                 print_help();
                 exit(EXIT_FAILURE);
         }
