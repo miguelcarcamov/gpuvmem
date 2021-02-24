@@ -2051,6 +2051,7 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
         int i1, i2, j1, j2;
         double du, dv;
         double2 uv;
+        double2 round_uv;
         cufftComplex v11, v12, v21, v22;
         float Zreal;
         float Zimag;
@@ -2069,13 +2070,16 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                         if(uv.y < 0.0)
                                 uv.y += N;
 
-                        i1 = (int)uv.x;
-                        i2 = i1+1;
-                        du = uv.x - i1;
+                        round_uv.x = round(uv.x);
+                        round_uv.y = round(uv.y);
 
-                        j1 = (int)uv.y;
-                        j2 = j1+1;
-                        dv = uv.y - j1;
+                        i1 = (int)round_uv.x;
+                        i2 = (i1+1)%N;
+                        du = round_uv.x - i1;
+
+                        j1 = (int)round_uv.y;
+                        j2 = (j1+1)%N;
+                        dv = round_uv.y - j1;
 
                         if (i1 >= 0 && i1 < N && i2 >= 0 && i2 < N && j1 >= 0 && j1 < N && j2 >= 0 && j2 < N) {
                                 /* Bilinear interpolation */
