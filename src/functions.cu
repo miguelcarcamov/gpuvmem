@@ -2016,6 +2016,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
         float u,v, phase, c, s;
         double upix = xphs/(double)M;
         double vpix = yphs/(double)N;
+        cufftComplex exp_phase;
 
         if(j < M/2) {
                 u = upix * j;
@@ -2029,15 +2030,15 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                 v = vpix * (i-N);
         }
 
-        phase = 2.0*(u+v);
+        phase = 2.0f*(u+v);
     #if (__CUDA_ARCH__ >= 300 )
         sincospif(phase, &s, &c);
     #else
         c = cospif(phase);
         s = sinpif(phase);
     #endif
-
-        data[N*i+j] = cuCmulf(data[N*i+j], make_cuFloatComplex(c, s));
+        exp_phase = make_cuFloatComplex(c, s); // Create the complex cos + i sin
+        data[N*i+j] = cuCmulf(data[N*i+j], exp_phase); // Complex multiplication
 }
 
 
