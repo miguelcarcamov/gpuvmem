@@ -84,7 +84,7 @@ __host__ void LBFGS::deallocateMemoryGpu()
 
 __host__ void LBFGS::optimize()
 {
-        printf("\n\nStarting Lbfgs\n\n");
+        std::cout << "\n\nStarting Lbfgs\n" << std::endl;
         double start, end;
         I = image;
         flag_opt = this->flag;
@@ -97,7 +97,7 @@ __host__ void LBFGS::optimize()
 
         fp = of->calcFunction(image->getImage());
         if(verbose_flag) {
-                printf("Starting function value = %f\n", fp);
+                std::cout << "Starting function value = " << std::setprecision(4) << fp << std::endl;
         }
         of->calcGradient(image->getImage(),xi, 0);
 
@@ -117,7 +117,7 @@ __host__ void LBFGS::optimize()
                 this->current_iteration = i;
                 this->max_per_it = 0.0f;
                 if(verbose_flag) {
-                        printf("\n\n********** Iteration %d **********\n\n", i);
+                        std::cout << "\n\n********** Iteration "<< i <<"**********\n" << std::endl;
                 }
 
                 checkCudaErrors(cudaMemcpy(p_old, image->getImage(), sizeof(float)*M*N*image->getImageCount(), cudaMemcpyDeviceToDevice));
@@ -126,7 +126,7 @@ __host__ void LBFGS::optimize()
                 linmin(image->getImage(), xi, &fret, NULL);
 
                 if((fp - fret)/std::max({fabsf(fret), fabsf(fp), 1.0f}) <= this->ftol){
-                        printf("Exit due to tolerance\n");
+                        std::cout << "Exit due to tolerance" << std::endl;
                         of->calcFunction(I->getImage());
                         deallocateMemoryGpu();
                         return;
@@ -137,11 +137,11 @@ __host__ void LBFGS::optimize()
                         normArray<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, M, N, i);
                         checkCudaErrors(cudaDeviceSynchronize());
                 }
-                
+
                 this->max_per_it = std::max(this->max_per_it, deviceMaxReduce(norm_vector, M*N*image->getImageCount(), threadsPerBlockNN.x * threadsPerBlockNN.y));
 
                 if(this->max_per_it <= this->gtol) {
-                        printf("Exit due to gnorm ~ 0\n");
+                        std::cout << "Exit due to gnorm ~ 0" << std::endl;
                         of->calcFunction(image->getImage());
                         deallocateMemoryGpu();
                         return;
@@ -150,7 +150,7 @@ __host__ void LBFGS::optimize()
 
                 fp= of->calcFunction(image->getImage());
                 if(verbose_flag) {
-                        printf("Function value = %f\n", fp);
+                        std::cout << "Function value = " << std::setprecision(4) << fp << std::endl;
                 }
                 of->calcGradient(image->getImage(),xi, i);
 
@@ -165,10 +165,10 @@ __host__ void LBFGS::optimize()
                 end = omp_get_wtime();
                 double wall_time = end-start;
                 if(verbose_flag) {
-                        printf("Time: %lf seconds\n", i, wall_time);
+                        std::cout << "Time: "<< std::setprecision(4) << wall_time << " seconds" << std::endl;
                 }
         }
-        printf("Too many iterations in LBFGS\n");
+        std::cout << "Too many iterations in LBFGS" << std::endl;
         of->calcFunction(image->getImage());
         deallocateMemoryGpu();
         return;

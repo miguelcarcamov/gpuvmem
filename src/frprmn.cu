@@ -88,7 +88,7 @@ __host__ void ConjugateGradient::optimize()
 
         fp = of->calcFunction(image->getImage());
         if(verbose_flag) {
-                printf("Starting function value = %f\n", fp);
+                std::cout << "Starting function value = " << std::setprecision(4) << fp << std::endl;
         }
         of->calcGradient(image->getImage(),xi,0);
         //g=-xi
@@ -104,11 +104,11 @@ __host__ void ConjugateGradient::optimize()
                 start = omp_get_wtime();
                 this->current_iteration = i;
                 if(verbose_flag) {
-                        printf("\n\n********** Iteration %d **********\n\n", i);
+                        std::cout << "\n\n********** Iteration "<< i <<"**********\n" << std::endl;
                 }
                 linmin(image->getImage(), xi, &fret, NULL);
                 if (2.0f*fabsf(fret-fp) <= this->ftol*(fabsf(fret)+fabsf(fp)+EPS)) {
-                        printf("Exit due to tolerance\n");
+                        std::cout << "Exit due to tolerance" << std::endl;
                         of->calcFunction(I->getImage());
                         deallocateMemoryGpu();
                         return;
@@ -116,7 +116,7 @@ __host__ void ConjugateGradient::optimize()
 
                 fp= of->calcFunction(image->getImage());
                 if(verbose_flag) {
-                        printf("Function value = %f\n", fp);
+                        std::cout << "Function value = " << std::setprecision(4) << fp << std::endl;
                 }
                 of->calcGradient(image->getImage(),xi, i);
 
@@ -130,7 +130,7 @@ __host__ void ConjugateGradient::optimize()
 
                 gmax = deviceMaxReduce(temp, M*N*image->getImageCount(), threadsPerBlockNN.x * threadsPerBlockNN.y);
                 if(gmax < this->gtol){
-                        printf("Exit due to gradient tolerance\n");
+                        std::cout << "Exit due to gradient tolerance" << std::endl;
                         of->calcFunction(I->getImage());
                         deallocateMemoryGpu();
                         return;
@@ -150,7 +150,7 @@ __host__ void ConjugateGradient::optimize()
                 gg = deviceReduce<float>(device_gg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                 dgg = deviceReduce<float>(device_dgg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
                 if(gg == 0.0f) {
-                        printf("Exit due to gg = 0\n");
+                        std::cout << "Exit due to gg = 0" << std::endl;
                         of->calcFunction(image->getImage());
                         deallocateMemoryGpu();
                         return;
@@ -167,10 +167,10 @@ __host__ void ConjugateGradient::optimize()
                 end = omp_get_wtime();
                 double wall_time = end-start;
                 if(verbose_flag) {
-                        printf("Time: %lf seconds\n", i, wall_time);
+                        std::cout << "Time: "<< std::setprecision(4) << wall_time << " seconds" << std::endl;
                 }
         }
-        printf("Too many iterations in frprmn\n");
+        std::cout << "Too many iterations in frprmn" << std::endl;
         of->calcFunction(image->getImage());
         deallocateMemoryGpu();
         return;
