@@ -2045,62 +2045,60 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
 /*
  * Interpolate in the visibility array to find the visibility at (u,v);
  */
-__global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
-{
-        const int i = threadIdx.x + blockDim.x * blockIdx.x;
-        int i1, i2, j1, j2;
-        double du, dv;
-        double2 uv;
-        double2 round_uv;
-        cufftComplex v11, v12, v21, v22;
-        float Zreal;
-        float Zimag;
+ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
+ {
+         const int i = threadIdx.x + blockDim.x * blockIdx.x;
+         int i1, i2, j1, j2;
+         double du, dv;
+         double2 uv;
+         cufftComplex v11, v12, v21, v22;
+         float Zreal;
+         float Zimag;
 
-        if (i < numVisibilities) {
+         if (i < numVisibilities) {
 
-                uv.x = UVW[i].x/fabs(deltau);
-                uv.y = UVW[i].y/fabs(deltav);
+                 uv.x = UVW[i].x/fabs(deltau);
+                 uv.y = UVW[i].y/deltav;
 
-                if (fabs(uv.x) < N/2 && fabs(uv.y) < N/2) {
+                 if (fabs(uv.x) <= (N/2)+0.5 && fabs(uv.y) <= (N/2)+0.5) {
 
-                        if(uv.x < 0.0)
-                                uv.x += N;
+                         if(uv.x < 0.0)
+                                 uv.x = round(uv.x+N);
 
 
-                        if(uv.y < 0.0)
-                                uv.y += N;
+                         if(uv.y < 0.0)
+                                 uv.y = round(uv.y+N);
 
-                        round_uv.x = floor(uv.x);
-                        round_uv.y = floor(uv.y);
 
-                        i1 = (int)round_uv.x;
-                        i2 = (i1+1)%N;
-                        du = round_uv.x - i1;
+                         i1 = (int)uv.x;
+                         i2 = (i1+1)%N;
+                         du = uv.x - i1;
 
-                        j1 = (int)round_uv.y;
-                        j2 = (j1+1)%N;
-                        dv = round_uv.y - j1;
+                         j1 = (int)uv.y;
+                         j2 = (j1+1)%N;
+                         dv = uv.y - j1;
 
-                        if (i1 >= 0 && i1 < N && i2 >= 0 && i2 < N && j1 >= 0 && j1 < N && j2 >= 0 && j2 < N) {
-                                /* Bilinear interpolation */
-                                v11 = V[N*j1 + i1]; /* [i1, j1] */
-                                v12 = V[N*j2 + i1]; /* [i1, j2] */
-                                v21 = V[N*j1 + i2]; /* [i2, j1] */
-                                v22 = V[N*j2 + i2]; /* [i2, j2] */
+                         if (i1 >= 0 && i1 < N && i2 >= 0 && i2 < N && j1 >= 0 && j1 < N && j2 >= 0 && j2 < N) {
+                                 /* Bilinear interpolation */
+                                 v11 = V[N*j1 + i1]; /* [i1, j1] */
+                                 v12 = V[N*j2 + i1]; /* [i1, j2] */
+                                 v21 = V[N*j1 + i2]; /* [i2, j1] */
+                                 v22 = V[N*j2 + i2]; /* [i2, j2] */
 
-                                Zreal = (1.0-du)*(1.0-dv)*v11.x + (1.0-du)*dv*v12.x + du*(1.0-dv)*v21.x + du*dv*v22.x;
-                                Zimag = (1.0-du)*(1.0-dv)*v11.y + (1.0-du)*dv*v12.y + du*(1.0-dv)*v21.y + du*dv*v22.y;
-                                Vm[i] = make_cuFloatComplex(Zreal, Zimag);
-                        }else{
-                                weight[i] = 0.0f;
-                        }
-                }else{
-                        weight[i] = 0.0f;
-                }
+                                 Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
+                                 Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
 
-        }
+                                 Vm[i] = make_cuComplex(Zreal, Zimag);
+                         }else{
+                                 weight[i] = 0.0f;
+                         }
+                 }else{
+                         weight[i] = 0.0f;
+                 }
 
-}
+         }
+
+ }
 
 
 __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
