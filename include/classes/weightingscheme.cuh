@@ -11,10 +11,12 @@ virtual void configure(void* params) = 0;
 
 WeightingScheme(){
     this->threads = omp_get_max_threads() - 1;
+    printf("Running weighting scheme with %d threads\n", this->threads);
 };
 
 WeightingScheme(int threads){
     this->threads = threads;
+    printf("Running weighting scheme with %d threads\n", this->threads);
 };
 
 int getThreads(){
@@ -23,6 +25,7 @@ int getThreads(){
 
 int setThreads(int threads){
     this->threads = threads;
+    printf("The running weighting scheme threads has been set to %d\n", this->threads);
 };
 
 void restoreWeights(std::vector<MSDataset>& d){

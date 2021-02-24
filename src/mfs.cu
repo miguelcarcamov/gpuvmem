@@ -415,11 +415,10 @@ void MFS::configure(int argc, char **argv)
         deltav = 1.0 / (N * deltay);
         if(NULL == this->scheme) {
                 this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
-                if(this->gridding){
-                  this->scheme->setThreads(this->getGriddingThreads());
-                }
         }
 
+        if(this->gridding)
+          this->scheme->setThreads(this->getGriddingThreads());
         this->scheme->configure(&robust_param);
         this->scheme->apply(datasets);
         if(this->gridding) {

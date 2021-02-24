@@ -11,7 +11,7 @@ void BriggsWeightingScheme::setRobustParam(float robust_param){
         if(robust_param >= -2.0 && robust_param <= 2.0) {
                 this->robust_param = robust_param;
         }else{
-                printf("Error. Robust parameter must have values between -2.0 and 2.0\n");
+                std::cout << "Error. Robust parameter must have values between -2.0 and 2.0"<< std::endl;
                 exit(-1);
         }
 
