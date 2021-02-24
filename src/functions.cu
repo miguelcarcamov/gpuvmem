@@ -2063,11 +2063,11 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                 if (fabs(uv.x) <= (N/2)+0.5 && fabs(uv.y) <= (N/2)+0.5) {
 
                         if(uv.x < 0.0)
-                                uv.x = round(uv.x+N);
+                                uv.x = floor(uv.x+N);
 
 
                         if(uv.y < 0.0)
-                                uv.y = round(uv.y+N);
+                                uv.y = floor(uv.y+N);
 
 
                         i1 = (int)uv.x;
