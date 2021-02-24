@@ -8,6 +8,7 @@ class NaturalWeightingScheme : public WeightingScheme
 {
 public:
 NaturalWeightingScheme();
+NaturalWeightingScheme(int threads);
 void configure(void *params){};
 void apply(std::vector<MSDataset>& d);
 };

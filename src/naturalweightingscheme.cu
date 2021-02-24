@@ -1,6 +1,7 @@
 #include "naturalweightingscheme.cuh"
 
-NaturalWeightingScheme::NaturalWeightingScheme(){};
+NaturalWeightingScheme::NaturalWeightingScheme() : WeightingScheme(){};
+NaturalWeightingScheme::NaturalWeightingScheme(int threads) : WeightingScheme(threads){};
 
 void NaturalWeightingScheme::apply(std::vector<MSDataset>& d){};
 

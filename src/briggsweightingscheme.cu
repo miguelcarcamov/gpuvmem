@@ -1,7 +1,7 @@
 #include "briggsweightingscheme.cuh"
 
-BriggsWeightingScheme::BriggsWeightingScheme(){
-};
+BriggsWeightingScheme::BriggsWeightingScheme() : WeightingScheme(){};
+BriggsWeightingScheme::BriggsWeightingScheme(int threads) : WeightingScheme(threads){};
 
 float BriggsWeightingScheme::getRobustParam(){
         return this->robust_param;
@@ -55,7 +55,7 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                         for(int i=0; i < d[j].data.total_frequencies; i++) {
                                 for(int s=0; s < d[j].data.nstokes; s++) {
                                         d[j].fields[f].backup_visibilities[i][s].weight.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights) private(x, y, grid_pos_x, grid_pos_y, uvw, w)
+                                        #pragma omp parallel for schedule(static, 1) num_threads(this->threads) shared(g_weights) private(x, y, grid_pos_x, grid_pos_y, uvw, w)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
                                                 // First we save the original weights
@@ -110,7 +110,7 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                         for(int i=0; i < d[j].data.total_frequencies; i++) {
                                 for(int s=0; s < d[j].data.nstokes; s++) {
                                         xy_pos.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, xy_pos) private(x, y, grid_pos_x, grid_pos_y, uvw, w)
+                                        #pragma omp parallel for schedule(static, 1) num_threads(this->threads) shared(g_weights, xy_pos) private(x, y, grid_pos_x, grid_pos_y, uvw, w)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
                                                 // First we save the original weights
@@ -150,7 +150,7 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
 
                                         }
 
-                                        #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, xy_pos, f_squared) private(x, y)
+                                        #pragma omp parallel for schedule(static, 1) num_threads(this->threads) shared(g_weights, xy_pos, f_squared) private(x, y)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
                                                 x = xy_pos[z].x;

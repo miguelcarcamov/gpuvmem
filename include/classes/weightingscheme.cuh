@@ -9,6 +9,22 @@ public:
 virtual void apply(std::vector<MSDataset>& d) = 0;
 virtual void configure(void* params) = 0;
 
+WeightingScheme(){
+    this->threads = omp_get_max_threads() - 1;
+};
+
+WeightingScheme(int threads){
+    this->threads = threads;
+};
+
+int getThreads(){
+    return this->threads;
+};
+
+int setThreads(int threads){
+    this->threads = threads;
+};
+
 void restoreWeights(std::vector<MSDataset>& d){
         for(int j=0; j < d.size(); j++) {
                 for(int f=0; f < d[j].data.nfields; f++) {
@@ -21,6 +37,8 @@ void restoreWeights(std::vector<MSDataset>& d){
         }
 };
 
+protected:
+  int threads;
 };
 
 #endif

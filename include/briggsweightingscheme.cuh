@@ -14,6 +14,7 @@ class BriggsWeightingScheme : public WeightingScheme
 {
 public:
 BriggsWeightingScheme();
+BriggsWeightingScheme(int threads);
 void apply(std::vector<MSDataset>& d);
 void configure(void *params);
 float getRobustParam();

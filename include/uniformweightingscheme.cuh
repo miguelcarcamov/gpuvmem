@@ -14,6 +14,7 @@ class UniformWeightingScheme : public WeightingScheme
 {
 public:
 UniformWeightingScheme();
+UniformWeightingScheme(int threads);
 void apply(std::vector<MSDataset>& d);
 void configure(void *params){};
 };
