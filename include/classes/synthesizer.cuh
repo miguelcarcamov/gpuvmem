@@ -71,7 +71,10 @@ __host__ void setGridding(bool gridding){
 };
 
 __host__ int getGriddingThreads(){
-        return this->griddingThreads;
+        if(this->gridding)
+          return this->griddingThreads;
+        else
+          return 0;
 };
 
 __host__ void setGriddingThreads(int griddingThreads){

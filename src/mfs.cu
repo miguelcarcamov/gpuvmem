@@ -84,6 +84,8 @@ void MFS::configure(int argc, char **argv)
         ioVisibilitiesHandler->setRandomProbability(random_probability);
         eta = variables.eta;
         gridding = variables.gridding;
+        printf("Gridding threads %d\n", gridding);
+        exit(-1);
         ioVisibilitiesHandler->setGridding(gridding);
         this->setGriddingThreads(gridding);
         nu_0 = variables.nu_0;
