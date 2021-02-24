@@ -1,7 +1,11 @@
 #include "briggsweightingscheme.cuh"
 
-BriggsWeightingScheme::BriggsWeightingScheme() : WeightingScheme(){};
-BriggsWeightingScheme::BriggsWeightingScheme(int threads) : WeightingScheme(threads){};
+BriggsWeightingScheme::BriggsWeightingScheme() : WeightingScheme(){
+  printf("Running weighting scheme with %d threads\n", this->threads);
+};
+BriggsWeightingScheme::BriggsWeightingScheme(int threads) : WeightingScheme(threads){
+  printf("Running weighting scheme with %d threads\n", this->threads);
+};
 
 float BriggsWeightingScheme::getRobustParam(){
         return this->robust_param;
