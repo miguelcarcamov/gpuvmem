@@ -77,6 +77,7 @@ void MFS::configure(int argc, char **argv)
         out_image = variables.output_image;
         ioImageHandler->setOutput(out_image);
         ioImageHandler->setPath(variables.path);
+        printf("Iterations: %d\n", variables.it_max);
         optimizer->setTotalIterations(variables.it_max);
         this->setVisNoise(variables.noise);
         noise_cut = variables.noise_cut;
