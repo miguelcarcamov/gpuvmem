@@ -97,7 +97,7 @@ __host__ void LBFGS::optimize()
 
         fp = of->calcFunction(image->getImage());
         if(verbose_flag) {
-                std::cout << "Starting function value = " << std::setprecision(4) << fp << std::endl;
+                std::cout << "Starting function value = " << std::setprecision(4) << std::fixed << fp << std::endl;
         }
         of->calcGradient(image->getImage(),xi, 0);
 
@@ -150,7 +150,7 @@ __host__ void LBFGS::optimize()
 
                 fp= of->calcFunction(image->getImage());
                 if(verbose_flag) {
-                        std::cout << "Function value = " << std::setprecision(4) << fp << std::endl;
+                        std::cout << "Function value = " << std::setprecision(4) << std::fixed << fp << std::endl;
                 }
                 of->calcGradient(image->getImage(),xi, i);
 
