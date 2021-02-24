@@ -2058,22 +2058,23 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
          if (i < numVisibilities) {
 
                  uv.x = UVW[i].x/fabs(deltau);
-                 uv.y = UVW[i].y/deltav;
+                 uv.y = UVW[i].y/fabs(deltav);
 
                  if (fabs(uv.x) <= (N/2)+0.5 && fabs(uv.y) <= (N/2)+0.5) {
 
                          if(uv.x < 0.0)
-                                 uv.x = round(uv.x+N);
+                                 uv.x = uv.x+N;
 
 
                          if(uv.y < 0.0)
-                                 uv.y = round(uv.y+N);
+                                 uv.y = uv.y+N;
 
-
+                         uv.x = round(uv.x);
                          i1 = (int)uv.x;
                          i2 = (i1+1)%N;
                          du = uv.x - i1;
 
+                         uv.y = round(uv.y);
                          j1 = (int)uv.y;
                          j2 = (j1+1)%N;
                          dv = uv.y - j1;
@@ -2088,7 +2089,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                                  Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
                                  Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
 
-                                 Vm[i] = make_cuComplex(Zreal, Zimag);
+                                 Vm[i] = make_cuFloatComplex(Zreal, Zimag);
                          }else{
                                  weight[i] = 0.0f;
                          }
