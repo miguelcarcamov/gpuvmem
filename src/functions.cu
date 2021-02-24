@@ -2051,7 +2051,8 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
         double du, dv;
         double2 uv;
         cufftComplex v11, v12, v21, v22;
-        cufftComplex Z;
+        float Zreal;
+        float Zimag;
 
         if (i < numVisibilities) {
 
@@ -2083,9 +2084,9 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                                 v21 = V[N*j1 + i2]; /* [i2, j1] */
                                 v22 = V[N*j2 + i2]; /* [i2, j2] */
 
-                                Z = make_cuFloatComplex((1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x,\
-                                                        (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y);
-                                Vm[i] = Z;
+                                Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
+                                Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
+                                Vm[i]= make_cuFloatComplex(Zreal, Zimag);
                         }else{
                                 weight[i] = 0.0f;
                         }
