@@ -2063,11 +2063,11 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
                 if (fabs(uv.x) <= (N/2)+0.5 && fabs(uv.y) <= (N/2)+0.5) {
 
                         if(uv.x < 0.0)
-                                uv.x = floor(uv.x+N);
+                                uv.x = round(uv.x+N);
 
 
                         if(uv.y < 0.0)
-                                uv.y = floor(uv.y+N);
+                                uv.y = round(uv.y+N);
 
 
                         i1 = (int)uv.x;
@@ -2087,7 +2087,7 @@ __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *
 
                                 Zreal = (1-du)*(1-dv)*v11.x + (1-du)*dv*v12.x + du*(1-dv)*v21.x + du*dv*v22.x;
                                 Zimag = (1-du)*(1-dv)*v11.y + (1-du)*dv*v12.y + du*(1-dv)*v21.y + du*dv*v22.y;
-                                Vm[i]= make_cuFloatComplex(Zreal, Zimag);
+                                Vm[i] = make_cuFloatComplex(Zreal, Zimag);
                         }else{
                                 weight[i] = 0.0f;
                         }
@@ -2159,12 +2159,12 @@ __global__ void clipWNoise(cufftComplex *fg_image, float *noise, float *I, long 
                         I[N*i+j] = 0.0;
                 }
                 else{
-                        I[N*i+j] = -1.0 * eta * MINPIX;
+                        I[N*i+j] = -1.0f * eta * MINPIX;
                 }
 
         }
 
-        fg_image[N*i+j] = make_cuFloatComplex(I[N*i+j], 0.0);
+        fg_image[N*i+j] = make_cuFloatComplex(I[N*i+j], 0.0f);
 }
 
 __global__ void clip2IWNoise(float *noise, float *I, long N, long M, float noise_cut, float MINPIX, float alpha_start, float eta, float threshold, int schedule)
@@ -2232,8 +2232,8 @@ __global__ void newP(float *p, float *xi, float xmin, float MINPIX, float eta, l
         if(p[N*i+j] + xi[N*i+j] > -1.0f*eta*MINPIX) {
                 p[N*i+j] += xi[N*i+j];
         }else{
-                p[N*i+j] = -1.0*eta*MINPIX;
-                xi[N*i+j] = 0.0;
+                p[N*i+j] = -1.0f*eta*MINPIX;
+                xi[N*i+j] = 0.0f;
         }
         //p[N*i+j].y = 0.0;
 }
@@ -2248,8 +2248,8 @@ __global__ void newP(float*p, float*xi, float xmin, long N, long M, float MINPIX
         if(p[N*M*image+N*i+j] + xi[N*M*image+N*i+j] > -1.0*eta*MINPIX) {
                 p[N*M*image+N*i+j] += xi[N*M*image+N*i+j];
         }else{
-                p[N*M*image+N*i+j] = -1.0*eta*MINPIX;
-                xi[N*M*image+N*i+j] = 0.0;
+                p[N*M*image+N*i+j] = -1.0f*eta*MINPIX;
+                xi[N*M*image+N*i+j] = 0.0f;
         }
 }
 
@@ -2267,7 +2267,7 @@ __global__ void evaluateXt(float *xt, float *pcom, float *xicom, float x, float 
         const int j = threadIdx.x + blockDim.x * blockIdx.x;
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-        if(pcom[N*i+j] + x * xicom[N*i+j] > -1.0*eta*MINPIX) {
+        if(pcom[N*i+j] + x * xicom[N*i+j] > -1.0f*eta*MINPIX) {
                 xt[N*i+j] = pcom[N*i+j] + x * xicom[N*i+j];
         }else{
                 xt[N*i+j] = -1.0f*eta*MINPIX;
@@ -2283,7 +2283,7 @@ __global__ void evaluateXt(float*xt, float*pcom, float*xicom, float x, long N, l
         if(pcom[N*M*image+N*i+j] + x * xicom[N*M*image+N*i+j] > -1.0*eta*MINPIX) {
                 xt[N*M*image+N*i+j] = pcom[N*M*image+N*i+j] + x * xicom[N*M*image+N*i+j];
         }else{
-                xt[N*M*image+N*i+j] = -1.0*eta*MINPIX;
+                xt[N*M*image+N*i+j] = -1.0f*eta*MINPIX;
         }
 }
 
@@ -2730,9 +2730,9 @@ __device__ float calculateL(float *I, float noise, float noise_cut, int index, i
                         d = I[N*M*index+N*(i+1)+j];
                         u = I[N*M*index+N*(i-1)+j];
 
-                        Dx = l - 2 * c + r;
-                        Dy = u - 2 * c + d;
-                        L = 0.5 * (Dx + Dy) * (Dx + Dy);
+                        Dx = l - 2.0f * c + r;
+                        Dy = u - 2.0f * c + d;
+                        L = 0.5f * (Dx + Dy) * (Dx + Dy);
                 }else{
                         L = c;
                 }
@@ -2777,9 +2777,9 @@ __device__ float calculateDL(float *I, float lambda, float noise, float noise_cu
                         l2 = I[N*M*index+N*i+(j-2)];
                         r2 = I[N*M*index+N*i+(j+2)];
 
-                        dL = 20 * c -
-                             8 * (d - r - u - l) +
-                             2 * (dl_corner + dr_corner + lu_corner + ru_corner) +
+                        dL = 20.0f * c -
+                             8.0f * (d - r - u - l) +
+                             2.0f * (dl_corner + dr_corner + lu_corner + ru_corner) +
                              d2 + r2 + u2 + l2;
                 }else
                         dL = 0.0f;
@@ -2951,7 +2951,7 @@ __global__ void DChi2_SharedMemory(float *noise, float *dChi2, cufftComplex *Vr,
 
         atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
 
-        float dchi2 = 0.0;
+        float dchi2 = 0.0f;
         if(noise[N*i+j] < noise_cut) {
                 for(int v=0; v<numVisibilities; v++) {
                         Ukv = x * u_shared[v];
@@ -2987,7 +2987,7 @@ __global__ void DChi2(float *noise, float *dChi2, cufftComplex *Vr, double3 *UVW
 
         atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
 
-        float dchi2 = 0.0;
+        float dchi2 = 0.0f;
         if(noise[N*i+j] < noise_cut) {
                 for(int v=0; v<numVisibilities; v++) {
                         Ukv = x * UVW[v].x;
@@ -3023,7 +3023,7 @@ __global__ void DChi2(float *noise, float *gcf, float *dChi2, cufftComplex *Vr, 
 
         atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs, ref_yobs, DELTAX, DELTAY, primary_beam);
         gcf_i = gcf[N*i+j];
-        float dchi2 = 0.0;
+        float dchi2 = 0.0f;
         if(noise[N*i+j] < noise_cut) {
                 for(int v=0; v<numVisibilities; v++) {
                         Ukv = x * UVW[v].x;
@@ -3338,7 +3338,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         cudaSetDevice(firstgpu);
 
-        float resultchi2  = 0.0f;
+        float resultchi2 = 0.0f;
 
         ip->clipWNoise(I);
 
