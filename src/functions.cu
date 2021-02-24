@@ -2069,13 +2069,11 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                          if(uv.y < 0.0)
                                  uv.y = uv.y+N;
 
-                         uv.x = floor(uv.x);
-                         i1 = (int)uv.x;
+                         i1 = uv.x;
                          i2 = (i1+1)%N;
                          du = uv.x - i1;
 
-                         uv.y = floor(uv.y);
-                         j1 = (int)uv.y;
+                         j1 = uv.y;
                          j2 = (j1+1)%N;
                          dv = uv.y - j1;
 
@@ -2116,11 +2114,11 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
                 uv.y = UVW[i].y/fabs(deltav);
 
                 f_j = round(uv.x + N/2);
-                j = (int)f_j;
+                j = f_j;
                 f_j = f_j - j;
 
                 f_k = round(uv.y + N/2);
-                k = (int)f_k;
+                k = f_k;
                 f_k = f_k - k;
 
 
