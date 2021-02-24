@@ -42,7 +42,7 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 x = round(grid_pos_x + N / 2);
                                                 y = round(grid_pos_y + M / 2);
 
-                                                if(x >= 0 && y >= 0 && x < M && y < M){
+                                                if(x >= 0 && y >= 0 && x < N && y < M){
                                                   xy_pos[z].x = x;
                                                   xy_pos[z].y = y;
                                                   // And we grid the weights
@@ -65,7 +65,7 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
                                            x = xy_pos[z].x;
                                            y = xy_pos[z].y;
 
-                                           if(x>=0 && y>=0)
+                                           if(x >= 0 && y >= 0 && x < N && y < M)
                                               d[j].fields[f].visibilities[i][s].weight[z] /= g_weights[N*y + x];
                                            else
                                               d[j].fields[f].visibilities[i][s].weight[z] = 0.0f;

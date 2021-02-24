@@ -2140,8 +2140,7 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
 __global__ void residual(cufftComplex *Vr, cufftComplex *Vm, cufftComplex *Vo, long numVisibilities){
         const int i = threadIdx.x + blockDim.x * blockIdx.x;
         if (i < numVisibilities) {
-                //Vr[i] = cuCsubf(Vm[i], Vo[i]);
-                Vr[i] = make_cuFloatComplex(Vm[i].x - Vo[i].x, Vm[i].y - Vo[i].y);
+              Vr[i] = cuCsubf(Vm[i], Vo[i]);
         }
 }
 
@@ -2172,8 +2171,8 @@ __global__ void clip2IWNoise(float *noise, float *I, long N, long M, float noise
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         if(noise[N*i+j] > noise_cut) {
-                if(eta > 0.0) {
-                        I[N*i+j] = 0.0;
+                if(eta > 0.0f) {
+                        I[N*i+j] = 0.0f;
                 }
                 else{
                         I[N*i+j] = -1.0 * eta * MINPIX;
@@ -2228,7 +2227,7 @@ __global__ void newP(float *p, float *xi, float xmin, float MINPIX, float eta, l
         const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
         xi[N*i+j] *= xmin;
-        if(p[N*i+j] + xi[N*i+j] > -1.0*eta*MINPIX) {
+        if(p[N*i+j] + xi[N*i+j] > -1.0f*eta*MINPIX) {
                 p[N*i+j] += xi[N*i+j];
         }else{
                 p[N*i+j] = -1.0*eta*MINPIX;
@@ -2269,7 +2268,7 @@ __global__ void evaluateXt(float *xt, float *pcom, float *xicom, float x, float 
         if(pcom[N*i+j] + x * xicom[N*i+j] > -1.0*eta*MINPIX) {
                 xt[N*i+j] = pcom[N*i+j] + x * xicom[N*i+j];
         }else{
-                xt[N*i+j] = -1.0*eta*MINPIX;
+                xt[N*i+j] = -1.0f*eta*MINPIX;
         }
         //xt[N*i+j].y = 0.0;
 }

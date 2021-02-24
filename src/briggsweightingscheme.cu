@@ -55,7 +55,6 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                         for(int i=0; i < d[j].data.total_frequencies; i++) {
                                 for(int s=0; s < d[j].data.nstokes; s++) {
                                         d[j].fields[f].backup_visibilities[i][s].weight.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                                        xy_pos.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights) private(x, y, grid_pos_x, grid_pos_y, uvw, w)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
@@ -80,7 +79,7 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 y = round(grid_pos_y + M / 2);
 
                                                 // And we grid the weights
-                                                if(x >= 0 && y >= 0 && x < M && y < M)
+                                                if(x >= 0 && y >= 0 && x < N && y < M)
                                                 {
                                                           #pragma omp critical
                                                           {
@@ -98,8 +97,6 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 }
                                         }
 
-                                        std::fill_n(g_weights.begin(), M*N, 0.0f);
-
                                 }
                         }
                 }
@@ -107,10 +104,12 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
 
         average_weights = sum_gridded_weights_squared / sum_original_weights;
         f_squared = (5.0f * powf(10.0f, -this->getRobustParam())) * (5.0f * powf(10.0f, -this->getRobustParam())) / average_weights;
+        std::fill_n(g_weights.begin(), M*N, 0.0f);
         for(int j=0; j < d.size(); j++) {
                 for(int f=0; f < d[j].data.nfields; f++) {
                         for(int i=0; i < d[j].data.total_frequencies; i++) {
                                 for(int s=0; s < d[j].data.nstokes; s++) {
+                                        xy_pos.resize(d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                                         #pragma omp parallel for schedule(static, 1) num_threads(gridding) shared(g_weights, xy_pos) private(x, y, grid_pos_x, grid_pos_y, uvw, w)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
@@ -133,14 +132,15 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 x = round(grid_pos_x + N / 2);
                                                 y = round(grid_pos_y + M / 2);
 
-                                                if(x >= 0 && y >= 0 && x < M && y < M)
+                                                if(x >= 0 && y >= 0 && x < N && y < M)
                                                 {
+                                                          xy_pos[z].x = x;
+                                                          xy_pos[z].y = y;
                                                   // And we grid the weights
                                                   #pragma omp critical
                                                   {
                                                           g_weights[N * y + x] += w;
-                                                          xy_pos[z].x = x;
-                                                          xy_pos[z].y = y;
+
 
                                                   }
                                                 }else{
@@ -156,7 +156,7 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 x = xy_pos[z].x;
                                                 y = xy_pos[z].y;
 
-                                                if(x >= 0 && y >= 0 && x < M && y < M)
+                                                if(x >= 0 && y >= 0 && x < N && y < M)
                                                   d[j].fields[f].visibilities[i][s].weight[z] /= (1.0 + g_weights[N*y + x] * f_squared);
                                                 else{
                                                   printf("Caigo aquí\n");

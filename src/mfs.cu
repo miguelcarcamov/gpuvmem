@@ -914,10 +914,6 @@ void MFS::writeResiduals()
         if(!this->gridding)
         {
                 this->scheme->restoreWeights(datasets);
-                //Saving residuals to disk
-                for(int d=0; d<nMeasurementSets; d++) {
-                        modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
-                }
         }else{
                 double deltax = RPDEG_D*DELTAX; //radians
                 double deltay = RPDEG_D*DELTAY; //radians
@@ -933,11 +929,10 @@ void MFS::writeResiduals()
                 Fi *chi2 =  optimizer->getObjectiveFunction()->getFiByName("Chi2");
                 //chi2->setCKernel(NULL);
                 chi2->simulateModel(image->getImage());
-
-                for(int d=0; d<nMeasurementSets; d++)
-                        modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
-
         }
+
+        for(int d=0; d<nMeasurementSets; d++)
+                modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
 
         printf("Saving residuals and model to MS...\n");
         for(int d=0; d<nMeasurementSets; d++) {
