@@ -117,7 +117,7 @@ __host__ void LBFGS::optimize()
                 this->current_iteration = i;
                 this->max_per_it = 0.0f;
                 if(verbose_flag) {
-                        std::cout << "\n\n********** Iteration "<< i <<"**********\n" << std::endl;
+                        std::cout << "\n\n********** Iteration "<< i <<" **********\n" << std::endl;
                 }
 
                 checkCudaErrors(cudaMemcpy(p_old, image->getImage(), sizeof(float)*M*N*image->getImageCount(), cudaMemcpyDeviceToDevice));

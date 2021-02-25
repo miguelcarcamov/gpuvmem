@@ -181,6 +181,7 @@ void MFS::configure(int argc, char **argv)
 
         ckernel->setIoImageHandler(ioImageHandler);
         //printf("Beam size canvas: %lf x %lf (arcsec)/ %lf (degrees)\n", canvas_vars.beam_bmaj*3600.0, canvas_vars.beam_bmin*3600.0, canvas_vars.beam_bpa);
+        cudaGetDeviceCount(&num_gpus);
         cudaDeviceProp dprop[num_gpus];
 
         if(verbose_flag) {
@@ -190,8 +191,13 @@ void MFS::configure(int argc, char **argv)
                 for(int i = 0; i < num_gpus; i++) {
                         checkCudaErrors(cudaGetDeviceProperties(&dprop[i], i));
                         printf("> GPU%d = \"%15s\" %s capable of Peer-to-Peer (P2P)\n", i, dprop[i].name, (IsGPUCapableP2P(&dprop[i]) ? "IS " : "NOT"));
+                        printf("> Memory Clock Rate (KHz): %d\n", dprop[i].memoryClockRate);
+                        printf("> Memory Bus Width (bits): %d\n", dprop[i].memoryBusWidth);
+                        printf("> Peak Memory Bandwidth (GB/s): %f\n", 2.0*dprop[i].memoryClockRate*(dprop[i].memoryBusWidth/8)/1.0e6);
+                        printf("> Total Global Memory (GB): %f\n", dprop[i].totalGlobalMem/pow(2,30));
+                        printf("-----------------------------------------------------------\n");
                 }
-                printf("---------------------------\n");
+                printf("-----------------------------------------------------------\n\n");
         }
 
         //Declaring block size and number of blocks for Image
@@ -230,12 +236,6 @@ void MFS::configure(int argc, char **argv)
 
                 numBlocksNN.x = iDivUp(M, threadsPerBlockNN.x);
                 numBlocksNN.y = iDivUp(N, threadsPerBlockNN.y);
-        }
-
-
-        if(firstgpu > num_gpus-1 || firstgpu < 0) {
-                printf("ERROR. The selected GPU IDs don't exist\n");
-                exit(-1);
         }
 
         if(verbose_flag)
@@ -307,7 +307,6 @@ void MFS::configure(int argc, char **argv)
                 firstgpu = std::stoi(string_values[0]);
         }
 
-
         string_values.clear();
 
         if(variables.penalization_factors != "NULL") {
@@ -346,7 +345,11 @@ void MFS::configure(int argc, char **argv)
                 }
         }
 
-        //printf("number of FINAL host CPUs:\t%d\n", omp_get_num_procs());
+        if(firstgpu > num_gpus-1 || firstgpu < 0) {
+                printf("ERROR. The selected GPU IDs don't exist\n");
+                exit(-1);
+        }
+
         if(verbose_flag) {
                 printf("Number of CUDA devices and threads: %d\n", num_gpus);
         }
@@ -365,6 +368,7 @@ void MFS::configure(int argc, char **argv)
                                 printf("> Peer-to-Peer (P2P) access from %s (GPU%d) -> %s (GPU%d) : %s\n", dpropX.name, i, dprop0.name, firstgpu, canAccessPeerx_0 ? "Yes" : "No");
                         }
                         if(canAccessPeer0_x == 0 || canAccessPeerx_0 == 0) {
+                                printf("Number of GPUs: %d\n", num_gpus);
                                 printf("Two or more SM 2.0 class GPUs are required for %s to run.\n", argv[0]);
                                 printf("Support for UVA requires a GPU with SM 2.0 capabilities.\n");
                                 printf("Peer to Peer access is not available between GPU%d <-> GPU%d, waiving test.\n", 0, i);
@@ -418,10 +422,11 @@ void MFS::configure(int argc, char **argv)
 
         if(this->gridding)
           this->scheme->setThreads(this->getGriddingThreads());
+
         this->scheme->configure(&robust_param);
         this->scheme->apply(datasets);
         if(this->gridding) {
-                printf("Doing gridding\n");
+                std::cout << "Doing gridding" << std::endl;
                 this->ckernel->setSigmas(fabs(deltau), fabs(deltav));
                 this->ckernel->buildKernel();
                 this->ckernel->printCKernel();

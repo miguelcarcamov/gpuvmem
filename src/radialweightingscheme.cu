@@ -7,7 +7,7 @@ RadialWeightingScheme::RadialWeightingScheme(int threads) : WeightingScheme(thre
 
 void RadialWeightingScheme::apply(std::vector<MSDataset>& d)
 {
-        printf("Running weighting scheme with %d threads\n", this->threads);
+        std::cout << "Running weighting scheme with " << this->threads << " threads" << std::endl;
         float w;
         double3 uvw;
         for(int j=0; j < d.size(); j++) {

@@ -104,7 +104,7 @@ __host__ void ConjugateGradient::optimize()
                 start = omp_get_wtime();
                 this->current_iteration = i;
                 if(verbose_flag) {
-                        std::cout << "\n\n********** Iteration "<< i <<"**********\n" << std::endl;
+                        std::cout << "\n\n********** Iteration "<< i <<" **********\n" << std::endl;
                 }
                 linmin(image->getImage(), xi, &fret, NULL);
                 if (2.0f*fabsf(fret-fp) <= this->ftol*(fabsf(fret)+fabsf(fp)+EPS)) {

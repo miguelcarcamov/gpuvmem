@@ -4,7 +4,6 @@
 #include "framework.cuh"
 #include "functions.cuh"
 
-extern int gridding;
 extern long M;
 extern long N;
 extern double deltau;

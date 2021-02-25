@@ -6,7 +6,7 @@ UniformWeightingScheme::UniformWeightingScheme(int threads) : WeightingScheme(th
 void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
 {
 
-        printf("Running weighting scheme with %d threads\n", this->threads);
+        std::cout << "Running weighting scheme with " << this->threads << " threads" << std::endl;
         float w;
         double3 uvw;
         std::vector<float> g_weights(M*N);

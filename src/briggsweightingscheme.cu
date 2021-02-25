@@ -20,12 +20,12 @@ void BriggsWeightingScheme::setRobustParam(float robust_param){
 void BriggsWeightingScheme::configure(void *params){
         float robust_param = *(float *)params;
         this->setRobustParam(robust_param);
-        printf("Using robust %1.1f for Briggs weighting\n", this->getRobustParam());
+        std::cout << "Using robust " << this->getRobustParam() << " for Briggs weighting" << std::endl;
 };
 
 void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
 {
-        printf("Running weighting scheme with %d threads\n", this->threads);
+        std::cout << "Running weighting scheme with " << this->threads << " threads" << std::endl;
         float w;
         double3 uvw;
         std::vector<float> g_weights(M*N);
@@ -159,7 +159,6 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 if(x >= 0 && y >= 0 && x < N && y < M)
                                                   d[j].fields[f].visibilities[i][s].weight[z] /= (1.0 + g_weights[N*y + x] * f_squared);
                                                 else{
-                                                  printf("Caigo aquí\n");
                                                   d[j].fields[f].visibilities[i][s].weight[z] = 0.0f;
                                                 }
                                         }
