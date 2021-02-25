@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8...3.16 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.8...3.18 FATAL_ERROR)
 project(gpuvmem LANGUAGES C CXX CUDA)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(Boost REQUIRED)
@@ -47,7 +47,12 @@ if(Boost_FOUND)
     set(TEMP "${TEMP} ") # A space to cleanly separate from existing content
   endif()
 
-  set_property(TARGET gpuvmem PROPERTY CUDA_ARCHITECTURES ${CUDA_NVCC_ARCH_FLAGS})
+  if(NOT DEFINED CUDA_ARCHITECTURES)
+    #set(CUDA_ARCHITECTURES ${CUDA_NVCC_ARCH_FLAGS})
+    set_property(TARGET gpuvmem PROPERTY CUDA_ARCHITECTURES ${CUDA_NVCC_ARCH_FLAGS})
+  endif()
+
+  #set_property(TARGET gpuvmem PROPERTY CUDA_ARCHITECTURES ${CUDA_NVCC_ARCH_FLAGS})
   if(MEMORY_DEBUG)
     message(NOTICE "MEMORY DEBUG IS ON")
     set(COMPFLAGS "-g -G -D_FORCE_INLINES -w")
