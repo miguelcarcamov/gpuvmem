@@ -933,7 +933,7 @@ void MFS::writeResiduals()
                         getOriginalVisibilitiesBack(datasets[d].fields, datasets[d].data, num_gpus, firstgpu, variables.blockSizeV);
                 }
                 Fi *chi2 =  optimizer->getObjectiveFunction()->getFiByName("Chi2");
-                //chi2->setCKernel(NULL);
+                chi2->setCKernel(NULL);
                 chi2->simulateModel(image->getImage());
         }
 

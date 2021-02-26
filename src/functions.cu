@@ -2045,6 +2045,47 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
 /*
  * Interpolate in the visibility array to find the visibility at (u,v);
  */
+ __global__ void getGriddedVisFromPix(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
+ {
+         const int i = threadIdx.x + blockDim.x * blockIdx.x;
+         int i1, j1;
+         double du, dv;
+         double2 uv;
+
+
+         if (i < numVisibilities) {
+
+                 uv.x = UVW[i].x/fabs(deltau);
+                 uv.y = UVW[i].y/deltav;
+
+                 if (fabs(uv.x) < N/2 && fabs(uv.y) < N/2) {
+
+                         if(uv.x < 0.0)
+                                 uv.x = uv.x+N;
+
+
+                         if(uv.y < 0.0)
+                                 uv.y = uv.y+N;
+
+                         j1 = uv.x;
+                         i1 = uv.y;
+
+                         if (i1 >= 0 && i1 < N &&  j1 >= 0 && j1 < N) {
+                                 Vm[i] = V[N*i1 + j1];
+                         }else{
+                                 weight[i] = 0.0f;
+                         }
+                 }else{
+                         weight[i] = 0.0f;
+                 }
+
+         }
+
+ }
+
+/*
+ * Interpolate in the visibility array to find the visibility at (u,v);
+ */
  __global__ void vis_mod(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
  {
          const int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -3320,10 +3361,16 @@ __host__ void simulate(float *I, VirtualImageProcessor *ip)
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                     if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY){
                                           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-                                                  // BILINEAR INTERPOLATION
-                                                  vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                          datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                  (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                  if(NULL != ip->getCKernel()){
+                                                    getGriddedVisFromPix <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                            datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                    (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                  }else{
+                                                    // BILINEAR INTERPOLATION
+                                                    vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                            datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                    (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                  }
                                                   checkCudaErrors(cudaDeviceSynchronize());
                                           }
                                     }
@@ -3375,10 +3422,17 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
 
                                                   checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0, sizeof(float)*max_number_vis));
-                                                  // BILINEAR INTERPOLATION
-                                                  vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                                                          datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
-                                                  (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+
+                                                  if(NULL != ip->getCKernel()){
+                                                    getGriddedVisFromPix <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                            datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                    (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                  }else{
+                                                    // BILINEAR INTERPOLATION
+                                                    vis_mod <<< datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                                                            datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV >>>
+                                                    (datasets[d].fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V, datasets[d].fields[f].device_visibilities[i][s].uvw, datasets[d].fields[f].device_visibilities[i][s].weight, deltau, deltav, datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+                                                  }
                                                   checkCudaErrors(cudaDeviceSynchronize());
 
                                                   // RESIDUAL CALCULATION
