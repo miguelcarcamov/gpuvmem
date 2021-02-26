@@ -2056,7 +2056,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
          if (i < numVisibilities) {
 
                  uv.x = UVW[i].x/fabs(deltau);
-                 uv.y = UVW[i].y/deltav;
+                 uv.y = UVW[i].y/fans(deltav);
 
                  if (fabs(uv.x) < N/2 && fabs(uv.y) < N/2) {
 
