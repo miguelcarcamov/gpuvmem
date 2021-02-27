@@ -2067,8 +2067,8 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                          if(uv.y < 0.0)
                                  uv.y = uv.y+N;
 
-                         j1 = round(uv.x);
-                         i1 = round(uv.y);
+                         j1 = floor(uv.x);
+                         i1 = floor(uv.y);
 
                          if (i1 >= 0 && i1 < N &&  j1 >= 0 && j1 < N) {
                                  Vm[i] = V[N*i1 + j1];
