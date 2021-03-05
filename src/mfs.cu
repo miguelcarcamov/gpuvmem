@@ -929,12 +929,12 @@ void MFS::writeResiduals()
                 printf("Visibilities are gridded, we will need to de-grid to save them in a Measurement Set File\n");
                 // In the de-gridding procedure weights are also restored to the original
                 for(int d=0; d<nMeasurementSets; d++){
-                        //degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel);
-                        getOriginalVisibilitiesBack(datasets[d].fields, datasets[d].data, num_gpus, firstgpu, variables.blockSizeV);
+                        degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel);
+                        //getOriginalVisibilitiesBack(datasets[d].fields, datasets[d].data, num_gpus, firstgpu, variables.blockSizeV);
                 }
-                Fi *chi2 =  optimizer->getObjectiveFunction()->getFiByName("Chi2");
-                chi2->setCKernel(NULL);
-                chi2->simulateModel(image->getImage());
+                //Fi *chi2 =  optimizer->getObjectiveFunction()->getFiByName("Chi2");
+                //chi2->setCKernel(NULL);
+                //chi2->simulateModel(image->getImage());
         }
 
         for(int d=0; d<nMeasurementSets; d++)
