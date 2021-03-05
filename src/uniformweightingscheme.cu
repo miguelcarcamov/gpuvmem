@@ -40,8 +40,8 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
 
                                                 grid_pos_x = uvw.x / fabs(deltau);
                                                 grid_pos_y = uvw.y / fabs(deltav);
-                                                x = round(grid_pos_x + N / 2);
-                                                y = round(grid_pos_y + M / 2);
+                                                x = round(grid_pos_x) + N / 2;
+                                                y = round(grid_pos_y) + M / 2;
 
                                                 if(x >= 0 && y >= 0 && x < N && y < M){
                                                   xy_pos[z].x = x;

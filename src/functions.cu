@@ -1280,8 +1280,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                         grid_pos_x = uvw.x / fabs(deltau);
                                         grid_pos_y = uvw.y / fabs(deltav);
-                                        j = round(grid_pos_x + N / 2);
-                                        k = round(grid_pos_y + M / 2);
+                                        j = round(grid_pos_x) + N / 2;
+                                        k = round(grid_pos_y) + M / 2;
 
                                         for(int m=-ckernel->getSupportY(); m<=ckernel->getSupportY(); m++) {
                                                 for(int n=-ckernel->getSupportX(); n<=ckernel->getSupportX(); n++) {
@@ -2154,11 +2154,11 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
                 uv.x = UVW[i].x/fabs(deltau);
                 uv.y = UVW[i].y/fabs(deltav);
 
-                f_j = round(uv.x + N/2);
+                f_j = round(uv.x) + N/2;
                 j = f_j;
                 f_j = f_j - j;
 
-                f_k = round(uv.y + N/2);
+                f_k = round(uv.y) + N/2;
                 k = f_k;
                 f_k = f_k - k;
 
