@@ -2,6 +2,7 @@
 #define WEIGHTINGSCHEME_CUH
 
 #include "MSFITSIO.cuh"
+#include "uvtaper.cuh"
 #include <vector>
 
 class WeightingScheme {
@@ -11,10 +12,17 @@ virtual void configure(void* params) = 0;
 
 WeightingScheme(){
     this->threads = omp_get_num_procs() - 2;
+    this->uvtaper = NULL;
 };
 
 WeightingScheme(int threads){
     this->threads = threads;
+    this->uvtaper = NULL;
+};
+
+WeightingScheme(int threads, UVTaper *uvtaper){
+    this->threads = threads;
+    this->uvtaper = uvtaper;
 };
 
 int getThreads(){
@@ -24,6 +32,16 @@ int getThreads(){
 int setThreads(int threads){
     this->threads = threads;
     std::cout << "The running weighting scheme threads have been set to "<< this->threads << std::endl;
+};
+
+UVTaper * getUVTaper(){
+    return this->uvtaper;
+};
+
+void setUVTaper(UVTaper * uvtaper){
+    this->uvtaper = uvtaper;
+    std::cout << "UVTaper has been set" << std::endl;
+    std::cout << "UVTaper Features - bmaj=" << this->uvtaper->getBMaj() << ", bmin=" << this->uvtaper->getBMin() << ", bpa=" << this->uvtaper->getBPA() << std::endl;
 };
 
 void restoreWeights(std::vector<MSDataset>& d){
@@ -40,5 +58,6 @@ void restoreWeights(std::vector<MSDataset>& d){
 
 protected:
   int threads;
+  UVTaper *uvtaper = NULL;
 };
 #endif

@@ -39,6 +39,7 @@
 #include "sinc2D.cuh"
 #include "pswf_12D.cuh"
 #include "fixedpoint.cuh"
+#include "uvtaper.cuh"
 #include <time.h>
 
 int num_gpus;
@@ -117,21 +118,25 @@ __host__ int main(int argc, char **argv) {
                 exit(EXIT_SUCCESS);
         }
 
-        Synthesizer * sy = createObject<Synthesizer, std::string>("MFS");
-        Optimizer * cg = createObject<Optimizer, std::string>("CG-FRPRMN");
+        Synthesizer *sy = createObject<Synthesizer, std::string>("MFS");
+        Optimizer *cg = createObject<Optimizer, std::string>("CG-FRPRMN");
         //Optimizer * cg = createObject<Optimizer, std::string>("CG-LBFGS");
         //cg->setK(15);
         // Choose your antialiasing kernel!
-        CKernel * sc = new PillBox2D();
+        CKernel *sc = new PillBox2D();
         //CKernel *sc = new Gaussian2D(7,7);
         //CKernel *sc = new Sinc2D(7,7);
-        //CKernel * sc = new GaussianSinc2D(7, 7);
-        //CKernel * sc = new PSWF_12D(9,9);
-        //CKernel * sc = createObject<CKernel, std::string>("GaussianSinc2D");
+        //CKernel *sc = new GaussianSinc2D(7, 7);
+        //CKernel *sc = new PSWF_12D(9,9);
+        //CKernel *sc = createObject<CKernel, std::string>("GaussianSinc2D");
         ObjectiveFunction *of = createObject<ObjectiveFunction, std::string>("ObjectiveFunction");
         Io *ioms = createObject<Io, std::string>("IoMS"); // This is the default Io Class
         Io *iofits = createObject<Io, std::string>("IoFITS"); // This is the default Io Class
+
+        UVTaper *uvtaper = new UVTaper(200000.0f,200000.0f);
         WeightingScheme *scheme = createObject<WeightingScheme, std::string>("Briggs");
+        scheme->setUVTaper(uvtaper);
+
         sy->setIoVisibilitiesHandler(ioms);
         sy->setIoImageHandler(iofits);
         sy->setOrder(&optimizationOrder);

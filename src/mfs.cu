@@ -425,6 +425,7 @@ void MFS::configure(int argc, char **argv)
 
         this->scheme->configure(&robust_param);
         this->scheme->apply(datasets);
+
         if(this->gridding) {
                 std::cout << "Doing gridding" << std::endl;
                 this->ckernel->setSigmas(fabs(deltau), fabs(deltav));

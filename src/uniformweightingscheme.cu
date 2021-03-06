@@ -2,11 +2,12 @@
 
 UniformWeightingScheme::UniformWeightingScheme() : WeightingScheme(){};
 UniformWeightingScheme::UniformWeightingScheme(int threads) : WeightingScheme(threads){};
+UniformWeightingScheme::UniformWeightingScheme(int threads, UVTaper * uvtaper) : WeightingScheme(threads, uvtaper){};
 
 void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
 {
 
-        std::cout << "Running weighting scheme with " << this->threads << " threads" << std::endl;
+        std::cout << "Running Uniform weighting scheme with " << this->threads << " threads" << std::endl;
         float w;
         double3 uvw;
         std::vector<float> g_weights(M*N);
@@ -60,15 +61,23 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
 
                                         }
 
-                                        #pragma omp parallel for schedule(static, 1) num_threads(this->threads) private(x, y)
+                                        #pragma omp parallel for schedule(static, 1) num_threads(this->threads) private(x, y, uvw)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
+                                           uvw = d[j].fields[f].visibilities[i][s].uvw[z];
+
+                                           uvw.x = metres_to_lambda(uvw.x, d[j].fields[f].nu[i]);
+                                           uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
+                                           uvw.z = metres_to_lambda(uvw.z, d[j].fields[f].nu[i]);
+
                                            x = xy_pos[z].x;
                                            y = xy_pos[z].y;
 
-                                           if(x >= 0 && y >= 0 && x < N && y < M)
+                                           if(x >= 0 && y >= 0 && x < N && y < M){
                                               d[j].fields[f].visibilities[i][s].weight[z] /= g_weights[N*y + x];
-                                           else
+                                              if(NULL != this->uvtaper)
+                                                d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
+                                           }else
                                               d[j].fields[f].visibilities[i][s].weight[z] = 0.0f;
                                         }
 

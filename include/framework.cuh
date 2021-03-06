@@ -32,6 +32,7 @@
 #include <optimizer.cuh>
 #include <filter.cuh>
 #include <ckernel.cuh>
+#include <uvtaper.cuh>
 #include <synthesizer.cuh>
 #include <factory.cuh>
 #include <flags.cuh>
