@@ -73,12 +73,13 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
                                            x = xy_pos[z].x;
                                            y = xy_pos[z].y;
 
-                                           if(x >= 0 && y >= 0 && x < N && y < M){
+                                           if(x >= 0 && y >= 0 && x < N && y < M)
                                               d[j].fields[f].visibilities[i][s].weight[z] /= g_weights[N*y + x];
-                                              if(NULL != this->uvtaper)
-                                                d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
-                                           }else
+                                           else
                                               d[j].fields[f].visibilities[i][s].weight[z] = 0.0f;
+
+                                           if(NULL != this->uvtaper)
+                                              d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
                                         }
 
                                         std::fill_n(g_weights.begin(), M*N, 0.0f);
