@@ -25,6 +25,12 @@ void NaturalWeightingScheme::apply(std::vector<MSDataset>& d){
                                                 uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
                                                 uvw.z = metres_to_lambda(uvw.z, d[j].fields[f].nu[i]);
 
+                                                //Apply hermitian symmetry (it will be applied afterwards)
+                                                if (uvw.x < 0.0) {
+                                                        uvw.x *= -1.0;
+                                                        uvw.y *= -1.0;
+                                                }
+
                                                 if(NULL != this->uvtaper)
                                                         d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
                                         }

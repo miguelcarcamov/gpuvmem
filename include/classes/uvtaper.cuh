@@ -84,7 +84,7 @@ __host__ float ellipticGaussianValue(double u, double v, double u_0, double v_0)
       double x = u - u_0;
       double y = v - v_0;
 
-      float value = this->amplitude*exp((x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin)));
+      float value = this->amplitude*exp(x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin));
       return value;
 };
 
@@ -93,7 +93,13 @@ __host__ float getValue(double u, double v)
       double x = u - this->u_0;
       double y = v - this->v_0;
 
-      float value = this->amplitude*exp((x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin)));
+      float cos_bpa = cosf(this->bpa);
+      float sin_bpa = sinf(this->bpa);
+      float sin_bpa_2 = sinf(2.0f*this->bpa);
+      float a = (cos_bpa*cos_bpa)/(2.0f*this->bmaj*this->bmaj) + (sin_bpa*sin_bpa)/(2.0f*this->bmin*this->bmin);
+      float b = sin_bpa_2/(2.0f*this->bmaj*this->bmaj) - sin_bpa_2/(2.0f*this->bmin*this->bmin);
+      float c = (sin_bpa*sin_bpa)/(2.0f*this->bmaj*this->bmaj) + (cos_bpa*cos_bpa)/(2.0f*this->bmin*this->bmin);
+      float value = this->amplitude*exp(-a*x*x - b*x*y - c*y*y);
       return value;
 };
 

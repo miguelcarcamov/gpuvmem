@@ -160,6 +160,12 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
                                                 uvw.z = metres_to_lambda(uvw.z, d[j].fields[f].nu[i]);
 
+                                                //Apply hermitian symmetry (it will be applied afterwards)
+                                                if (uvw.x < 0.0) {
+                                                        uvw.x *= -1.0;
+                                                        uvw.y *= -1.0;
+                                                }
+
                                                 x = xy_pos[z].x;
                                                 y = xy_pos[z].y;
 
