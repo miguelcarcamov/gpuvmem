@@ -133,9 +133,9 @@ __host__ int main(int argc, char **argv) {
         Io *ioms = createObject<Io, std::string>("IoMS"); // This is the default Io Class
         Io *iofits = createObject<Io, std::string>("IoFITS"); // This is the default Io Class
 
-        UVTaper *uvtaper = new UVTaper(200000.0f);
+        //UVTaper *uvtaper = new UVTaper(200000.0f); // Initialize your uvtaper in units of lambda
         WeightingScheme *scheme = createObject<WeightingScheme, std::string>("Briggs");
-        scheme->setUVTaper(uvtaper);
+        //scheme->setUVTaper(uvtaper);
 
         sy->setIoVisibilitiesHandler(ioms);
         sy->setIoImageHandler(iofits);
