@@ -13,6 +13,15 @@ __host__ UVTaper(){
       this->bpa = 0.0f;
 };
 
+__host__ UVTaper(float size){
+      this->amplitude = 1.0f;
+      this->u_0 = 0.0;
+      this->v_0 = 0.0;
+      this->bmaj = size;
+      this->bmin = size;
+      this->bpa = 0.0f;
+};
+
 __host__ UVTaper(float bmaj, float bmin){
       this->amplitude = 1.0f;
       this->u_0 = 0.0;
@@ -75,7 +84,7 @@ __host__ float ellipticGaussianValue(double u, double v, double u_0, double v_0)
       double x = u - u_0;
       double y = v - v_0;
 
-      float value = this->amplitude*expf((x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin)));
+      float value = this->amplitude*exp((x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin)));
       return value;
 };
 
@@ -84,16 +93,16 @@ __host__ float getValue(double u, double v)
       double x = u - this->u_0;
       double y = v - this->v_0;
 
-      float value = this->amplitude*expf((x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin)));
+      float value = this->amplitude*exp((x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin)));
       return value;
 };
 
 private:
   float bmaj;
   float bmin;
-  float bpa = 0.0f;
-  float amplitude = 1.0f;
-  double u_0 = 0.0;
-  double v_0 = 0.0;
+  float bpa;
+  float amplitude;
+  double u_0;
+  double v_0;
 };
 #endif //UVTAPER_CUH

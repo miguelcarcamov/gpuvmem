@@ -1506,22 +1506,22 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
 
         // We have calculate the running means so we divide by the sum of the weights
 
-        s_uu /= sum_weights;
-        s_vv /= sum_weights;
-        s_uv /= sum_weights;
+        if(sum_weights > 0.0f)
+        {
+                s_uu /= sum_weights;
+                s_vv /= sum_weights;
+                s_uv /= sum_weights;
+                variance = 1.0f/sum_weights;
+        }else{
+                printf("Error: The sum of the visibility weights cannot be zero\n");
+                exit(-1);
+        }
 
         double3 beam_size_rad = calc_beamSize(s_uu, s_vv, s_uv);
 
         *bmaj = beam_size_rad.x / RPDEG_D; // Major axis to degrees
         *bmin = beam_size_rad.y / RPDEG_D; // Minor axis to degrees
         *bpa = beam_size_rad.z / RPDEG_D; // Angle to degrees
-
-        if(sum_weights > 0.0f)
-                variance = 1.0f/sum_weights;
-        else{
-                printf("Error: The sum of the visibility weights cannot be zero\n");
-                exit(-1);
-        }
 
         if(verbose_flag) {
                 float aux_noise = sqrtf(variance);
