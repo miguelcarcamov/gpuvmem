@@ -8,8 +8,8 @@ __host__ UVTaper(){
       this->amplitude = 1.0f;
       this->u_0 = 0.0;
       this->v_0 = 0.0;
-      this->bmaj = 0.0f;
-      this->bmin = 0.0f;
+      this->sigma_maj = 0.0f;
+      this->sigma_min = 0.0f;
       this->bpa = 0.0f;
 };
 
@@ -17,35 +17,35 @@ __host__ UVTaper(float size){
       this->amplitude = 1.0f;
       this->u_0 = 0.0;
       this->v_0 = 0.0;
-      this->bmaj = size;
-      this->bmin = size;
+      this->sigma_maj = size;
+      this->sigma_min = size;
       this->bpa = 0.0f;
 };
 
-__host__ UVTaper(float bmaj, float bmin){
+__host__ UVTaper(float sigma_maj, float sigma_min){
       this->amplitude = 1.0f;
       this->u_0 = 0.0;
       this->v_0 = 0.0;
-      this->bmaj = bmaj;
-      this->bmin = bmin;
+      this->sigma_maj = sigma_maj;
+      this->sigma_min = sigma_min;
       this->bpa = 0.0f;
 };
 
-__host__ UVTaper(float bmaj, float bmin, float bpa){
+__host__ UVTaper(float sigma_maj, float sigma_min, float bpa){
       this->amplitude = 1.0f;
       this->u_0 = 0.0;
       this->v_0 = 0.0;
-      this->bmaj = bmaj;
-      this->bmin = bmin;
+      this->sigma_maj = sigma_maj;
+      this->sigma_min = sigma_min;
       this->bpa = bpa;
 };
 
-__host__ float getBMaj(){
-      return this->bmaj;
+__host__ float getsigma_maj(){
+      return this->sigma_maj;
 };
 
-__host__ float getBMin(){
-      return this->bmin;
+__host__ float getsigma_min(){
+      return this->sigma_min;
 };
 
 __host__ float getBPA(){
@@ -56,12 +56,12 @@ __host__ void setAmplitude(float amplitude){
       this->amplitude = amplitude;
 };
 
-__host__ void setBMaj(float bmaj){
-      this->bmaj = bmaj;
+__host__ void setsigma_maj(float sigma_maj){
+      this->sigma_maj = sigma_maj;
 };
 
-__host__ void setBMin(float bmin){
-      this->bmin = bmin;
+__host__ void setsigma_min(float sigma_min){
+      this->sigma_min = sigma_min;
 };
 
 __host__ void setBPA(float bpa){
@@ -73,9 +73,9 @@ __host__ void setCenter(double u_0, double v_0){
       this->v_0 = v_0;
 };
 
-__host__ void setGaussianParameters(float bmaj, float bmin, float bpa){
-      this->bmaj = bmaj;
-      this->bmin = bmin;
+__host__ void setGaussianParameters(float sigma_maj, float sigma_min, float bpa){
+      this->sigma_maj = sigma_maj;
+      this->sigma_min = sigma_min;
       this->bpa = bpa;
 };
 
@@ -84,7 +84,7 @@ __host__ float ellipticGaussianValue(double u, double v, double u_0, double v_0)
       double x = u - u_0;
       double y = v - v_0;
 
-      float value = this->amplitude*exp(x*x/(2*this->bmaj*this->bmaj) - this->bpa*x*y/(this->bmaj*this->bmin) - y*y/(2*this->bmin*this->bmin));
+      float value = this->amplitude*exp(x*x/(2*this->sigma_maj*this->sigma_maj) - this->bpa*x*y/(this->sigma_maj*this->sigma_min) - y*y/(2*this->sigma_min*this->sigma_min));
       return value;
 };
 
@@ -96,16 +96,16 @@ __host__ float getValue(double u, double v)
       float cos_bpa = cosf(this->bpa);
       float sin_bpa = sinf(this->bpa);
       float sin_bpa_2 = sinf(2.0f*this->bpa);
-      float a = (cos_bpa*cos_bpa)/(2.0f*this->bmaj*this->bmaj) + (sin_bpa*sin_bpa)/(2.0f*this->bmin*this->bmin);
-      float b = sin_bpa_2/(2.0f*this->bmaj*this->bmaj) - sin_bpa_2/(2.0f*this->bmin*this->bmin);
-      float c = (sin_bpa*sin_bpa)/(2.0f*this->bmaj*this->bmaj) + (cos_bpa*cos_bpa)/(2.0f*this->bmin*this->bmin);
+      float a = (cos_bpa*cos_bpa)/(2.0f*this->sigma_maj*this->sigma_maj) + (sin_bpa*sin_bpa)/(2.0f*this->sigma_min*this->sigma_min);
+      float b = sin_bpa_2/(2.0f*this->sigma_maj*this->sigma_maj) - sin_bpa_2/(2.0f*this->sigma_min*this->sigma_min);
+      float c = (sin_bpa*sin_bpa)/(2.0f*this->sigma_maj*this->sigma_maj) + (cos_bpa*cos_bpa)/(2.0f*this->sigma_min*this->sigma_min);
       float value = this->amplitude*exp(-a*x*x - b*x*y - c*y*y);
       return value;
 };
 
 private:
-  float bmaj;
-  float bmin;
+  float sigma_maj;
+  float sigma_min;
   float bpa;
   float amplitude;
   double u_0;
