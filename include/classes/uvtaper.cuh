@@ -40,11 +40,11 @@ __host__ UVTaper(float sigma_maj, float sigma_min, float bpa){
       this->bpa = bpa;
 };
 
-__host__ float getsigma_maj(){
+__host__ float getSigma_maj(){
       return this->sigma_maj;
 };
 
-__host__ float getsigma_min(){
+__host__ float getSigma_min(){
       return this->sigma_min;
 };
 
@@ -56,11 +56,11 @@ __host__ void setAmplitude(float amplitude){
       this->amplitude = amplitude;
 };
 
-__host__ void setsigma_maj(float sigma_maj){
+__host__ void setSigma_maj(float sigma_maj){
       this->sigma_maj = sigma_maj;
 };
 
-__host__ void setsigma_min(float sigma_min){
+__host__ void setSigma_min(float sigma_min){
       this->sigma_min = sigma_min;
 };
 
@@ -77,15 +77,6 @@ __host__ void setGaussianParameters(float sigma_maj, float sigma_min, float bpa)
       this->sigma_maj = sigma_maj;
       this->sigma_min = sigma_min;
       this->bpa = bpa;
-};
-
-__host__ float ellipticGaussianValue(double u, double v, double u_0, double v_0)
-{
-      double x = u - u_0;
-      double y = v - v_0;
-
-      float value = this->amplitude*exp(x*x/(2*this->sigma_maj*this->sigma_maj) - this->bpa*x*y/(this->sigma_maj*this->sigma_min) - y*y/(2*this->sigma_min*this->sigma_min));
-      return value;
 };
 
 __host__ float getValue(double u, double v)

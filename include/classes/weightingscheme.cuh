@@ -41,7 +41,7 @@ UVTaper * getUVTaper(){
 void setUVTaper(UVTaper * uvtaper){
     this->uvtaper = uvtaper;
     std::cout << "UVTaper has been set" << std::endl;
-    std::cout << "UVTaper Features - bmaj=" << this->uvtaper->getBMaj() << ", bmin=" << this->uvtaper->getBMin() << ", bpa=" << this->uvtaper->getBPA() << std::endl;
+    std::cout << "UVTaper Features - bmaj=" << this->uvtaper->getSigma_maj() << ", bmin=" << this->uvtaper->getSigma_min() << ", bpa=" << this->uvtaper->getBPA() << std::endl;
 };
 
 void restoreWeights(std::vector<MSDataset>& d){
