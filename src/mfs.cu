@@ -347,7 +347,7 @@ void MFS::configure(int argc, char **argv)
 
         int total_gpus;
         cudaGetDeviceCount(&total_gpus);
-        if(firstgpu > total_gpus || firstgpu < 0) {
+        if(firstgpu > total_gpus-1 || firstgpu < 0) {
                 printf("ERROR. The selected GPU ID does not exist\n");
                 exit(-1);
         }
@@ -693,7 +693,7 @@ void MFS::setDevice()
 
 
                 }
-                
+
                 cudaSetDevice(firstgpu);
 
 
