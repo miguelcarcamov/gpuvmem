@@ -3391,8 +3391,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
-
-                        printf("Total frequencies: %d\n", datasets[d].data.total_frequencies);
                         #pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
                         for (int i = 0; i < datasets[d].data.total_frequencies; i++)
                         {
@@ -3420,7 +3418,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 checkCudaErrors(cudaDeviceSynchronize());
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                     if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY){
-                                          printf("Entering stokes\n");
                                           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
                                                   checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0, sizeof(float)*max_number_vis));
 
@@ -3452,7 +3449,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                                                                datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], datasets[d].fields[f].device_visibilities[i][s].threadsPerBlockUV);
                                                   //REDUCTIONS
                                                   //chi2
-                                                  printf("Result %f\n", result);
                                                   resultchi2 += result;
                                           }
                                     }
