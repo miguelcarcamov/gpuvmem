@@ -694,7 +694,8 @@ void MFS::setDevice()
 
                 }
 
-
+                printf("firstgpu: %d\n", firstgpu);
+                printf("num_gpu: %d\n", num_gpus);
                 cudaSetDevice(firstgpu);
 
 
