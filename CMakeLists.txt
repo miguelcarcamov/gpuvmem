@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 project(gpuvmem LANGUAGES C CXX CUDA)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(Boost REQUIRED)
@@ -35,7 +35,6 @@ if(Boost_FOUND)
   ${CASACORE_INCLUDE_DIRS}
   ${CFITSIO_INCLUDE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
   ${Boost_INCLUDE_DIRS}
   ${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc
   )
@@ -47,18 +46,12 @@ if(Boost_FOUND)
     set(TEMP "${TEMP} ") # A space to cleanly separate from existing content
   endif()
 
-  if(NOT DEFINED CUDA_ARCHITECTURES)
-    #set(CUDA_ARCHITECTURES ${CUDA_NVCC_ARCH_FLAGS})
-    set_property(TARGET gpuvmem PROPERTY CUDA_ARCHITECTURES ${CUDA_NVCC_ARCH_FLAGS})
-  endif()
-
-  #set_property(TARGET gpuvmem PROPERTY CUDA_ARCHITECTURES ${CUDA_NVCC_ARCH_FLAGS})
   if(MEMORY_DEBUG)
     message(NOTICE "MEMORY DEBUG IS ON")
     set(COMPFLAGS "-g -G -D_FORCE_INLINES -w")
     set(TEMP "${TEMP}${COMPFLAGS}" )
     set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
   else()
     message(NOTICE "MEMORY DEBUG IS OFF")
     if(USE_FAST_MATH)
@@ -66,12 +59,12 @@ if(Boost_FOUND)
       set(COMPFLAGS "-D_FORCE_INLINES -w --use_fast_math -O3")
       set(TEMP "${TEMP}${COMPFLAGS}" )
       set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
-      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp")
+      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
     else()
       set(COMPFLAGS "-D_FORCE_INLINES -w -O3")
       set(TEMP "${TEMP}${COMPFLAGS}" )
       set_target_properties(gpuvmem PROPERTIES COMPILE_FLAGS ${TEMP} CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 11)
-      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp")
+      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
     endif()
   endif()
 
