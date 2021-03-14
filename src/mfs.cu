@@ -345,8 +345,8 @@ void MFS::configure(int argc, char **argv)
                 }
         }
 
-        if(firstgpu > num_gpus-1 || firstgpu < 0) {
-                printf("ERROR. The selected GPU IDs don't exist\n");
+        if(firstgpu > multigpu || firstgpu < 0) {
+                printf("ERROR. The selected GPU ID does not exist\n");
                 exit(-1);
         }
 
