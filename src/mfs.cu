@@ -961,7 +961,6 @@ void MFS::unSetDevice()
         for(int d=0; d<nMeasurementSets; d++) {
                 for(int f=0; f<datasets[d].data.nfields; f++) {
                         for(int i=0; i<datasets[d].data.total_frequencies; i++) {
-
                                 cudaSetDevice((i%num_gpus) + firstgpu);
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                         cudaFree(datasets[d].fields[f].device_visibilities[i][s].uvw);
