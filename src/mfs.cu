@@ -345,10 +345,13 @@ void MFS::configure(int argc, char **argv)
                 }
         }
 
+        printf("First GPU: %d\n", firstgpu);
+        printf("Multigpu: %d\n", multigpu);
         if(firstgpu > multigpu || firstgpu < 0) {
                 printf("ERROR. The selected GPU ID does not exist\n");
                 exit(-1);
         }
+        exit(-1);
 
         if(verbose_flag) {
                 printf("Number of CUDA devices and threads: %d\n", num_gpus);
