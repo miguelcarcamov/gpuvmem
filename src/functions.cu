@@ -3399,7 +3399,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 unsigned int num_cpu_threads = omp_get_num_threads();
                                 int gpu_idx = i%num_gpus;
                                 cudaSetDevice(gpu_idx + firstgpu);
-                                printf("Set device: %d\n", gpu_idx + firstgpu);
                                 int gpu_id = -1;
                                 cudaGetDevice(&gpu_id);
 
@@ -3415,9 +3414,11 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
 
                                 //PHASE_ROTATE
-                                printf("gpu_id: %d\n", gpu_idx);
+                                printf("GPU ID chi2: %d\n", gpu_idx + firstgpu);
+                                printf("Array idx chi2: %d\n", gpu_idx);
                                 phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
                                 checkCudaErrors(cudaDeviceSynchronize());
+
                                 for(int s=0; s<datasets[d].data.nstokes; s++) {
                                     if(datasets[d].data.corr_type[s]==LL || datasets[d].data.corr_type[s]==RR || datasets[d].data.corr_type[s]==XX || datasets[d].data.corr_type[s]==YY){
                                           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {

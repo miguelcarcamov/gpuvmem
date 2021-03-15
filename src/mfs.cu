@@ -521,15 +521,6 @@ void MFS::setDevice()
 
         this->visibilities->setMaxNumberVis(max_number_vis);
 
-        for(int g=0; g<num_gpus; g++) {
-                cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_dchi2, sizeof(float)*M*N));
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_dchi2, 0, sizeof(float)*M*N));
-
-                checkCudaErrors(cudaMalloc(&vars_gpu[g].device_chi2, sizeof(float)*max_number_vis));
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float)*max_number_vis));
-        }
-
         printf("Estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*3600.0, beam_bmin*3600.0, beam_bpa);
         printf("gpuvmem estimated beam size: %e x %e (arcsec) / %lf (degrees)\n", beam_bmaj*1200.0, beam_bmin*1200.0, beam_bpa); // ~ A third of the clean beam
         beam_bmaj = beam_bmaj / fabs(DELTAX); // Beam major axis to pixels
@@ -609,12 +600,19 @@ void MFS::setDevice()
         }
 
         ////////////////////////////////////////////////CUDA MEMORY ALLOCATION FOR DEVICE///////////////////////////////////////////////////
-        printf("Num gpus: %d\n", num_gpus);
         for(int g=0; g<num_gpus; g++) {
-                printf("Setting GPU: %d\n",(g%num_gpus) + firstgpu);
+                printf("GPU ID: %d\n", (g%num_gpus) + firstgpu);
+                printf("Array idx: %d\n", g);
                 cudaSetDevice((g%num_gpus) + firstgpu);
                 checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_V, sizeof(cufftComplex)*M*N));
                 checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_I_nu, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMalloc(&vars_gpu[g].device_chi2, sizeof(float)*max_number_vis));
+                checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_dchi2, sizeof(float)*M*N));
+
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float)*max_number_vis));
+                checkCudaErrors(cudaMemset(vars_gpu[g].device_dchi2, 0, sizeof(float)*M*N));
         }
 
 
@@ -633,16 +631,6 @@ void MFS::setDevice()
 
         if(radius_mask)
                 checkCudaErrors(cudaMalloc((void**)&device_distance_image, sizeof(float)*M*N));
-
-
-
-        for(int g=0; g<num_gpus; g++) {
-                printf("Setting GPU: %d\n",(g%num_gpus) + firstgpu);
-                cudaSetDevice((g%num_gpus) + firstgpu);
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex)*M*N));
-                checkCudaErrors(cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex)*M*N));
-
-        }
 
         /////////// MAKING IMAGE OBJECT /////////////
         image = new Image(device_Image, image_count);
