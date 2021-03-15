@@ -3399,6 +3399,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 unsigned int num_cpu_threads = omp_get_num_threads();
                                 int gpu_idx = i%num_gpus;
                                 cudaSetDevice(gpu_idx + firstgpu);
+                                printf("Set device: %d\n", gpu_idx + firstgpu);
                                 int gpu_id = -1;
                                 cudaGetDevice(&gpu_id);
 
