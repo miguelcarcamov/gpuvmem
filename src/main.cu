@@ -120,7 +120,7 @@ __host__ int main(int argc, char **argv) {
 
         Synthesizer *sy = createObject<Synthesizer, std::string>("MFS");
         Optimizer *cg = createObject<Optimizer, std::string>("CG-FRPRMN");
-        //Optimizer * cg = createObject<Optimizer, std::string>("CG-LBFGS");
+        //Optimizer *cg = createObject<Optimizer, std::string>("CG-LBFGS");
         //cg->setK(15);
         // Choose your antialiasing kernel!
         CKernel *sc = new PillBox2D();
