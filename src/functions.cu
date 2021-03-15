@@ -2039,6 +2039,7 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
     #endif
         exp_phase = make_cuFloatComplex(c, s); // Create the complex cos + i sin
         data[N*i+j] = cuCmulf(data[N*i+j], exp_phase); // Complex multiplication
+        printf("Thread (%d, %d) = (%f, %f)", i, j, data[N*i+j].x, data[N*i+j].y);
 }
 
 
