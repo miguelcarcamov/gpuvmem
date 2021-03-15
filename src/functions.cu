@@ -2038,7 +2038,6 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
         s = sinpif(phase);
     #endif
         exp_phase = make_cuFloatComplex(c, s); // Create the complex cos + i sin
-        printf("Thread (%d, %d) = (%f, %f)", i, j, data[N*i+j].x, data[N*i+j].y);
         data[N*i+j] = cuCmulf(data[N*i+j], exp_phase); // Complex multiplication
 }
 
@@ -3414,6 +3413,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 //FFT 2D
                                 FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
 
+                                printf("Got GPU %d\n", gpu_id);
                                 //PHASE_ROTATE
                                 phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
                                 checkCudaErrors(cudaDeviceSynchronize());
