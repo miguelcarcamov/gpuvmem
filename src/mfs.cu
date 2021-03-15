@@ -601,8 +601,6 @@ void MFS::setDevice()
 
         ////////////////////////////////////////////////CUDA MEMORY ALLOCATION FOR DEVICE///////////////////////////////////////////////////
         for(int g=0; g<num_gpus; g++) {
-                printf("GPU ID: %d\n", (g%num_gpus) + firstgpu);
-                printf("Array idx: %d\n", g);
                 cudaSetDevice((g%num_gpus) + firstgpu);
                 checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_V, sizeof(cufftComplex)*M*N));
                 checkCudaErrors(cudaMalloc((void**)&vars_gpu[g].device_I_nu, sizeof(cufftComplex)*M*N));
@@ -779,6 +777,7 @@ void MFS::clearRun()
 
         }
 
+        cudaSetDevice(firstgpu);
         checkCudaErrors(cudaMemcpy(device_Image, host_I, sizeof(float)*N*M*image_count, cudaMemcpyHostToDevice));
 
 };
@@ -994,7 +993,7 @@ void MFS::unSetDevice()
         }
 
 
-
+        cudaSetDevice(firstgpu);
         cudaFree(device_Image);
 
         for(int g=0; g<num_gpus; g++) {
@@ -1005,7 +1004,6 @@ void MFS::unSetDevice()
 
 
         cudaSetDevice(firstgpu);
-
 
         cudaFree(device_noise_image);
 

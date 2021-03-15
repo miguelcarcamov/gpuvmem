@@ -3414,8 +3414,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
 
                                 //PHASE_ROTATE
-                                printf("GPU ID chi2: %d\n", gpu_idx + firstgpu);
-                                printf("Array idx chi2: %d\n", gpu_idx);
                                 phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
                                 checkCudaErrors(cudaDeviceSynchronize());
 
