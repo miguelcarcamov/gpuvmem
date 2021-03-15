@@ -71,16 +71,16 @@ __host__ void setGridding(bool gridding){
 };
 
 __host__ int getGriddingThreads(){
-        if(this->gridding)
           return this->griddingThreads;
-        else
-          return 0;
 };
 
 __host__ void setGriddingThreads(int griddingThreads){
-        this->griddingThreads = griddingThreads;
-        if(this->griddingThreads > 0)
+        if(griddingThreads > 0){
+          this->griddingThreads = griddingThreads;
           this->gridding = true;
+        }else{
+          std::cout << "Gridding threads cannot be less than 0" << std::endl;
+        }
 };
 
 __host__ float getVisNoise(){

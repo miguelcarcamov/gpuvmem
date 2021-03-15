@@ -423,7 +423,7 @@ void MFS::configure(int argc, char **argv)
         }
 
         if(this->gridding)
-          this->scheme->setThreads(this->getGriddingThreads());
+          this->scheme->setThreads(this->griddingThreads);
 
         this->scheme->configure(&robust_param);
         this->scheme->apply(datasets);
