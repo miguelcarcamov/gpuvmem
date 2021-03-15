@@ -3413,7 +3413,6 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
                                 //FFT 2D
                                 FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
 
-                                printf("Got GPU %d\n", gpu_id);
                                 //PHASE_ROTATE
                                 phase_rotate <<< numBlocksNN, threadsPerBlockNN >>> (vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
                                 checkCudaErrors(cudaDeviceSynchronize());
