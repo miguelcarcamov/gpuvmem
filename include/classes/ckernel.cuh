@@ -369,6 +369,11 @@ __host__ int getSupportX(){
 __host__ int getSupportY(){
         return this->support_y;
 };
+
+__host__ int getGPUID(){
+        return this->gpu_id;
+};
+
 __host__ float getW(){
         return this->w;
 };
@@ -441,6 +446,10 @@ __host__ void setIoImageHandler(Io *imageHandler){
         this->ioImageHandler = imageHandler;
 };
 
+__host__ void setGPUID(int gpu_id){
+        this->gpu_id = gpu_id;
+};
+
 __host__ void printGCF(){
         if(this->gcf->getImageHandler() != NULL && this->gcf->getImageHandler()->getPrintImages())
             this->gcf->getImageHandler()->printImage(this->gcf->getKernelPointer(), "GCF.fits", "", 0, 0, 1.0f, this->gcf->getm(), this->gcf->getn(), false);
@@ -491,6 +500,7 @@ int m;     //size of the kernel
 int n;     //size of the kernel
 int support_x;
 int support_y;
+int gpu_id = 0;
 float amp;
 float x0;
 float y0;
@@ -507,13 +517,17 @@ CKernel *gcf = NULL;
 std::string name;
 
 
-__host__ void setKernelMemory(){
+__host__ void setKernelMemory()
+{
         this->kernel.resize(this->m_times_n);
+        cudaSetDevice(this->gpu_id);
         checkCudaErrors(cudaMalloc(&this->gpu_kernel, sizeof(float) * this->m_times_n));
         checkCudaErrors(cudaMemset(this->gpu_kernel, 0, sizeof(float) * this->m_times_n));
 };
 
-__host__ void copyKerneltoGPU(){
+__host__ void copyKerneltoGPU()
+{
+        cudaSetDevice(this->gpu_id);
         checkCudaErrors(cudaMemcpy(this->gpu_kernel, this->kernel.data(), sizeof(float) * this->m_times_n, cudaMemcpyHostToDevice));
 };
 

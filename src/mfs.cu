@@ -308,7 +308,7 @@ void MFS::configure(int argc, char **argv)
         }
 
         string_values.clear();
-
+        this->ckernel->setGPUID(firstgpu);
         if(variables.penalization_factors != "NULL") {
 
                 string_values = countAndSeparateStrings(variables.penalization_factors, ",");
