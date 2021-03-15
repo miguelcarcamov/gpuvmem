@@ -8,7 +8,7 @@
 class WeightingScheme {
 public:
 virtual void apply(std::vector<MSDataset>& d) = 0;
-virtual void configure(void* params) = 0;
+virtual void configure(void *params) = 0;
 
 WeightingScheme(){
     this->threads = omp_get_num_procs() - 2;
@@ -29,7 +29,7 @@ int getThreads(){
     return this->threads;
 };
 
-int setThreads(int threads){
+void setThreads(int threads){
     this->threads = threads;
     std::cout << "The running weighting scheme threads have been set to "<< this->threads << std::endl;
 };

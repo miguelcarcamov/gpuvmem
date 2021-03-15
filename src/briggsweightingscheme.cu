@@ -19,7 +19,7 @@ void BriggsWeightingScheme::setRobustParam(float robust_param){
 };
 
 void BriggsWeightingScheme::configure(void *params){
-        float robust_param = *(float *)params;
+        float robust_param = *((float *)params);
         this->setRobustParam(robust_param);
         std::cout << "Using robust " << this->getRobustParam() << " for Briggs weighting" << std::endl;
 };

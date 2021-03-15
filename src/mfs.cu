@@ -418,12 +418,14 @@ void MFS::configure(int argc, char **argv)
         double deltay = RPDEG_D*DELTAY; //radians
         deltau = 1.0 / (M * deltax);
         deltav = 1.0 / (N * deltay);
-        if(NULL == this->scheme) {
+
+        if(this->scheme == NULL) {
                 this->scheme = Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
         }
 
         if(this->gridding)
           this->scheme->setThreads(this->griddingThreads);
+
 
         this->scheme->configure(&robust_param);
         this->scheme->apply(datasets);
