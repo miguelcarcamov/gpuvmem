@@ -3351,6 +3351,7 @@ __host__ void simulate(float *I, VirtualImageProcessor *ip)
 
                                 if(NULL!= ip->getCKernel()){
                                     apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
+                                    checkCudaErrors(cudaDeviceSynchronize());
                                 }
                                 //FFT 2D
                                 FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
@@ -3409,6 +3410,7 @@ __host__ float chi2(float *I, VirtualImageProcessor *ip)
 
                                 if(NULL!= ip->getCKernel()){
                                     apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
+                                    checkCudaErrors(cudaDeviceSynchronize());
                                 }
                                 //FFT 2D
                                 FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu, vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
