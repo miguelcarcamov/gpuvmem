@@ -881,7 +881,8 @@ void MFS::writeImages()
         printf("Saving final image to disk\n");
         if(IoOrderEnd == NULL) {
                 ioImageHandler->printNotPathImage(image->getImage(), "JY/PIXEL", optimizer->getCurrentIteration(), 0, fg_scale, true);
-                ioImageHandler->printNotPathNotNormalizedImage(image->getImage(), "alpha.fits", "", optimizer->getCurrentIteration(), 1, true);
+                if(print_images)
+                  ioImageHandler->printNotNormalizedImage(image->getImage(), "alpha.fits", "", optimizer->getCurrentIteration(), 1, true);
         }else{
                 (IoOrderEnd)(image->getImage(), ioImageHandler);
         }
@@ -897,8 +898,11 @@ void MFS::writeImages()
                 printf("Calculating Error Images\n");
                 this->error->calculateErrorImage(this->image, this->visibilities);
                 if(IoOrderError == NULL) {
-                        ioImageHandler->printNotPathImage(image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL", optimizer->getCurrentIteration(), 0, 1.0, true);
-                        ioImageHandler->printNotPathImage(image->getErrorImage(), "error_alpha.fits", "", optimizer->getCurrentIteration(), 1, 1.0, true);
+                        if(print_images){
+                          ioImageHandler->printNotNormalizedImage(image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL", optimizer->getCurrentIteration(), 0, true);
+                          ioImageHandler->printNotNormalizedImage(image->getErrorImage(), "error_alpha_0.fits", "", optimizer->getCurrentIteration(), 1, true);
+                        }
+
                 }else{
                         (IoOrderError)(image->getErrorImage(), ioImageHandler);
                 }
