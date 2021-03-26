@@ -140,7 +140,6 @@ typedef struct header_values {
         long M, N;
         double beam_bmaj, beam_bmin, beam_bpa;
         float beam_noise = -1.0f;
-        int type;
         int bitpix;
 }headerValues;
 
@@ -186,7 +185,7 @@ __host__ headerValues open_fits(T **data, const char *filename)
 
         *data = (T*)malloc(elements*sizeof(T));
 
-        fits_read_img(hdu, h_values.type, fpixel, elements, &null, *data, &anynull, &status);
+        fits_read_img(hdu, h_values.bitpix, fpixel, elements, &null, *data, &anynull, &status);
         if (status) {
                 fits_report_error(stderr, status);         /* print error message */
                 exit(0);
