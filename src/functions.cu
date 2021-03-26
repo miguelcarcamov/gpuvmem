@@ -222,6 +222,7 @@ __host__ Vars getOptions(int argc, char **argv) {
         flags.Var(variables.gridding, 'g', "gridding", int32_t(0), "Use gridded visibilities. This is done in CPU (Need to select the CPU threads that will grid the input visibilities)");
         flags.Var(variables.initial_values, 'z', "initial_values", std::string("NULL"), "Initial values for image/s");
         flags.Var(variables.penalization_factors, 'Z', "regularization_factors", std::string("NULL"), "Regularization factors for each regularization (separated by a comma)");
+        flags.Var(variables.user_mask, 'U', "user-mask", std::string("NULL"), "Use a user created mask instead of using the noise mask");
         flags.Bool(verbose_flag, 'v', "verbose", "Shows information through all the execution", "Flags");
         flags.Bool(nopositivity, 'x', "nopositivity", "Runs gpuvmem with no positivity restrictions on the images", "Flags");
         flags.Bool(apply_noise, 'a', "apply-noise", "Applies random gaussian noise to visibilities", "Flags");

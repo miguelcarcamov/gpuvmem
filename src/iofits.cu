@@ -76,6 +76,105 @@ headerValues IoFITS::readHeader()
         return readFITSHeader(getConstCharFromString(this->input));
 };
 
+std::vector<float> IoFITS::read_data_float_FITS()
+{
+      std::vector<float> image;
+      float *tmp;
+      headerValues hdr = open_fits<float>(&tmp, getConstCharFromString(this->input));
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<float> IoFITS::read_data_float_FITS(char* filename)
+{
+      std::vector<float> image;
+      float *tmp;
+      headerValues hdr = open_fits<float>(&tmp, filename);
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<float> IoFITS::read_data_float_FITS(std::string filename)
+{
+      std::vector<float> image;
+      float *tmp;
+      headerValues hdr = open_fits<float>(&tmp, getConstCharFromString(filename));
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<double> IoFITS::read_data_double_FITS()
+{
+      std::vector<double> image;
+      double *tmp;
+      headerValues hdr = open_fits<double>(&tmp, getConstCharFromString(this->input));
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<double> IoFITS::read_data_double_FITS(char* filename)
+{
+      std::vector<double> image;
+      double *tmp;
+      headerValues hdr = open_fits<double>(&tmp, filename);
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<double> IoFITS::read_data_double_FITS(std::string filename)
+{
+      std::vector<double> image;
+      double *tmp;
+      headerValues hdr = open_fits<double>(&tmp, getConstCharFromString(filename));
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<int> IoFITS::read_data_int_FITS()
+{
+      std::vector<int> image;
+      int *tmp;
+      headerValues hdr = open_fits<int>(&tmp, getConstCharFromString(this->input));
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<int> IoFITS::read_data_int_FITS(char* filename)
+{
+      std::vector<int> image;
+      int *tmp;
+      headerValues hdr = open_fits<int>(&tmp, filename);
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
+std::vector<int> IoFITS::read_data_int_FITS(std::string filename)
+{
+      std::vector<int> image;
+      int *tmp;
+      headerValues hdr = open_fits<int>(&tmp, getConstCharFromString(filename));
+      int tmp_len = hdr.M * hdr.N;
+      image.assign(tmp, tmp+tmp_len);
+      free(tmp);
+      return image;
+};
+
 void IoFITS::printImage(float *I, char *path, char *name_image, char *units, int iteration, int index, float fg_scale, long M, long N, bool isInGPU)
 {
         OCopyFITS(I, getConstCharFromString(this->input), path, name_image, units, iteration, index, fg_scale, M, N, isInGPU);

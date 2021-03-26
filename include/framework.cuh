@@ -63,6 +63,7 @@ typedef struct variables {
         std::string gpus;
         std::string initial_values;
         std::string penalization_factors;
+        std::string user_mask;
         int blockSizeX;
         int blockSizeY;
         int blockSizeV;

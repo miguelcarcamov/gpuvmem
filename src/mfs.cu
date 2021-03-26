@@ -737,8 +737,14 @@ void MFS::setDevice()
                 printf("fg_scale = %e\n", fg_scale);
                 printf("noise (Jy/pix) = %e\n", noise_jypix);
         }
-        if(radius_mask)
-                checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
+
+        std::vector<float> u_mask;
+        if(variables.user_mask != "NULL"){
+              u_mask = ioImageHandler->read_data_float_FITS(variables.user_mask);
+              checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), u_mask.data(), sizeof(float), sizeof(float), M*N, cudaMemcpyHostToDevice));
+        }
+        else if(radius_mask)
+              checkCudaErrors(cudaMemcpy2D(device_noise_image, sizeof(float), device_distance_image, sizeof(float), sizeof(float), M*N, cudaMemcpyDeviceToDevice));
 
         free(host_noise_image);
         free(host_weight_image);
