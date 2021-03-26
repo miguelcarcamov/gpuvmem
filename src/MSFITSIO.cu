@@ -228,6 +228,7 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
 {
         int status_header = 0;
         int status_noise = 0;
+        int status_dirty_beam = 0;
         float aux_noise;
 
         headerValues h_values;
@@ -241,9 +242,9 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
         fits_read_key(hdu_in, TDOUBLE, "CRPIX2", &h_values.crpix2, NULL, &status_header);
         fits_read_key(hdu_in, TLONG, "NAXIS1", &h_values.M, NULL, &status_header);
         fits_read_key(hdu_in, TLONG, "NAXIS2", &h_values.N, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BMAJ", &h_values.beam_bmaj, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BMIN", &h_values.beam_bmin, NULL, &status_header);
-        fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL, &status_header);
+        fits_read_key(hdu_in, TDOUBLE, "BMAJ", &h_values.beam_bmaj, NULL, &status_dirty_beam);
+        fits_read_key(hdu_in, TDOUBLE, "BMIN", &h_values.beam_bmin, NULL, &status_dirty_beam);
+        fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL, &status_dirty_beam);
         fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
         h_values.type = fits_get_img_type(hdu_in, &bitpix, &status_header);
         h_values.bitpix = bitpix;
