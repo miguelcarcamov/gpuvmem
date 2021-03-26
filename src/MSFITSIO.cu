@@ -248,6 +248,9 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits)
         fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
         h_values.type = fits_get_img_type(hdu_in, &bitpix, &status_header);
         h_values.bitpix = bitpix;
+        printf("Type: %d\n", h_values.type);
+        printf("Bitpix: %d\n", h_values.bitpix);
+        exit(-1);
 
 
         if (status_header) {
