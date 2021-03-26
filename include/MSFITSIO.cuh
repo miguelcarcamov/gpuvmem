@@ -184,7 +184,7 @@ __host__ headerValues open_fits(T **data, const char *filename)
         int elements = h_values.M * h_values.N;
 
         *data = (T*)malloc(elements*sizeof(T));
-        printf("Bitpix: %d\n", hvalues.bitpix);
+        printf("Bitpix: %d\n", h_values.bitpix);
         fits_read_img(hdu, h_values.bitpix, fpixel, elements, &null, *data, &anynull, &status);
         if (status) {
                 fits_report_error(stderr, status);         /* print error message */
