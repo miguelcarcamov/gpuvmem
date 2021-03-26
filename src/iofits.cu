@@ -80,7 +80,7 @@ std::vector<float> IoFITS::read_data_float_FITS()
 {
       std::vector<float> image;
       float *tmp;
-      headerValues hdr = open_fits<float>(&tmp, getConstCharFromString(this->input));
+      headerValues hdr = open_fits<float>(&tmp, getConstCharFromString(this->input), TFLOAT);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -91,7 +91,7 @@ std::vector<float> IoFITS::read_data_float_FITS(char* filename)
 {
       std::vector<float> image;
       float *tmp;
-      headerValues hdr = open_fits<float>(&tmp, filename);
+      headerValues hdr = open_fits<float>(&tmp, filename, TFLOAT);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -102,7 +102,7 @@ std::vector<float> IoFITS::read_data_float_FITS(std::string filename)
 {
       std::vector<float> image;
       float *tmp;
-      headerValues hdr = open_fits<float>(&tmp, getConstCharFromString(filename));
+      headerValues hdr = open_fits<float>(&tmp, getConstCharFromString(filename), TFLOAT);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -113,7 +113,7 @@ std::vector<double> IoFITS::read_data_double_FITS()
 {
       std::vector<double> image;
       double *tmp;
-      headerValues hdr = open_fits<double>(&tmp, getConstCharFromString(this->input));
+      headerValues hdr = open_fits<double>(&tmp, getConstCharFromString(this->input), TDOUBLE);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -124,7 +124,7 @@ std::vector<double> IoFITS::read_data_double_FITS(char* filename)
 {
       std::vector<double> image;
       double *tmp;
-      headerValues hdr = open_fits<double>(&tmp, filename);
+      headerValues hdr = open_fits<double>(&tmp, filename, TDOUBLE);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -135,7 +135,7 @@ std::vector<double> IoFITS::read_data_double_FITS(std::string filename)
 {
       std::vector<double> image;
       double *tmp;
-      headerValues hdr = open_fits<double>(&tmp, getConstCharFromString(filename));
+      headerValues hdr = open_fits<double>(&tmp, getConstCharFromString(filename), TDOUBLE);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -146,7 +146,7 @@ std::vector<int> IoFITS::read_data_int_FITS()
 {
       std::vector<int> image;
       int *tmp;
-      headerValues hdr = open_fits<int>(&tmp, getConstCharFromString(this->input));
+      headerValues hdr = open_fits<int>(&tmp, getConstCharFromString(this->input), TINT);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -157,7 +157,7 @@ std::vector<int> IoFITS::read_data_int_FITS(char* filename)
 {
       std::vector<int> image;
       int *tmp;
-      headerValues hdr = open_fits<int>(&tmp, filename);
+      headerValues hdr = open_fits<int>(&tmp, filename, TINT);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
@@ -168,7 +168,7 @@ std::vector<int> IoFITS::read_data_int_FITS(std::string filename)
 {
       std::vector<int> image;
       int *tmp;
-      headerValues hdr = open_fits<int>(&tmp, getConstCharFromString(filename));
+      headerValues hdr = open_fits<int>(&tmp, getConstCharFromString(filename), TINT);
       int tmp_len = hdr.M * hdr.N;
       image.assign(tmp, tmp+tmp_len);
       free(tmp);
