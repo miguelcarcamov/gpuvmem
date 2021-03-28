@@ -23,10 +23,17 @@ void RadialWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 uvw = d[j].fields[f].visibilities[i][s].uvw[z];
                                                 uvw.x = metres_to_lambda(uvw.x, d[j].fields[f].nu[i]);
                                                 uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
-
                                                 w = d[j].fields[f].visibilities[i][s].weight[z];
-                                                d[j].fields[f].backup_visibilities[i][s].weight[z] = w;
                                                 d[j].fields[f].visibilities[i][s].weight[z] *= distance(uvw.x, uvw.y, 0.0f, 0.0f);
+
+                                                if(NULL != this->uvtaper)
+                                                        d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
+
+                                                if(this->modify_weights)
+                                                        d[j].fields[f].backup_visibilities[i][s].weight[z] = d[j].fields[f].visibilities[i][s].weight[z];
+                                                else
+                                                        d[j].fields[f].backup_visibilities[i][s].weight[z] = w;
+
                                         }
                                 }
                         }

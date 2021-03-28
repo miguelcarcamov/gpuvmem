@@ -66,7 +66,7 @@ extern varsPerGPU *vars_gpu;
 extern Vars variables;
 
 extern bool verbose_flag, nopositivity, apply_noise, \
-            print_images, print_errors, save_model_input, radius_mask;
+            print_images, print_errors, save_model_input, radius_mask, modify_weights;
 
 extern Flags flags;
 
@@ -230,6 +230,7 @@ __host__ Vars getOptions(int argc, char **argv) {
         flags.Bool(print_errors, 'E', "print-errors", "Prints final error maps", "Flags");
         flags.Bool(save_model_input, 's', "save_modelcolumn", "Saves the model visibilities on the model column of the input MS", "Flags");
         flags.Bool(radius_mask, 'M', "use-radius-mask", "Use a mask based on a radius instead of the noise estimation", "Flags");
+        flags.Bool(modify_weights, 'W', "modify-weights", "Modify Measurement Set WEIGHT column with gpuvmem weights", "Flags");
         flags.Bool(help, 'h', "help", "Shows this help", "Help");
         flags.Bool(warranty, 'w', "warranty", "Shows warranty details", "Help");
         flags.Bool(copyright, 'c', "copyright", "Shows copyright conditions", "Help");

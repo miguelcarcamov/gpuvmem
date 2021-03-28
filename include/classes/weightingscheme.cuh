@@ -13,16 +13,34 @@ virtual void configure(void *params) = 0;
 WeightingScheme(){
     this->threads = omp_get_num_procs() - 2;
     this->uvtaper = NULL;
+    this->modify_weights = false;
 };
 
 WeightingScheme(int threads){
     this->threads = threads;
     this->uvtaper = NULL;
+    this->modify_weights = false;
 };
 
 WeightingScheme(int threads, UVTaper *uvtaper){
     this->threads = threads;
     this->uvtaper = uvtaper;
+    this->modify_weights = false;
+};
+
+WeightingScheme(int threads, UVTaper *uvtaper, bool modify_weights){
+    this->threads = threads;
+    this->uvtaper = uvtaper;
+    this->modify_weights = modify_weights;
+};
+
+
+bool getModifyWeights(){
+    return this->modify_weights;
+};
+
+void setModifyWeights(bool modify_weights){
+    this->modify_weights = modify_weights;
 };
 
 int getThreads(){
@@ -59,5 +77,6 @@ void restoreWeights(std::vector<MSDataset>& d){
 protected:
   int threads;
   UVTaper *uvtaper = NULL;
+  bool modify_weights;
 };
 #endif

@@ -62,7 +62,8 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 // First we save the original weights
                                                 uvw = d[j].fields[f].visibilities[i][s].uvw[z];
                                                 w = d[j].fields[f].visibilities[i][s].weight[z];
-                                                d[j].fields[f].backup_visibilities[i][s].weight[z] = w;
+                                                if(!this->modify_weights)
+                                                  d[j].fields[f].backup_visibilities[i][s].weight[z] = w;
 
                                                 uvw.x = metres_to_lambda(uvw.x, d[j].fields[f].nu[i]);
                                                 uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
@@ -176,6 +177,9 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d)
 
                                                 if(NULL != this->uvtaper)
                                                   d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
+
+                                                if(this->modify_weights)
+                                                  d[j].fields[f].backup_visibilities[i][s].weight[z] = d[j].fields[f].visibilities[i][s].weight[z];
 
                                         }
                                         std::fill_n(g_weights.begin(), M*N, 0.0f);

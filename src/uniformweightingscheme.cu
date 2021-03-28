@@ -27,7 +27,8 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
                                                 // First we save the original weights
                                                 uvw = d[j].fields[f].visibilities[i][s].uvw[z];
                                                 w = d[j].fields[f].visibilities[i][s].weight[z];
-                                                d[j].fields[f].backup_visibilities[i][s].weight[z] = w;
+                                                if(!this->modify_weights)
+                                                  d[j].fields[f].backup_visibilities[i][s].weight[z] = w;
 
                                                 uvw.x = metres_to_lambda(uvw.x, d[j].fields[f].nu[i]);
                                                 uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
@@ -64,28 +65,31 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d)
                                         #pragma omp parallel for schedule(static, 1) num_threads(this->threads) private(x, y, uvw)
                                         for (int z = 0; z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++)
                                         {
-                                           uvw = d[j].fields[f].visibilities[i][s].uvw[z];
+                                          uvw = d[j].fields[f].visibilities[i][s].uvw[z];
 
-                                           uvw.x = metres_to_lambda(uvw.x, d[j].fields[f].nu[i]);
-                                           uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
-                                           uvw.z = metres_to_lambda(uvw.z, d[j].fields[f].nu[i]);
+                                          uvw.x = metres_to_lambda(uvw.x, d[j].fields[f].nu[i]);
+                                          uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
+                                          uvw.z = metres_to_lambda(uvw.z, d[j].fields[f].nu[i]);
 
-                                           //Apply hermitian symmetry (it will be applied afterwards)
-                                           if (uvw.x < 0.0) {
-                                                   uvw.x *= -1.0;
-                                                   uvw.y *= -1.0;
-                                           }
+                                          //Apply hermitian symmetry (it will be applied afterwards)
+                                          if (uvw.x < 0.0) {
+                                                  uvw.x *= -1.0;
+                                                  uvw.y *= -1.0;
+                                          }
 
-                                           x = xy_pos[z].x;
-                                           y = xy_pos[z].y;
+                                          x = xy_pos[z].x;
+                                          y = xy_pos[z].y;
 
-                                           if(x >= 0 && y >= 0 && x < N && y < M)
-                                              d[j].fields[f].visibilities[i][s].weight[z] /= g_weights[N*y + x];
-                                           else
-                                              d[j].fields[f].visibilities[i][s].weight[z] = 0.0f;
+                                          if(x >= 0 && y >= 0 && x < N && y < M)
+                                            d[j].fields[f].visibilities[i][s].weight[z] /= g_weights[N*y + x];
+                                          else
+                                            d[j].fields[f].visibilities[i][s].weight[z] = 0.0f;
 
-                                           if(NULL != this->uvtaper)
-                                              d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
+                                          if(NULL != this->uvtaper)
+                                            d[j].fields[f].visibilities[i][s].weight[z] *= this->uvtaper->getValue(uvw.x, uvw.y);
+
+                                          if(this->modify_weights)
+                                            d[j].fields[f].backup_visibilities[i][s].weight[z] = d[j].fields[f].visibilities[i][s].weight[z];
                                         }
 
                                         std::fill_n(g_weights.begin(), M*N, 0.0f);

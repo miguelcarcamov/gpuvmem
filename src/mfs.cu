@@ -28,7 +28,7 @@ std::vector<MSDataset> datasets;
 varsPerGPU *vars_gpu;
 
 bool verbose_flag, nopositivity, apply_noise, \
-     print_images, print_errors, save_model_input, radius_mask;
+     print_images, print_errors, save_model_input, radius_mask, modify_weights;
 
 Vars variables;
 
@@ -428,6 +428,7 @@ void MFS::configure(int argc, char **argv)
 
 
         this->scheme->configure(&robust_param);
+        this->scheme->setModifyWeights(modify_weights);
         this->scheme->apply(datasets);
 
         if(this->gridding) {
