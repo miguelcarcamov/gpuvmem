@@ -64,6 +64,37 @@ __host__ void setSigma_min(float sigma_min){
       this->sigma_min = sigma_min;
 };
 
+__host__ void setFWHM(float fwhm){
+      float sigma_val = fwhm/(2.0f*sqrtf(2.0f*logf(2.0f)));
+      this->sigma_maj = sigma_val;
+      this->sigma_min = sigma_val;
+};
+
+__host__ void setFWHM(float fwhm_maj, float fwhm_min){
+      this->sigma_maj = fwhm_maj/(2.0f*sqrtf(2.0f*logf(2.0f)));
+      this->sigma_min = fwhm_min/(2.0f*sqrtf(2.0f*logf(2.0f)));
+};
+
+__host__ void setFWHM_arcsec(float fwhm_sky_arcsec){
+      float fwhm_sky_rad  = (fwhm_sky_arcsec/3600.0f)*PI/180.0;
+      float fwhm_lambda = 1.0f/fwhm_sky_rad;
+      float sigma_val = fwhm_lambda/(2.0f*sqrtf(2.0f*logf(2.0f)));
+      this->sigma_maj = sigma_val;
+      this->sigma_min = sigma_val;
+};
+
+__host__ void setFWHM_arcsec(float fwhm_maj_sky_arcsec, float fwhm_min_sky_arcsec){
+      float fwhm_maj_sky_rad  = (fwhm_maj_sky_arcsec/3600.0f)*PI/180.0;
+      float fwhm_maj_lambda = 1.0f/fwhm_maj_sky_rad;
+
+      float fwhm_min_sky_rad  = (fwhm_min_sky_arcsec/3600.0f)*PI/180.0;
+      float fwhm_min_lambda = 1.0f/fwhm_min_sky_rad;
+
+      this->sigma_maj = fwhm_maj_lambda/(2.0f*sqrtf(2.0f*logf(2.0f)));
+      this->sigma_min = fwhm_min_lambda/(2.0f*sqrtf(2.0f*logf(2.0f)));
+};
+
+
 __host__ void setBPA(float bpa){
       this->bpa = bpa;
 };
