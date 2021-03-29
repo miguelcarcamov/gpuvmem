@@ -264,6 +264,10 @@ __host__ Vars getOptions(int argc, char **argv) {
                 exit(EXIT_FAILURE);
         }
 
+        if(variables.user_mask != "NULL"){
+                variables.noise_cut = 1.0f;
+        }
+
         return variables;
 }
 
