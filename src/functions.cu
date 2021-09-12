@@ -1536,7 +1536,7 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
 
         if(*noise <= 0.0)
         {
-                *noise = 0.5f * sqrt(variance);
+                *noise = 0.5f * sqrtf(variance);
                 if(verbose_flag) {
                         printf("No NOISE keyword entered or detected in header\n");
                         printf("Using NOISE: %e ...\n", *noise);
