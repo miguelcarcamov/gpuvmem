@@ -1530,13 +1530,13 @@ __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets, int *tota
         *bpa = beam_size_rad.z / RPDEG_D; // Angle to degrees
 
         if(verbose_flag) {
-                float aux_noise = sqrtf(variance);
+                float aux_noise = 0.5f * sqrtf(variance);
                 printf("Calculated NOISE %e\n", aux_noise);
         }
 
         if(*noise <= 0.0)
         {
-                *noise = sqrt(variance);
+                *noise = 0.5f * sqrt(variance);
                 if(verbose_flag) {
                         printf("No NOISE keyword entered or detected in header\n");
                         printf("Using NOISE: %e ...\n", *noise);
