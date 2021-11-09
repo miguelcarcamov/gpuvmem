@@ -2048,9 +2048,6 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
 }
 
 
-/*
- * Interpolate in the visibility array to find the visibility at (u,v);
- */
  __global__ void getGriddedVisFromPix(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
  {
          const int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2076,11 +2073,11 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                          j1 = round(uv.x);
                          i1 = round(uv.y);
 
-                         if (i1 >= 0 && i1 < N &&  j1 >= 0 && j1 < N) {
+                         if (i1 >= 0 && i1 < N &&  j1 >= 0 && j1 < N)
                                  Vm[i] = V[N*i1 + j1];
-                         }else{
+                         else
                                  weight[i] = 0.0f;
-                         }
+
                  }else{
                          weight[i] = 0.0f;
                  }
@@ -2116,11 +2113,11 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                          if(uv.y < 0.0)
                                  uv.y = uv.y+N;
 
-                         i1 = uv.x;
+                         i1 = floor(uv.x);
                          i2 = (i1+1)%N;
                          du = uv.x - i1;
 
-                         j1 = uv.y;
+                         j1 = floor(uv.y);
                          j2 = (j1+1)%N;
                          dv = uv.y - j1;
 
@@ -2146,12 +2143,14 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
 
  }
 
-
+/*
+ * Interpolate in the visibility array to find the visibility at (u,v);
+ */
 __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float *weight, double deltau, double deltav, long numVisibilities, long N)
 {
         const int i = threadIdx.x + blockDim.x * blockIdx.x;
         double f_j, f_k;
-        int j, k;
+        int j1, j2, k1, k2;
         double2 uv;
         cufftComplex Z;
 
@@ -2161,20 +2160,22 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
                 uv.y = UVW[i].y/fabs(deltav);
 
                 f_j = uv.x + N/2;
-                j = floor(f_j);
-                f_j = f_j - j;
+                j1 = floor(f_j);
+                j2 = j1 + 1
+                f_j = f_j - j1;
 
                 f_k = uv.y + N/2;
-                k = floor(f_k);
-                f_k = f_k - k;
+                k1 = floor(f_k);
+                k2 = k1 + 1
+                f_k = f_k - k1;
 
 
                 if (j < N && k < N && j+1 < N && k+1 < N) {
                         /* Bilinear interpolation */
                         // Real part
-                        Z.x = (1-f_j)*(1-f_k)*V[N*k+j].x + f_j*(1-f_k)*V[N*k+(j+1)].x + (1-f_j)*f_k*V[N*(k+1)+j].x + f_j*f_k*V[N*(k+1)+j+1].x;
+                        Z.x = (1-f_j)*(1-f_k)*V[N*k1+j1].x + f_j*(1-f_k)*V[N*k1+j2].x + (1-f_j)*f_k*V[N*k2+j1].x + f_j*f_k*V[N*k2+j2].x;
                         // Imaginary part
-                        Z.y = (1-f_j)*(1-f_k)*V[N*k+j].y + f_j*(1-f_k)*V[N*k+(j+1)].y + (1-f_j)*f_k*V[N*(k+1)+j].y + f_j*f_k*V[N*(k+1)+j+1].y;
+                        Z.y = (1-f_j)*(1-f_k)*V[N*k1+j1].y + f_j*(1-f_k)*V[N*k1+j2].y + (1-f_j)*f_k*V[N*k2+j1].y + f_j*f_k*V[N*k2+j2].y;
 
                         Vm[i] = Z;
                 }else{
