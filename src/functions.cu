@@ -2160,12 +2160,12 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
                 uv.x = UVW[i].x/fabs(deltau);
                 uv.y = UVW[i].y/fabs(deltav);
 
-                f_j = floor(uv.x + N/2);
-                j = f_j;
+                f_j = uv.x + N/2;
+                j = floor(f_j);
                 f_j = f_j - j;
 
-                f_k = floor(uv.y + N/2);
-                k = f_k;
+                f_k = uv.y + N/2;
+                k = floor(f_k);
                 f_k = f_k - k;
 
 
