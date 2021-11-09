@@ -2161,16 +2161,16 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
 
                 f_j = uv.x + N/2;
                 j1 = floor(f_j);
-                j2 = j1 + 1
+                j2 = j1 + 1;
                 f_j = f_j - j1;
 
                 f_k = uv.y + N/2;
                 k1 = floor(f_k);
-                k2 = k1 + 1
+                k2 = k1 + 1;
                 f_k = f_k - k1;
 
 
-                if (j < N && k < N && j+1 < N && k+1 < N) {
+                if (j1 < N && k1 < N && j2 < N && k2 < N) {
                         /* Bilinear interpolation */
                         // Real part
                         Z.x = (1-f_j)*(1-f_k)*V[N*k1+j1].x + f_j*(1-f_k)*V[N*k1+j2].x + (1-f_j)*f_k*V[N*k2+j1].x + f_j*f_k*V[N*k2+j2].x;
