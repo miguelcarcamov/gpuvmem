@@ -1562,8 +1562,8 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded, std::vector<c
 
         int j, k;
         for(int i=0; i<numvis; i++) {
-                j = (uvw_gridded_sp[i].x / deltau_meters) + N/2;
-                k = (uvw_gridded_sp[i].y / deltav_meters) + M/2;
+                j = round((uvw_gridded_sp[i].x / deltau_meters) + N/2);
+                k = round((uvw_gridded_sp[i].y / deltav_meters) + M/2);
                 Vm_gridded[N*k+j] = Vm_gridded_sp[i];
         }
 }
@@ -2113,11 +2113,11 @@ __global__ void phase_rotate(cufftComplex *data, long M, long N, double xphs, do
                          if(uv.y < 0.0)
                                  uv.y = uv.y+N;
 
-                         i1 = floor(uv.x);
+                         i1 = uv.x;
                          i2 = (i1+1)%N;
                          du = uv.x - i1;
 
-                         j1 = floor(uv.y);
+                         j1 = uv.y;
                          j2 = (j1+1)%N;
                          dv = uv.y - j1;
 
@@ -2160,12 +2160,12 @@ __global__ void vis_mod2(cufftComplex *Vm, cufftComplex *V, double3 *UVW, float 
                 uv.y = UVW[i].y/fabs(deltav);
 
                 f_j = uv.x + N/2;
-                j1 = floor(f_j);
+                j1 = f_j;
                 j2 = j1 + 1;
                 f_j = f_j - j1;
 
                 f_k = uv.y + N/2;
-                k1 = floor(f_k);
+                k1 = f_k;
                 k2 = k1 + 1;
                 f_k = f_k - k1;
 
