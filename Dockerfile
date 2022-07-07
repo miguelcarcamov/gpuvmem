@@ -3,7 +3,7 @@ ENV PATH /usr/local/cuda/bin${PATH:+:${PATH}}
 ENV LD_LIBRARY_PATH /usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 
 # Update
-RUN apt-get update && \
+RUN apt-get update
 
 # Install git
 RUN apt-get install -y git
