@@ -16,13 +16,6 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3.0.2
-      - uses: ptxmac/yapf-action@master
-        with:
-          args: --recursive --verbose
   build:
     runs-on: ubuntu-latest
     needs: lint
