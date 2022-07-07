@@ -1286,8 +1286,8 @@ __host__ void do_gridding(std::vector<Field>& fields, MSData *data, double delta
 
                                         grid_pos_x = uvw.x / fabs(deltau);
                                         grid_pos_y = uvw.y / fabs(deltav);
-                                        j = round(grid_pos_x) + N / 2;
-                                        k = round(grid_pos_y) + M / 2;
+                                        j = grid_pos_x + N / 2;
+                                        k = grid_pos_y + M / 2;
 
                                         for(int m=-ckernel->getSupportY(); m<=ckernel->getSupportY(); m++) {
                                                 for(int n=-ckernel->getSupportX(); n<=ckernel->getSupportX(); n++) {

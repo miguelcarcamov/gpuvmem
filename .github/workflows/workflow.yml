@@ -1,0 +1,51 @@
+name: gpuvmem CI
+
+on:
+  push:
+    branches: ["master", "framework_dev"]
+  pull_request:
+    branches: ["master", "framework_dev"]
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:base
+      credentials:
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v3.0.2
+        with:
+          lfs: true
+      - name: Create build folder
+        run: | 
+            mkdir build
+            cd build
+      - name: Run cmake
+        run: cmake ..
+      - name: Run make
+        run: make
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    container:
+      image: ghcr.io/${{ github.repository }}:base
+      credentials:
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v3.0.2
+        with:
+          lfs: true
+      - name : Run tests
+        run: make test
+
