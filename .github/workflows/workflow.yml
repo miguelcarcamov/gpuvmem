@@ -29,12 +29,11 @@ jobs:
           lfs: true
       - name: Create build folder
         run: mkdir build
-      - name: Run cmake
+      - name: Run cmake and make
         run: |
             cd build
             cmake ..
-      - name: Run make
-        run: make
+            make
 
   test:
     runs-on: ubuntu-latest
@@ -49,5 +48,7 @@ jobs:
         with:
           lfs: true
       - name : Run tests
-        run: make test
+        run: |
+            cd build
+            make test
 
