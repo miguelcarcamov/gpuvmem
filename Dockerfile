@@ -29,7 +29,8 @@ RUN apt-get install -y build-essential && \
     apt-get install -y libfftw3-dev && \
     apt-get install -y libhdf5-serial-dev && \
     apt-get install -y python3-numpy && \
-    apt-get install -y libboost-all-dev
+    apt-get install -y libboost-all-dev && \
+    apt-get install -y libgsl-dev
 
 # Install casacore
 RUN git clone --single-branch --branch v3.5.0 https://github.com/casacore/casacore.git && \
