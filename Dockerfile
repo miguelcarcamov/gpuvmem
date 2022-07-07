@@ -38,7 +38,7 @@ RUN git clone --single-branch --branch v3.5.0 https://github.com/casacore/casaco
     cd build && \
     cmake -DUSE_FFTW3=ON -DUSE_OPENMP=ON -DUSE_HDF5=ON -DBUILD_PYTHON3=ON -DUSE_THREADS=ON -DBUILD_PYTHON=OFF .. && \
     make -j2 && \
-    make install \
+    make install
 
 # Install CUDA samples
 RUN cd /usr/local/cuda && \
