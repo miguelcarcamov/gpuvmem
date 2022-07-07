@@ -37,5 +37,5 @@ RUN git clone --single-branch --branch v3.5.0 https://github.com/casacore/casaco
     make -j2 && \
     make install \
 
-RUN echo "Hello from gpuvmem base image"
+RUN echo "Hello there from gpuvmem base image"
 LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem"
