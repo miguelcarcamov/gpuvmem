@@ -29,11 +29,9 @@ jobs:
       - uses: actions/checkout@v3.0.2
         with:
           lfs: true
-      - name: Create build folder
-        run: mkdir build
-      - name: Run cmake
-        working-directory: ${{ env.BUILD_DIR }}
-        run: cmake ..
+      - name: Configure cmake
+        id: configure
+        run: cmake . -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.CONFIG }}
       - name: Configure Error Processing
         if: ${{ failure() && steps.configure.outcome == 'failure' }}
         working-directory: ${{ env.BUILD_DIR }}
