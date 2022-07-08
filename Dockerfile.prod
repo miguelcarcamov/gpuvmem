@@ -1,0 +1,12 @@
+FROM ghcr.io/miguelcarcamov/gpuvmem:base
+ENV BUILD_DIR "build"
+ENV CONFIG "Release"
+
+RUN echo "Installing GPUVMEM"
+RUN git clone https://github.com/miguelcarcamov/gpuvmem.git && \
+    cd gpuvmem && \
+    cmake . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CONFIG && \
+    cd $BUILD_DIR && \
+    cmake --build . --target install --verbose -j `nproc`
+RUN echo "Hello from GPUVMEM production image"
+LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem"
