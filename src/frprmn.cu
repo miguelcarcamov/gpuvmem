@@ -47,141 +47,158 @@ int flag_opt;
 
 #define EPS 1.0e-10
 
-#define FREEALL cudaFree(device_gg_vector); cudaFree(device_dgg_vector); cudaFree(xi); cudaFree(device_h); cudaFree(device_g); cudaFree(temp);
+#define FREEALL                \
+  cudaFree(device_gg_vector);  \
+  cudaFree(device_dgg_vector); \
+  cudaFree(xi);                \
+  cudaFree(device_h);          \
+  cudaFree(device_g);          \
+  cudaFree(temp);
 
-__host__ void ConjugateGradient::allocateMemoryGpu()
-{
-        checkCudaErrors(cudaMalloc((void**)&device_g, sizeof(float)*M*N*image->getImageCount()));
-        checkCudaErrors(cudaMemset(device_g, 0, sizeof(float)*M*N*image->getImageCount()));
-        checkCudaErrors(cudaMalloc((void**)&device_h, sizeof(float)*M*N*image->getImageCount()));
-        checkCudaErrors(cudaMemset(device_h, 0, sizeof(float)*M*N*image->getImageCount()));
-        checkCudaErrors(cudaMalloc((void**)&xi, sizeof(float)*M*N*image->getImageCount()));
-        checkCudaErrors(cudaMemset(xi, 0, sizeof(float)*M*N*image->getImageCount()));
-        checkCudaErrors(cudaMalloc((void**)&temp, sizeof(float)*M*N*image->getImageCount()));
-        checkCudaErrors(cudaMemset(temp, 0, sizeof(float)*M*N*image->getImageCount()));
+__host__ void ConjugateGradient::allocateMemoryGpu() {
+  checkCudaErrors(cudaMalloc((void **)&device_g,
+                             sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(
+      cudaMemset(device_g, 0, sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(cudaMalloc((void **)&device_h,
+                             sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(
+      cudaMemset(device_h, 0, sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(
+      cudaMalloc((void **)&xi, sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(
+      cudaMemset(xi, 0, sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(cudaMalloc((void **)&temp,
+                             sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(
+      cudaMemset(temp, 0, sizeof(float) * M * N * image->getImageCount()));
 
-        checkCudaErrors(cudaMalloc((void**)&device_gg_vector, sizeof(float)*M*N));
-        checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
+  checkCudaErrors(
+      cudaMalloc((void **)&device_gg_vector, sizeof(float) * M * N));
+  checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float) * M * N));
 
-        checkCudaErrors(cudaMalloc((void**)&device_dgg_vector, sizeof(float)*M*N));
-        checkCudaErrors(cudaMemset(device_dgg_vector, 0, sizeof(float)*M*N));
+  checkCudaErrors(
+      cudaMalloc((void **)&device_dgg_vector, sizeof(float) * M * N));
+  checkCudaErrors(cudaMemset(device_dgg_vector, 0, sizeof(float) * M * N));
 };
-__host__ void ConjugateGradient::deallocateMemoryGpu()
-{
-        FREEALL
-};
+__host__ void ConjugateGradient::deallocateMemoryGpu(){FREEALL};
 
-__host__ void ConjugateGradient::optimize()
-{
-        printf("\n\nStarting Fletcher Reeves Polak Ribiere method (Conj. Grad.)\n\n");
-        double start, end;
-        float den;
-        float gmax;
-        I = image;
-        flag_opt = this->flag;
-        allocateMemoryGpu();
-        testof = of;
-        if(configured) {
-                of->configure(N, M, image->getImageCount());
-                configured = 0;
-        }
+__host__ void ConjugateGradient::optimize() {
+  printf("\n\nStarting Fletcher Reeves Polak Ribiere method (Conj. Grad.)\n\n");
+  double start, end;
+  float den;
+  float gmax;
+  I = image;
+  flag_opt = this->flag;
+  allocateMemoryGpu();
+  testof = of;
+  if (configured) {
+    of->configure(N, M, image->getImageCount());
+    configured = 0;
+  }
 
-        fp = of->calcFunction(image->getImage());
-        if(verbose_flag) {
-                std::cout << "Starting function value = " << std::setprecision(4) << std::fixed << fp << std::endl;
-        }
-        of->calcGradient(image->getImage(),xi,0);
-        //g=-xi
-        //xi=h=g
+  fp = of->calcFunction(image->getImage());
+  if (verbose_flag) {
+    std::cout << "Starting function value = " << std::setprecision(4)
+              << std::fixed << fp << std::endl;
+  }
+  of->calcGradient(image->getImage(), xi, 0);
+  // g=-xi
+  // xi=h=g
 
-        for(int i=0; i < image->getImageCount(); i++)
-        {
-                searchDirection<<<numBlocksNN, threadsPerBlockNN>>>(device_g, xi, device_h, N, M, i); //Search direction
-                checkCudaErrors(cudaDeviceSynchronize());
-        }
+  for (int i = 0; i < image->getImageCount(); i++) {
+    searchDirection<<<numBlocksNN, threadsPerBlockNN>>>(
+        device_g, xi, device_h, N, M, i);  // Search direction
+    checkCudaErrors(cudaDeviceSynchronize());
+  }
 
-        for(int i=1; i <= this->total_iterations; i++) {
-                start = omp_get_wtime();
-                this->current_iteration = i;
-                if(verbose_flag) {
-                        std::cout << "\n\n********** Iteration "<< i <<" **********\n" << std::endl;
-                }
-                linmin(image->getImage(), xi, &fret, NULL);
-                if (2.0f*fabsf(fret-fp) <= this->ftol*(fabsf(fret)+fabsf(fp)+EPS)) {
-                        std::cout << "Exit due to tolerance" << std::endl;
-                        of->calcFunction(I->getImage());
-                        deallocateMemoryGpu();
-                        return;
-                }
+  for (int i = 1; i <= this->total_iterations; i++) {
+    start = omp_get_wtime();
+    this->current_iteration = i;
+    if (verbose_flag) {
+      std::cout << "\n\n********** Iteration " << i << " **********\n"
+                << std::endl;
+    }
+    linmin(image->getImage(), xi, &fret, NULL);
+    if (2.0f * fabsf(fret - fp) <=
+        this->ftol * (fabsf(fret) + fabsf(fp) + EPS)) {
+      std::cout << "Exit due to tolerance" << std::endl;
+      of->calcFunction(I->getImage());
+      deallocateMemoryGpu();
+      return;
+    }
 
-                fp= of->calcFunction(image->getImage());
-                if(verbose_flag) {
-                        std::cout << "Function value = " << std::setprecision(4) << std::fixed << fp << std::endl;
-                }
-                of->calcGradient(image->getImage(),xi, i);
+    fp = of->calcFunction(image->getImage());
+    if (verbose_flag) {
+      std::cout << "Function value = " << std::setprecision(4) << std::fixed
+                << fp << std::endl;
+    }
+    of->calcGradient(image->getImage(), xi, i);
 
-                den = std::max(fp, 1.0f);
+    den = std::max(fp, 1.0f);
 
-                for(int i=0; i < image->getImageCount(); i++)
-                {
-                        CGGradCondition<<<numBlocksNN, threadsPerBlockNN>>>(temp, xi, image->getImage(), den, N, M, i);
-                        checkCudaErrors(cudaDeviceSynchronize());
-                }
+    for (int i = 0; i < image->getImageCount(); i++) {
+      CGGradCondition<<<numBlocksNN, threadsPerBlockNN>>>(
+          temp, xi, image->getImage(), den, N, M, i);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
 
-                gmax = deviceMaxReduce(temp, M*N*image->getImageCount(), threadsPerBlockNN.x * threadsPerBlockNN.y);
-                if(gmax < this->gtol){
-                        std::cout << "Exit due to gradient tolerance" << std::endl;
-                        of->calcFunction(I->getImage());
-                        deallocateMemoryGpu();
-                        return;
-                }
+    gmax = deviceMaxReduce(temp, M * N * image->getImageCount(),
+                           threadsPerBlockNN.x * threadsPerBlockNN.y);
+    if (gmax < this->gtol) {
+      std::cout << "Exit due to gradient tolerance" << std::endl;
+      of->calcFunction(I->getImage());
+      deallocateMemoryGpu();
+      return;
+    }
 
-                dgg = gg = 0.0f;
-                ////gg = g*g
-                ////dgg = (xi+g)*xi
-                checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float)*M*N));
-                checkCudaErrors(cudaMemset(device_dgg_vector, 0, sizeof(float)*M*N));
-                for(int i=0; i < image->getImageCount(); i++)
-                {
-                        getGGandDGG<<<numBlocksNN, threadsPerBlockNN>>>(device_gg_vector, device_dgg_vector, xi, device_g, N, M, i);
-                        checkCudaErrors(cudaDeviceSynchronize());
-                }
-                ////getSums (Reductions) of gg dgg
-                gg = deviceReduce<float>(device_gg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
-                dgg = deviceReduce<float>(device_dgg_vector, M*N, threadsPerBlockNN.x * threadsPerBlockNN.y);
-                if(gg == 0.0f) {
-                        std::cout << "Exit due to gg = 0" << std::endl;
-                        of->calcFunction(image->getImage());
-                        deallocateMemoryGpu();
-                        return;
-                }
-                gam = std::max(0.0f, dgg/gg);
-                //printf("Gamma = %f\n", gam);
-                //g=-xi
-                //xi=h=g+gam*h;
-                for(int i=0; i < image->getImageCount(); i++)
-                {
-                        newXi<<<numBlocksNN, threadsPerBlockNN>>>(device_g, xi, device_h, gam, N, M, i);
-                        checkCudaErrors(cudaDeviceSynchronize());
-                }
-                end = omp_get_wtime();
-                double wall_time = end-start;
-                if(verbose_flag) {
-                        std::cout << "Time: "<< std::setprecision(4) << wall_time << " seconds" << std::endl;
-                }
-        }
-        std::cout << "Too many iterations in frprmn" << std::endl;
-        of->calcFunction(image->getImage());
-        deallocateMemoryGpu();
-        return;
+    dgg = gg = 0.0f;
+    ////gg = g*g
+    ////dgg = (xi+g)*xi
+    checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float) * M * N));
+    checkCudaErrors(cudaMemset(device_dgg_vector, 0, sizeof(float) * M * N));
+    for (int i = 0; i < image->getImageCount(); i++) {
+      getGGandDGG<<<numBlocksNN, threadsPerBlockNN>>>(
+          device_gg_vector, device_dgg_vector, xi, device_g, N, M, i);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+    ////getSums (Reductions) of gg dgg
+    gg = deviceReduce<float>(device_gg_vector, M * N,
+                             threadsPerBlockNN.x * threadsPerBlockNN.y);
+    dgg = deviceReduce<float>(device_dgg_vector, M * N,
+                              threadsPerBlockNN.x * threadsPerBlockNN.y);
+    if (gg == 0.0f) {
+      std::cout << "Exit due to gg = 0" << std::endl;
+      of->calcFunction(image->getImage());
+      deallocateMemoryGpu();
+      return;
+    }
+    gam = std::max(0.0f, dgg / gg);
+    // printf("Gamma = %f\n", gam);
+    // g=-xi
+    // xi=h=g+gam*h;
+    for (int i = 0; i < image->getImageCount(); i++) {
+      newXi<<<numBlocksNN, threadsPerBlockNN>>>(device_g, xi, device_h, gam, N,
+                                                M, i);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+    end = omp_get_wtime();
+    double wall_time = end - start;
+    if (verbose_flag) {
+      std::cout << "Time: " << std::setprecision(4) << wall_time << " seconds"
+                << std::endl;
+    }
+  }
+  std::cout << "Too many iterations in frprmn" << std::endl;
+  of->calcFunction(image->getImage());
+  deallocateMemoryGpu();
+  return;
 };
 
 namespace {
-Optimizer *CreateFrprmn()
-{
-        return new ConjugateGradient;
-};
+Optimizer *CreateFrprmn() { return new ConjugateGradient; };
 
 const std::string name = "CG-FRPRMN";
-const bool RegisteredFrprmn = registerCreationFunction<Optimizer, std::string>(name, CreateFrprmn);
-};
+const bool RegisteredFrprmn =
+    registerCreationFunction<Optimizer, std::string>(name, CreateFrprmn);
+};  // namespace

@@ -3,12 +3,10 @@
 
 #include "framework.cuh"
 
-class SecondDerivateError : public Error
-{
-public:
-SecondDerivateError(){
-};
-void calculateErrorImage(Image *I, Visibilities *v);
+class SecondDerivateError : public Error {
+ public:
+  SecondDerivateError(){};
+  void calculateErrorImage(Image *I, Visibilities *v);
 };
 
 #endif

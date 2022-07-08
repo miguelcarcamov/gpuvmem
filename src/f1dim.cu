@@ -33,7 +33,7 @@
 
 #include "f1dim.cuh"
 extern float *device_pcom;
-extern float *device_xicom, (*nrfunc)(float*);
+extern float *device_xicom, (*nrfunc)(float *);
 extern long M;
 extern long N;
 extern float MINPIX, eta;
@@ -46,35 +46,35 @@ extern int image_count;
 extern ObjectiveFunction *testof;
 extern Image *I;
 
+__host__ float f1dim(float x) {
+  float *device_xt;
+  float f;
 
-__host__ float f1dim(float x)
-{
-        float *device_xt;
-        float f;
+  checkCudaErrors(
+      cudaMalloc((void **)&device_xt, sizeof(float) * M * N * image_count));
+  checkCudaErrors(
+      cudaMemset(device_xt, 0, sizeof(float) * M * N * image_count));
 
-        checkCudaErrors(cudaMalloc((void**)&device_xt, sizeof(float)*M*N*image_count));
-        checkCudaErrors(cudaMemset(device_xt, 0, sizeof(float)*M*N*image_count));
+  imageMap *auxPtr = I->getFunctionMapping();
+  // xt = pcom+x*xicom;
+  if (!nopositivity) {
+    for (int i = 0; i < I->getImageCount(); i++) {
+      (auxPtr[i].evaluateXt)(device_xt, device_pcom, device_xicom, x, i);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+  } else {
+    for (int i = 0; i < I->getImageCount(); i++) {
+      evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(
+          device_xt, device_pcom, device_xicom, x, N, M, i);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+    /*evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt,
+       device_pcom, device_xicom, x, N, M, 0);
+       checkCudaErrors(cudaDeviceSynchronize());*/
+  }
 
-        imageMap* auxPtr = I->getFunctionMapping();
-        //xt = pcom+x*xicom;
-        if(!nopositivity) {
-                for(int i=0; i<I->getImageCount(); i++)
-                {
-                        (auxPtr[i].evaluateXt)(device_xt, device_pcom, device_xicom, x, i);
-                        checkCudaErrors(cudaDeviceSynchronize());
-                }
-        }else{
-                for(int i=0; i<I->getImageCount(); i++)
-                {
-                        evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt, device_pcom, device_xicom, x, N, M, i);
-                        checkCudaErrors(cudaDeviceSynchronize());
-                }
-                /*evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt, device_pcom, device_xicom, x, N, M, 0);
-                   checkCudaErrors(cudaDeviceSynchronize());*/
-        }
-
-        //f = (*nrfunc)(device_xt);
-        f = testof->calcFunction(device_xt);
-        cudaFree(device_xt);
-        return f;
+  // f = (*nrfunc)(device_xt);
+  f = testof->calcFunction(device_xt);
+  cudaFree(device_xt);
+  return f;
 }

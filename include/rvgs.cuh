@@ -6,7 +6,7 @@
  * --------------------------------------------------------------
  */
 
-#if !defined( _RVGS_ )
+#if !defined(_RVGS_)
 #define _RVGS_
 
 long Bernoulli(double p);

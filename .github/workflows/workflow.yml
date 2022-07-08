@@ -2,13 +2,13 @@ name: gpuvmem CI
 
 on:
   push:
-    branches: ["master", "framework_dev"]
+    branches: [master, framework_dev]
   pull_request:
-    branches: ["master", "framework_dev"]
+    branches: [master, framework_dev]
 
 env:
-  BUILD_DIR: "build"
-  CONFIG: "Debug"
+  BUILD_DIR: build
+  CONFIG: Debug
 
 
 permissions:
@@ -24,28 +24,28 @@ jobs:
         password: ${{ secrets.REGISTRY_TOKEN }}
 
     steps:
-      - name: Install GIT LFS
-        run: apt-get install -y git-lfs
-      - uses: actions/checkout@v3.0.2
-        with:
-          lfs: true
-      - name: Configure cmake
-        id: configure
-        run: cmake . -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.CONFIG }}
-      - name: Configure Error Processing
-        if: ${{ failure() && steps.configure.outcome == 'failure' }}
-        working-directory: ${{ env.BUILD_DIR }}
-        run: |
-            if [[ -f "CMakeFiles/CMakeOutput.log" ]]; then
-              echo "---- CMakeFiles/CMakeOutput.log"
-              cat CMakeFiles/CMakeOutput.log
-              echo "----"
-            fi
-            if [[ -f "CMakeFiles/CMakeError.log" ]]; then
-              echo "---- CMakeFiles/CMakeError.log"
-              cat CMakeFiles/CMakeError.log
-              echo "----"
-            fi
-      - name: Build everything else
-        working-directory: ${{ env.BUILD_DIR }}
-        run:  cmake --build . --target all --verbose -j `nproc`
+    - name: Install GIT LFS
+      run: apt-get install -y git-lfs
+    - uses: actions/checkout@v3.0.2
+      with:
+        lfs: true
+    - name: Configure cmake
+      id: configure
+      run: cmake . -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.CONFIG }}
+    - name: Configure Error Processing
+      if: ${{ failure() && steps.configure.outcome == 'failure' }}
+      working-directory: ${{ env.BUILD_DIR }}
+      run: |
+        if [[ -f "CMakeFiles/CMakeOutput.log" ]]; then
+          echo "---- CMakeFiles/CMakeOutput.log"
+          cat CMakeFiles/CMakeOutput.log
+          echo "----"
+        fi
+        if [[ -f "CMakeFiles/CMakeError.log" ]]; then
+          echo "---- CMakeFiles/CMakeError.log"
+          cat CMakeFiles/CMakeError.log
+          echo "----"
+        fi
+    - name: Build everything else
+      working-directory: ${{ env.BUILD_DIR }}
+      run: cmake --build . --target all --verbose -j `nproc`

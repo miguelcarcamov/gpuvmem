@@ -1,0 +1,31 @@
+repos:
+- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+  rev: v2.3.0
+  hooks:
+  - id: pretty-format-yaml
+    args: [--autofix, --indent, '2']
+  - id: pretty-format-toml
+    args: [--autofix]
+
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.2.0
+  hooks:
+  - id: check-yaml
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+
+- repo: https://gitlab.com/daverona/pre-commit/cpp
+  rev: 0.8.0                 # use the most recent version
+  hooks:
+    # Hooks using native
+  - id: clang-format           # formatter for C/C++ code based on a style guide
+    args: [-style=Google]      # use LLVM Coding Standards
+    # - id: cpplint              # linter (or style-error checker) for Google C++ Style Guide
+    # - id: cppcheck             # static analyzer for C/C++ code
+
+- repo: https://github.com/igorshubovych/markdownlint-cli
+  rev: v0.31.1
+  hooks:
+  - id: markdownlint-fix
+    entry: markdownlint -f README.md --disable MD013 MD036 MD033 MD041 MD029 MD046 MD040
+        # args: [--disable MD013 MD036]

@@ -26,11 +26,11 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 
 # Installation
 
-1.  Install git-lfs
+1. Install git-lfs
 
     a. `sudo apt-get install git-lfs`
 
-2.  Install casacore latest stable version v3.2.1
+2. Install casacore latest stable version v3.2.1
 
     a. `git clone --single-branch --branch v3.2.1 https://github.com/casacore/casacore.git`
 
@@ -48,17 +48,17 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 
     g. `sudo make install`
 
-3.  Install Boost
+3. Install Boost
 
     a. `sudo apt-get -y install libboost-all-dev`
 
-4.  Install cfitsio
+4. Install cfitsio
 
     a. `sudo apt-get -y install libcfitsio-dev`
 
-5.  Download or clone gpuvmem.
+5. Download or clone gpuvmem.
 
-6.  To compile GPUVMEM you will need:
+6. To compile GPUVMEM you will need:
 
 - cfitsio - Usually the package is called `libcfitsio-dev`.
 - cmake >= 3.8
@@ -74,8 +74,7 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 We have created a recipe to use Singularity without worrying about installing CUDA and installing libraries. The container has gpuvmem compiled and all you need to work. Additionally, you can edit the recipe and add applications that you are interested in. To use the Singularity container, follow the next steps:
 
 ```bash
-# Install Singularity, in this case we will follow the Linux instructions, but to install it on MAC see: https://singularity.lbl.gov/install-mac
-
+   # Install Singularity, in this case we will follow the Linux instructions, but to install it on MAC see: https://singularity.lbl.gov/install-mac
 sudo apt install squashfs-tools
 VERSION=2.5.2
 wget https://github.com/singularityware/singularity/releases/download/$VERSION/singularity-$VERSION.tar.gz
@@ -109,11 +108,11 @@ make -j
 
 Create your FITS model input astrometry data on the header, typically we use the resulting dirty image from CASA's tclean.
 
-# Use GPUVMEM:
+# Use GPUVMEM
 
 Usage: `./bin/gpuvmem [options]`
 
-```
+```bash
       -O --output_image [default: mod_out.fits]
           Name of the output visibility file/s (separated by a comma)
       -e --eta [default: -1]

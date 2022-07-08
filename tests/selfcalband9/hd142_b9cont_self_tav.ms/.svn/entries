@@ -25,19 +25,19 @@ proman
 
 
 c7d3b59e-508a-11e3-a289-bb252c00d98c
-
+
 STATE
 dir
-
+
 FIELD
 dir
-
+
 POINTING
 dir
-
+
 OBSERVATION
 dir
-
+
 table.f2_TSM1
 file
 
@@ -71,10 +71,10 @@ has-props
 
 
 2097152
-
+
 HISTORY
 dir
-
+
 table.f6_TSM0
 file
 
@@ -108,7 +108,7 @@ has-props
 
 
 1892352
-
+
 table.f8_TSM1
 file
 
@@ -142,10 +142,10 @@ has-props
 
 
 1048576
-
+
 DATA_DESCRIPTION
 dir
-
+
 table.lock
 file
 
@@ -179,10 +179,10 @@ has-props
 
 
 357
-
+
 PROCESSOR
 dir
-
+
 table.info
 file
 
@@ -216,10 +216,10 @@ proman
 
 
 176
-
+
 ANTENNA
 dir
-
+
 table.f0
 file
 
@@ -253,10 +253,10 @@ has-props
 
 
 500298
-
+
 FLAG_CMD
 dir
-
+
 table.f1
 file
 
@@ -290,7 +290,7 @@ has-props
 
 
 983552
-
+
 table.f2
 file
 
@@ -324,7 +324,7 @@ has-props
 
 
 483
-
+
 table.f3
 file
 
@@ -358,7 +358,7 @@ has-props
 
 
 483
-
+
 table.dat
 file
 
@@ -392,7 +392,7 @@ has-props
 
 
 10260
-
+
 table.f4
 file
 
@@ -426,7 +426,7 @@ has-props
 
 
 331
-
+
 table.f5
 file
 
@@ -460,10 +460,10 @@ has-props
 
 
 490
-
+
 SOURCE
 dir
-
+
 table.f6
 file
 
@@ -497,7 +497,7 @@ has-props
 
 
 276
-
+
 table.f3_TSM1
 file
 
@@ -531,7 +531,7 @@ has-props
 
 
 32768
-
+
 table.f7
 file
 
@@ -565,10 +565,10 @@ has-props
 
 
 470
-
+
 FEED
 dir
-
+
 table.f8
 file
 
@@ -602,10 +602,10 @@ has-props
 
 
 472
-
+
 SPECTRAL_WINDOW
 dir
-
+
 table.f5_TSM1
 file
 
@@ -639,7 +639,7 @@ has-props
 
 
 1048576
-
+
 table.f7_TSM1
 file
 
@@ -673,7 +673,6 @@ has-props
 
 
 1048576
-
+
 POLARIZATION
 dir
-

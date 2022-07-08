@@ -1,3 +1,3 @@
-url: "https://gpuvmem.github.io"
-baseurl: ""
+url: https://gpuvmem.github.io
+baseurl: ''
 theme: jekyll-theme-minimal
