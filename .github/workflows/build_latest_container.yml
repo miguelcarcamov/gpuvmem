@@ -12,14 +12,26 @@ on:
     paths:
     - Dockerfile.prod
 env:
+  BUILD_DIR: build
+  CONFIG: Debug
   REGISTRY: ghcr.io
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:base
+      credentials:
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
     steps:
     - name: Checkout Code
       uses: actions/checkout@v3.0.2
+    - name: Build CMake
+      run: cmake . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CONFIG
+    - name: Build and install
+      working-directory: ${{ env.BUILD_DIR }}
+      run: cmake --build . --target install --verbose -j `nproc`
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v1
       with:
@@ -31,6 +43,6 @@ jobs:
     - name: Build and Push Docker Image
       uses: docker/build-push-action@v2
       with:
-        file: ./Dockerfile.prod
+        context: .
         push: true       # Will only build if this is not here
         tags: ${{ env.REGISTRY }}/${{ github.repository }}:latest
