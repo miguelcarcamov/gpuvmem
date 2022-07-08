@@ -36,7 +36,7 @@ jobs:
       - name: Run make
         run: |
             cd build
-            make -j
+            make -j2
       - name: Run tests
         run: |
             cd build
