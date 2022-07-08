@@ -8,5 +8,5 @@ RUN git clone https://github.com/miguelcarcamov/gpuvmem.git && \
     cmake . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CONFIG && \
     cd $BUILD_DIR && \
     cmake --build . --target install --verbose -j `nproc`
-RUN echo "Hello from GPUVMEM production image"
+RUN echo "Hello there from GPUVMEM production image"
 LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem"
