@@ -77,8 +77,6 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
    docker pull ghcr.io/miguelcarcamov/gpuvmem:base
    ```
 
-The gpuvmem binary should be in `/gpuvmem/bin`.
-
 # Compiling
 
    ```bash
@@ -89,7 +87,7 @@ The gpuvmem binary should be in `/gpuvmem/bin`.
    make -j
    ```
 
-# Now antenna configurations are read directly from the MS file
+## Now antenna configurations are read directly from the MS file
 
 # Usage
 
