@@ -16,7 +16,7 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build:
+  build-base-container:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
