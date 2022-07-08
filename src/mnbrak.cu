@@ -41,8 +41,13 @@
   (b) = (c);             \
   (c) = (d);
 
-__host__ void mnbrak(float *ax, float *bx, float *cx, float *fa, float *fb,
-                     float *fc, float (*func)(float)) {
+__host__ void mnbrak(float* ax,
+                     float* bx,
+                     float* cx,
+                     float* fa,
+                     float* fb,
+                     float* fc,
+                     float (*func)(float)) {
   float ulim, u, r, q, fu, dum;
   *fa = (*func)(*ax);
   *fb = (*func)(*bx);

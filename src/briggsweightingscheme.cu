@@ -6,7 +6,9 @@ BriggsWeightingScheme::BriggsWeightingScheme(int threads)
 BriggsWeightingScheme::BriggsWeightingScheme(int threads, UVTaper* uvtaper)
     : WeightingScheme(threads, uvtaper){};
 
-float BriggsWeightingScheme::getRobustParam() { return this->robust_param; };
+float BriggsWeightingScheme::getRobustParam() {
+  return this->robust_param;
+};
 
 void BriggsWeightingScheme::setRobustParam(float robust_param) {
   if (robust_param >= -2.0 && robust_param <= 2.0) {
@@ -188,10 +190,13 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d) {
 };
 
 namespace {
-WeightingScheme* CreateWeightingScheme() { return new BriggsWeightingScheme; }
+WeightingScheme* CreateWeightingScheme() {
+  return new BriggsWeightingScheme;
+}
 
 const std::string name = "Briggs";
 const bool RegisteredBriggsWeighting =
     registerCreationFunction<WeightingScheme, std::string>(
-        name, CreateWeightingScheme);
+        name,
+        CreateWeightingScheme);
 };  // namespace

@@ -40,7 +40,11 @@
   (a) = (b);             \
   (b) = (c);             \
   (c) = (d);
-__host__ float brent(float ax, float bx, float cx, float tol, float *xmin,
+__host__ float brent(float ax,
+                     float bx,
+                     float cx,
+                     float tol,
+                     float* xmin,
                      float (*f)(float)) {
   float a, b, d, etemp, fu, fv, fw, fx, p, q, r, tol1, tol2, u, v, w, x, xm;
   float e = 0.0;

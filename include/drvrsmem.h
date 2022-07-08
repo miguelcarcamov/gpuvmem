@@ -95,7 +95,7 @@ typedef union {
   double d; /* for proper alignment on every machine */
 } BLKHEAD;
 
-typedef void *SHARED_P; /* generic type of shared memory pointer */
+typedef void* SHARED_P; /* generic type of shared memory pointer */
 
 typedef struct SHARED_GTABstruct /* data type used in global table */
 {
@@ -111,7 +111,7 @@ typedef struct SHARED_GTABstruct /* data type used in global table */
 
 typedef struct SHARED_LTABstruct /* data type used in local table */
 {
-  BLKHEAD *p;   /* pointer to segment (may be null) */
+  BLKHEAD* p;   /* pointer to segment (may be null) */
   int tcnt;     /* number of threads in this process attached to segment */
   int lkcnt;    /* >=0 <- number of read locks, -1 - write lock */
   long seekpos; /* current pointer position, read/write/seek operations change
@@ -128,8 +128,8 @@ typedef struct flock flock_t;
 #ifndef HAVE_UNION_SEMUN
 union semun {
   int val;
-  struct semid_ds *buf;
-  unsigned short *array;
+  struct semid_ds* buf;
+  unsigned short* array;
 };
 #define HAVE_UNION_SEMUN
 #endif
@@ -154,7 +154,8 @@ int shared_init(
     int debug_msgs); /* must be called before any other shared memory routine */
 int shared_recover(
     int id); /* try to recover dormant segment(s) after applic crash */
-int shared_malloc(long size, int mode,
+int shared_malloc(long size,
+                  int mode,
                   int newhandle); /* allocate n-bytes of shared memory */
 int shared_attach(int idx);       /* attach to segment given index to table */
 int shared_free(int idx);         /* release shared memory */
@@ -176,22 +177,23 @@ int shared_list(int id);              /* list segment(s) */
 int shared_uncond_delete(
     int id); /* uncondintionally delete (NOWAIT operation) segment(s) */
 int shared_getaddr(
-    int id, char **address); /* get starting address of FITS file in segment */
+    int id,
+    char** address); /* get starting address of FITS file in segment */
 
 int smem_init(void);
 int smem_shutdown(void);
 int smem_setoptions(int options);
-int smem_getoptions(int *options);
-int smem_getversion(int *version);
-int smem_open(char *filename, int rwmode, int *driverhandle);
-int smem_create(char *filename, int *driverhandle);
+int smem_getoptions(int* options);
+int smem_getversion(int* version);
+int smem_open(char* filename, int rwmode, int* driverhandle);
+int smem_create(char* filename, int* driverhandle);
 int smem_close(int driverhandle);
-int smem_remove(char *filename);
-int smem_size(int driverhandle, LONGLONG *size);
+int smem_remove(char* filename);
+int smem_size(int driverhandle, LONGLONG* size);
 int smem_flush(int driverhandle);
 int smem_seek(int driverhandle, LONGLONG offset);
-int smem_read(int driverhandle, void *buffer, long nbytes);
-int smem_write(int driverhandle, void *buffer, long nbytes);
+int smem_read(int driverhandle, void* buffer, long nbytes);
+int smem_write(int driverhandle, void* buffer, long nbytes);
 
 #ifdef __cplusplus
 }

@@ -60,8 +60,10 @@ __host__ __device__ cufftDoubleComplex divComplexReal(cufftDoubleComplex c1,
   return result;
 };
 
-__global__ void mulArrayComplexComplex(cufftComplex *c1, cufftComplex *c2,
-                                       int M, int N) {
+__global__ void mulArrayComplexComplex(cufftComplex* c1,
+                                       cufftComplex* c2,
+                                       int M,
+                                       int N) {
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
 
@@ -70,8 +72,10 @@ __global__ void mulArrayComplexComplex(cufftComplex *c1, cufftComplex *c2,
   }
 };
 
-__global__ void mulArrayComplexComplex(cufftDoubleComplex *c1,
-                                       cufftDoubleComplex *c2, int M, int N) {
+__global__ void mulArrayComplexComplex(cufftDoubleComplex* c1,
+                                       cufftDoubleComplex* c2,
+                                       int M,
+                                       int N) {
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
 

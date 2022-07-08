@@ -11,7 +11,7 @@
 
 double Random(void);
 void PlantSeeds(long x);
-void GetSeed(long *x);
+void GetSeed(long* x);
 void PutSeed(long x);
 void SelectStream(int index);
 void TestRandom(void);

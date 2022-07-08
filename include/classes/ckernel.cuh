@@ -5,37 +5,63 @@
 
 class CKernel {
  public:
-  __host__ virtual void buildKernel(float amp, float x0, float y0,
-                                    float sigma_x, float sigma_y) = 0;
+  __host__ virtual void buildKernel(float amp,
+                                    float x0,
+                                    float y0,
+                                    float sigma_x,
+                                    float sigma_y) = 0;
   __host__ virtual void buildKernel() = 0;
-  __host__ virtual float GCF(float amp, float x, float y, float x0, float y0,
-                             float sigma_x, float sigma_y) {
+  __host__ virtual float GCF(float amp,
+                             float x,
+                             float y,
+                             float x0,
+                             float y0,
+                             float sigma_x,
+                             float sigma_y) {
     return;
   };
-  __host__ virtual float GCF(float amp, float x, float y, float x0, float y0,
-                             float sigma_x, float sigma_y, float w) {
+  __host__ virtual float GCF(float amp,
+                             float x,
+                             float y,
+                             float x0,
+                             float y0,
+                             float sigma_x,
+                             float sigma_y,
+                             float w) {
     return;
   };
-  __host__ virtual float GCF(float amp, float x, float y, float x0, float y0,
-                             float sigma_x, float sigma_y, float w,
+  __host__ virtual float GCF(float amp,
+                             float x,
+                             float y,
+                             float x0,
+                             float y0,
+                             float sigma_x,
+                             float sigma_y,
+                             float w,
                              float alpha) {
     return;
   };
-  __host__ virtual void buildGCF(float amp, float x0, float y0, float sigma_x,
+  __host__ virtual void buildGCF(float amp,
+                                 float x0,
+                                 float y0,
+                                 float sigma_x,
                                  float sigma_y){};
   __host__ virtual void buildGCF(){};
-  __host__ virtual CKernel *getGCF() { return this->gcf; };
-  __host__ virtual void fillGCFvalues(float amp, float x0, float y0,
-                                      float sigma_x, float sigma_y) {
+  __host__ virtual CKernel* getGCF() { return this->gcf; };
+  __host__ virtual void fillGCFvalues(float amp,
+                                      float x0,
+                                      float y0,
+                                      float sigma_x,
+                                      float sigma_y) {
     this->gcf->buildGCF(amp, x0, y0, sigma_x, sigma_y);
   };
   __host__ virtual void createMemberGCF(){};
-  __host__ virtual void setGCF(CKernel *gcf) { this->gcf = gcf; };
-  __host__ virtual float *getGCFGPU() { return this->gcf->getGPUKernel(); };
+  __host__ virtual void setGCF(CKernel* gcf) { this->gcf = gcf; };
+  __host__ virtual float* getGCFGPU() { return this->gcf->getGPUKernel(); };
   __host__ virtual std::vector<float> getGCFCPU() {
     return this->gcf->getKernel();
   };
-  __host__ virtual float *getGCFCPUPointer() {
+  __host__ virtual float* getGCFCPUPointer() {
     return this->gcf->getKernelPointer();
   };
   __host__ virtual void printGCFCPU() { return this->gcf->printCKernel(); };
@@ -49,7 +75,7 @@ class CKernel {
   __host__ virtual void setW2(float w2){};
 
   // Clone virtual function
-  __host__ virtual CKernel *clone() const = 0;
+  __host__ virtual CKernel* clone() const = 0;
 
   // Virtual functions to initialize GCF
   __host__ virtual void initializeGCF() { this->gcf = this->clone(); };
@@ -60,7 +86,10 @@ class CKernel {
     this->gcf->setW(m);
     this->gcf->buildGCF();
   };
-  __host__ virtual void initializeGCF(int m, int n, float dx, float dy,
+  __host__ virtual void initializeGCF(int m,
+                                      int n,
+                                      float dx,
+                                      float dy,
                                       float w) {
     this->gcf = this->clone();
     this->gcf->setmn(m, n);
@@ -99,7 +128,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, CKernel *gcf) {
+  __host__ CKernel(int m, int n, CKernel* gcf) {
     this->amp = 1.0f;
     this->m = m;
     this->n = n;
@@ -114,7 +143,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, Io *imageHandler) {
+  __host__ CKernel(int m, int n, Io* imageHandler) {
     this->amp = 1.0f;
     this->m = m;
     this->n = n;
@@ -129,7 +158,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, Io *imageHandler, CKernel *gcf) {
+  __host__ CKernel(int m, int n, Io* imageHandler, CKernel* gcf) {
     this->amp = 1.0f;
     this->m = m;
     this->n = n;
@@ -159,7 +188,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float dx, float dy, CKernel *gcf) {
+  __host__ CKernel(int m, int n, float dx, float dy, CKernel* gcf) {
     this->amp = 1.0f;
     this->m = m;
     this->n = n;
@@ -174,7 +203,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float dx, float dy, Io *imageHandler) {
+  __host__ CKernel(int m, int n, float dx, float dy, Io* imageHandler) {
     this->amp = 1.0f;
     this->m = m;
     this->n = n;
@@ -189,8 +218,12 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float dx, float dy, Io *imageHandler,
-                   CKernel *gcf) {
+  __host__ CKernel(int m,
+                   int n,
+                   float dx,
+                   float dy,
+                   Io* imageHandler,
+                   CKernel* gcf) {
     this->amp = 1.0f;
     this->m = m;
     this->n = n;
@@ -221,7 +254,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float w, CKernel *gcf) {
+  __host__ CKernel(int m, int n, float w, CKernel* gcf) {
     this->amp = 1.0f;
     this->n = m;
     this->n = n;
@@ -237,7 +270,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float w, Io *imageHandler) {
+  __host__ CKernel(int m, int n, float w, Io* imageHandler) {
     this->amp = 1.0f;
     this->n = m;
     this->n = n;
@@ -253,7 +286,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float w, Io *imageHandler, CKernel *gcf) {
+  __host__ CKernel(int m, int n, float w, Io* imageHandler, CKernel* gcf) {
     this->amp = 1.0f;
     this->n = m;
     this->n = n;
@@ -285,7 +318,7 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float dx, float dy, float w, CKernel *gcf) {
+  __host__ CKernel(int m, int n, float dx, float dy, float w, CKernel* gcf) {
     this->amp = 1.0f;
     this->n = m;
     this->n = n;
@@ -301,8 +334,12 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float dx, float dy, float w,
-                   Io *imageHandler) {
+  __host__ CKernel(int m,
+                   int n,
+                   float dx,
+                   float dy,
+                   float w,
+                   Io* imageHandler) {
     this->amp = 1.0f;
     this->n = m;
     this->n = n;
@@ -318,8 +355,13 @@ class CKernel {
     this->name = "";
   };
 
-  __host__ CKernel(int m, int n, float dx, float dy, float w, Io *imageHandler,
-                   CKernel *gcf) {
+  __host__ CKernel(int m,
+                   int n,
+                   float dx,
+                   float dy,
+                   float w,
+                   Io* imageHandler,
+                   CKernel* gcf) {
     this->amp = 1.0f;
     this->n = m;
     this->n = n;
@@ -378,10 +420,10 @@ class CKernel {
     return this->kernel[this->n * i + j];
   };
   __host__ std::vector<float> getKernel() { return this->kernel; };
-  __host__ float *getKernelPointer() { return this->kernel.data(); };
-  __host__ float *getGPUKernel() { return this->gpu_kernel; };
+  __host__ float* getKernelPointer() { return this->kernel.data(); };
+  __host__ float* getGPUKernel() { return this->gpu_kernel; };
   __host__ std::string getName() { return this->name; };
-  __host__ Io *getImageHandler() { return this->ioImageHandler; };
+  __host__ Io* getImageHandler() { return this->ioImageHandler; };
 
   __host__ void setName(std::string name) { this->name = name; };
 
@@ -406,7 +448,7 @@ class CKernel {
 
   __host__ void setW(float w) { this->w = w; };
 
-  __host__ void setIoImageHandler(Io *imageHandler) {
+  __host__ void setIoImageHandler(Io* imageHandler) {
     this->ioImageHandler = imageHandler;
   };
 
@@ -483,11 +525,11 @@ class CKernel {
   float sigma_y;
   float w;
   std::vector<float> kernel;
-  float *gpu_kernel;
+  float* gpu_kernel;
   // Image IO handler to print images if necessary
-  Io *ioImageHandler = NULL;
+  Io* ioImageHandler = NULL;
   // Gridding correction function (GCF)
-  CKernel *gcf = NULL;
+  CKernel* gcf = NULL;
   // Name of the Convolution Kernel
   std::string name;
 

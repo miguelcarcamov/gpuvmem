@@ -102,9 +102,12 @@ void UniformWeightingScheme::apply(std::vector<MSDataset>& d) {
 };
 
 namespace {
-WeightingScheme* CreateWeightingScheme() { return new UniformWeightingScheme; }
+WeightingScheme* CreateWeightingScheme() {
+  return new UniformWeightingScheme;
+}
 const std::string name = "Uniform";
 const bool RegisteredUniformWeighting =
     registerCreationFunction<WeightingScheme, std::string>(
-        name, CreateWeightingScheme);
+        name,
+        CreateWeightingScheme);
 };  // namespace

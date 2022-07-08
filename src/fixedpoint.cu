@@ -31,14 +31,17 @@ __host__ bool areThereAnyGreaterThanOne(std::vector<float> x1) {
 // The algorithm will return a vector with the solutions
 __host__ std::vector<float> fixedPointOpt(
     std::vector<float> guess,
-    std::vector<float> (*optf)(std::vector<float>, Synthesizer *), float tol,
-    int iterations, Synthesizer *synthesizer) {
+    std::vector<float> (*optf)(std::vector<float>, Synthesizer*),
+    float tol,
+    int iterations,
+    Synthesizer* synthesizer) {
   std::vector<float> x0 = guess;
   std::vector<float> x1(x0.size(), 0.0);
   int it = 0;
   float c_tol = tolFunction(x1, x0);
   while (it < iterations && c_tol > tol) {
-    if (it > 1) x0 = x1;
+    if (it > 1)
+      x0 = x1;
     x1 = optf(x0, synthesizer);
     for (int i = 0; i < x1.size(); i++) {
       std::cout << x1[i] << std::endl;

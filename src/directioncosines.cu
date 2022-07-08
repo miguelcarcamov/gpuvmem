@@ -37,8 +37,12 @@
  * phase-tracking center (ra0, dec0). All in radians.
  * Reference: Synthesis Imaging in Radio Astronomy II, p.388.
  */// MS     ,      MS  ,    FITS   ,   FITS
-__host__ void direccos(double ra, double dec, double ra0, double dec0,
-                       double* l, double* m) {
+__host__ void direccos(double ra,
+                       double dec,
+                       double ra0,
+                       double dec0,
+                       double* l,
+                       double* m) {
   double delta_ra = ra - ra0;
   double delta_dec = dec - dec0;
   double sindec, cosdec;

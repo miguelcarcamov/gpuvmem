@@ -34,8 +34,8 @@
 #include "linmin.cuh"
 #define TOL 1.0e-7
 
-float *device_pcom;
-float *device_xicom, (*nrfunc)(float *);
+float* device_pcom;
+float *device_xicom, (*nrfunc)(float*);
 extern long M;
 extern long N;
 extern float MINPIX, eta;
@@ -45,22 +45,24 @@ extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 extern int verbose_flag;
 extern int image_count;
-extern Image *I;
+extern Image* I;
 
-extern ObjectiveFunction *testof;
+extern ObjectiveFunction* testof;
 
-__host__ void linmin(float *p, float *xi, float *fret,
-                     float (*func)(float *))  // p and xi are in GPU
+__host__ void linmin(float* p,
+                     float* xi,
+                     float* fret,
+                     float (*func)(float*))  // p and xi are in GPU
 {
   float xx, xmin, fx, fb, fa, bx, ax;
 
   checkCudaErrors(
-      cudaMalloc((void **)&device_pcom, sizeof(float) * M * N * image_count));
+      cudaMalloc((void**)&device_pcom, sizeof(float) * M * N * image_count));
   checkCudaErrors(
       cudaMemset(device_pcom, 0, sizeof(float) * M * N * image_count));
 
-  checkCudaErrors((
-      cudaMalloc((void **)&device_xicom, sizeof(float) * M * N * image_count)));
+  checkCudaErrors(
+      (cudaMalloc((void**)&device_xicom, sizeof(float) * M * N * image_count)));
   checkCudaErrors(
       cudaMemset(device_xicom, 0, sizeof(float) * M * N * image_count));
   nrfunc = func;
@@ -86,7 +88,7 @@ __host__ void linmin(float *p, float *xi, float *fret,
   // GPU MUL AND ADD
   // xi     = xi*xmin;
   // p      = p + xi;
-  imageMap *auxPtr = I->getFunctionMapping();
+  imageMap* auxPtr = I->getFunctionMapping();
   if (!nopositivity) {
     for (int i = 0; i < I->getImageCount(); i++) {
       (auxPtr[i].newP)(p, xi, xmin, i);

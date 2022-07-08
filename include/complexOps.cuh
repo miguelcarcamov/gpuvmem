@@ -16,9 +16,13 @@ __host__ __device__ cufftDoubleComplex mulComplexReal(cufftDoubleComplex c1,
 __host__ __device__ cufftComplex divComplexReal(cufftComplex c1, float c2);
 __host__ __device__ cufftDoubleComplex divComplexReal(cufftDoubleComplex c1,
                                                       double c2);
-__global__ void mulArrayComplexComplex(cufftComplex *c1, cufftComplex *c2,
-                                       int M, int N);
-__global__ void mulArrayComplexComplex(cufftDoubleComplex *c1,
-                                       cufftDoubleComplex *c2, int M, int N);
+__global__ void mulArrayComplexComplex(cufftComplex* c1,
+                                       cufftComplex* c2,
+                                       int M,
+                                       int N);
+__global__ void mulArrayComplexComplex(cufftDoubleComplex* c1,
+                                       cufftDoubleComplex* c2,
+                                       int M,
+                                       int N);
 
 #endif

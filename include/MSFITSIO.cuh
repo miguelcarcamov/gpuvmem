@@ -88,12 +88,12 @@ typedef struct host_visibilities {
 } HVis;
 
 typedef struct device_visibilities {
-  double3 *uvw;
-  float *weight;
-  cufftComplex *Vo;
-  cufftComplex *Vm;
-  cufftComplex *Vr;
-  int *S;
+  double3* uvw;
+  float* weight;
+  cufftComplex* Vo;
+  cufftComplex* Vm;
+  cufftComplex* Vr;
+  int* S;
 
   int threadsPerBlockUV;
   int numBlocksUV;
@@ -106,7 +106,7 @@ typedef struct field {
   double phs_ra, phs_dec;
   float ref_xobs, ref_yobs;
   float phs_xobs, phs_yobs;
-  float *atten_image;
+  float* atten_image;
   std::vector<float> nu;
   std::vector<std::vector<long>> numVisibilitiesPerFreqPerStoke;
   std::vector<long> numVisibilitiesPerFreq;
@@ -128,8 +128,8 @@ typedef struct MSAntenna {
 } MSAntenna;
 
 typedef struct MSDataset {
-  char *name;
-  char *oname;
+  char* name;
+  char* oname;
   std::vector<Field> fields;
   std::vector<MSAntenna> antennas;
   MSData data;
@@ -145,18 +145,18 @@ typedef struct header_values {
   int bitpix;
 } headerValues;
 
-__host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits);
-__host__ headerValues readFITSHeader(const char *filename);
-__host__ fitsfile *openFITS(const char *filename);
-__host__ void closeFITS(fitsfile *canvas);
+__host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits);
+__host__ headerValues readFITSHeader(const char* filename);
+__host__ fitsfile* openFITS(const char* filename);
+__host__ void closeFITS(fitsfile* canvas);
 
 template <typename T>
-__host__ T readHeaderKeyword(char *filename, char *keyword, int type) {
+__host__ T readHeaderKeyword(char* filename, char* keyword, int type) {
   int status_header = 0;
 
   T value;
 
-  fitsfile *hdu_in = openFITS(filename);
+  fitsfile* hdu_in = openFITS(filename);
 
   fits_read_key(hdu_in, type, keyword, &value, NULL, &status_header);
 
@@ -170,19 +170,19 @@ __host__ T readHeaderKeyword(char *filename, char *keyword, int type) {
 }
 
 template <typename T>
-__host__ headerValues open_fits(T **data, const char *filename, int datatype) {
+__host__ headerValues open_fits(T** data, const char* filename, int datatype) {
   int status = 0;
   float null = 0;
   long fpixel = 1;
   int anynull;
   headerValues h_values;
 
-  fitsfile *hdu = openFITS(filename);
+  fitsfile* hdu = openFITS(filename);
 
   h_values = readOpenedFITSHeader(hdu, false);
   int elements = h_values.M * h_values.N;
 
-  *data = (T *)malloc(elements * sizeof(T));
+  *data = (T*)malloc(elements * sizeof(T));
 
   fits_read_img(hdu, datatype, fpixel, elements, &null, *data, &anynull,
                 &status);
@@ -195,32 +195,60 @@ __host__ headerValues open_fits(T **data, const char *filename, int datatype) {
   return h_values;
 }
 
-__host__ void readMS(const char *MS_name, std::vector<MSAntenna> &antennas,
-                     std::vector<Field> &fields, MSData *data, bool noise,
-                     bool W_projection, float random_prob, int gridding);
-__host__ void readMS(const char *MS_name, std::string data_column,
-                     std::vector<MSAntenna> &antennas,
-                     std::vector<Field> &fields, MSData *data, bool noise,
-                     bool W_projection, float random_prob, int gridding);
-__host__ void MScopy(const char *in_dir, const char *in_dir_dest);
+__host__ void readMS(const char* MS_name,
+                     std::vector<MSAntenna>& antennas,
+                     std::vector<Field>& fields,
+                     MSData* data,
+                     bool noise,
+                     bool W_projection,
+                     float random_prob,
+                     int gridding);
+__host__ void readMS(const char* MS_name,
+                     std::string data_column,
+                     std::vector<MSAntenna>& antennas,
+                     std::vector<Field>& fields,
+                     MSData* data,
+                     bool noise,
+                     bool W_projection,
+                     float random_prob,
+                     int gridding);
+__host__ void MScopy(const char* in_dir, const char* in_dir_dest);
 
-__host__ void modelToHost(std::vector<Field> &fields, MSData data, int num_gpus,
+__host__ void modelToHost(std::vector<Field>& fields,
+                          MSData data,
+                          int num_gpus,
                           int firstgpu);
-__host__ void writeMS(const char *outfile, const char *out_col,
-                      std::vector<Field> fields, MSData data,
-                      float random_probability, bool sim, bool noise,
+__host__ void writeMS(const char* outfile,
+                      const char* out_col,
+                      std::vector<Field> fields,
+                      MSData data,
+                      float random_probability,
+                      bool sim,
+                      bool noise,
                       bool W_projection);
-__host__ void OCopyFITS(float *I, const char *original_filename,
-                        const char *path, const char *name_image, char *units,
-                        int iteration, int index, float fg_scale, long M,
-                        long N, bool isInGPU);
-__host__ void OCopyFITSCufftComplex(cufftComplex *I,
-                                    const char *original_filename,
-                                    const char *path, const char *out_image,
-                                    int iteration, float fg_scale, long M,
-                                    long N, int option, bool isInGPU);
-__host__ fitsfile *createFITS(const char *filename);
-__host__ void copyHeader(fitsfile *original, fitsfile *output);
+__host__ void OCopyFITS(float* I,
+                        const char* original_filename,
+                        const char* path,
+                        const char* name_image,
+                        char* units,
+                        int iteration,
+                        int index,
+                        float fg_scale,
+                        long M,
+                        long N,
+                        bool isInGPU);
+__host__ void OCopyFITSCufftComplex(cufftComplex* I,
+                                    const char* original_filename,
+                                    const char* path,
+                                    const char* out_image,
+                                    int iteration,
+                                    float fg_scale,
+                                    long M,
+                                    long N,
+                                    int option,
+                                    bool isInGPU);
+__host__ fitsfile* createFITS(const char* filename);
+__host__ void copyHeader(fitsfile* original, fitsfile* output);
 
 __host__ __device__ float freq_to_wavelength(float freq);
 __host__ __device__ double metres_to_lambda(double uvw_metres, float freq);

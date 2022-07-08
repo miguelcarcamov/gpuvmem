@@ -45,10 +45,13 @@ void RadialWeightingScheme::apply(std::vector<MSDataset>& d) {
 };
 
 namespace {
-WeightingScheme* CreateWeightingScheme() { return new RadialWeightingScheme; }
+WeightingScheme* CreateWeightingScheme() {
+  return new RadialWeightingScheme;
+}
 
 const std::string name = "Radial";
 const bool RegisteredRadialWeighting =
     registerCreationFunction<WeightingScheme, std::string>(
-        name, CreateWeightingScheme);
+        name,
+        CreateWeightingScheme);
 };  // namespace

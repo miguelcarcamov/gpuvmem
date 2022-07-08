@@ -13,11 +13,11 @@ class TVariation : public Fi {
   TVariation(float epsilon);
   float getEpsilon();
   void setEpsilon(float epsilon);
-  float calcFi(float *p);
-  void calcGi(float *p, float *xi);
+  float calcFi(float* p);
+  void calcGi(float* p, float* xi);
   void restartDGi();
-  void addToDphi(float *device_dphi);
-  void setSandDs(float *S, float *Ds);
+  void addToDphi(float* device_dphi);
+  void setSandDs(float* S, float* Ds);
   float calculateSecondDerivate(){};
 };
 

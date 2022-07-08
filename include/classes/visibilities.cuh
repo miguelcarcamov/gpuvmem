@@ -2,6 +2,7 @@
 #define VISIBILITIES_CUH
 
 #include "MSFITSIO.cuh"
+#include "weightingscheme.cuh"
 
 class Visibilities {
  public:

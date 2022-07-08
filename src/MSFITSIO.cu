@@ -50,8 +50,8 @@ __host__ __device__ float distance(float x, float y, float x0, float y0) {
   return distance;
 }
 
-__host__ fitsfile *openFITS(const char *filename) {
-  fitsfile *hdu;
+__host__ fitsfile* openFITS(const char* filename) {
+  fitsfile* hdu;
   int status = 0;
 
   fits_open_file(&hdu, filename, 0, &status);
@@ -62,8 +62,8 @@ __host__ fitsfile *openFITS(const char *filename) {
   return hdu;
 }
 
-__host__ fitsfile *createFITS(const char *filename) {
-  fitsfile *fpointer;
+__host__ fitsfile* createFITS(const char* filename) {
+  fitsfile* fpointer;
   int status = 0;
   fits_create_file(&fpointer, filename, &status);
   if (status) {
@@ -73,7 +73,7 @@ __host__ fitsfile *createFITS(const char *filename) {
   return fpointer;
 }
 
-__host__ void copyHeader(fitsfile *original, fitsfile *output) {
+__host__ void copyHeader(fitsfile* original, fitsfile* output) {
   int status = 0;
   fits_copy_header(original, output, &status);
   if (status) {
@@ -82,7 +82,7 @@ __host__ void copyHeader(fitsfile *original, fitsfile *output) {
   }
 }
 
-__host__ void closeFITS(fitsfile *canvas) {
+__host__ void closeFITS(fitsfile* canvas) {
   int status = 0;
   fits_close_file(canvas, &status);
   if (status) {
@@ -91,24 +91,31 @@ __host__ void closeFITS(fitsfile *canvas) {
   }
 }
 
-__host__ void OCopyFITS(float *I, const char *original_filename,
-                        const char *path, const char *name_image, char *units,
-                        int iteration, int index, float fg_scale, long M,
-                        long N, bool isInGPU) {
+__host__ void OCopyFITS(float* I,
+                        const char* original_filename,
+                        const char* path,
+                        const char* name_image,
+                        char* units,
+                        int iteration,
+                        int index,
+                        float fg_scale,
+                        long M,
+                        long N,
+                        bool isInGPU) {
   int status = 0;
   long fpixel = 1;
   long elements = M * N;
   size_t needed;
   long naxes[2] = {M, N};
   long naxis = 2;
-  char *full_name;
+  char* full_name;
 
   needed = snprintf(NULL, 0, "!%s%s", path, name_image) + 1;
-  full_name = (char *)malloc(needed * sizeof(char));
+  full_name = (char*)malloc(needed * sizeof(char));
   snprintf(full_name, needed * sizeof(char), "!%s%s", path, name_image);
 
-  fitsfile *fpointer = createFITS(full_name);
-  fitsfile *original_hdu = openFITS(original_filename);
+  fitsfile* fpointer = createFITS(full_name);
+  fitsfile* original_hdu = openFITS(original_filename);
   copyHeader(original_hdu, fpointer);
 
   fits_update_key(fpointer, TSTRING, "BUNIT", units, "Unit of measurement",
@@ -117,7 +124,7 @@ __host__ void OCopyFITS(float *I, const char *original_filename,
                   "Number of iteration in gpuvmem software", &status);
   fits_update_key(fpointer, TINT, "NAXIS1", &M, "", &status);
   fits_update_key(fpointer, TINT, "NAXIS2", &N, "", &status);
-  float *host_IFITS = (float *)malloc(M * N * sizeof(float));
+  float* host_IFITS = (float*)malloc(M * N * sizeof(float));
 
   // unsigned int offset = M*N*index*sizeof(float);
   int offset = M * N * index;
@@ -147,29 +154,34 @@ __host__ void OCopyFITS(float *I, const char *original_filename,
   free(host_IFITS);
 }
 
-__host__ void OCopyFITSCufftComplex(cufftComplex *I,
-                                    const char *original_filename,
-                                    const char *path, const char *out_image,
-                                    int iteration, float fg_scale, long M,
-                                    long N, int option, bool isInGPU) {
+__host__ void OCopyFITSCufftComplex(cufftComplex* I,
+                                    const char* original_filename,
+                                    const char* path,
+                                    const char* out_image,
+                                    int iteration,
+                                    float fg_scale,
+                                    long M,
+                                    long N,
+                                    int option,
+                                    bool isInGPU) {
   int status = 0;
   long fpixel = 1;
   long elements = M * N;
   size_t needed;
-  char *name;
+  char* name;
   long naxes[2] = {M, N};
   long naxis = 2;
-  char *unit = "JY/PIXEL";
+  char* unit = "JY/PIXEL";
 
   switch (option) {
     case 0:
       needed = snprintf(NULL, 0, "!%s", out_image) + 1;
-      name = (char *)malloc(needed * sizeof(char));
+      name = (char*)malloc(needed * sizeof(char));
       snprintf(name, needed * sizeof(char), "!%s", out_image);
       break;
     case 1:
       needed = snprintf(NULL, 0, "!%sMEM_%d.fits", path, iteration) + 1;
-      name = (char *)malloc(needed * sizeof(char));
+      name = (char*)malloc(needed * sizeof(char));
       snprintf(name, needed * sizeof(char), "!%sMEM_%d.fits", path, iteration);
       break;
     case -1:
@@ -179,8 +191,8 @@ __host__ void OCopyFITSCufftComplex(cufftComplex *I,
       exit(-1);
   }
 
-  fitsfile *fpointer = createFITS(name);
-  fitsfile *original_hdu = openFITS(original_filename);
+  fitsfile* fpointer = createFITS(name);
+  fitsfile* original_hdu = openFITS(original_filename);
   copyHeader(original_hdu, fpointer);
 
   fits_update_key(fpointer, TSTRING, "BUNIT", unit, "Unit of measurement",
@@ -188,9 +200,9 @@ __host__ void OCopyFITSCufftComplex(cufftComplex *I,
   fits_update_key(fpointer, TINT, "NITER", &iteration,
                   "Number of iteration in gpuvmem software", &status);
 
-  cufftComplex *host_IFITS;
-  host_IFITS = (cufftComplex *)malloc(M * N * sizeof(cufftComplex));
-  float *image2D = (float *)malloc(M * N * sizeof(float));
+  cufftComplex* host_IFITS;
+  host_IFITS = (cufftComplex*)malloc(M * N * sizeof(cufftComplex));
+  float* image2D = (float*)malloc(M * N * sizeof(float));
   if (isInGPU) {
     checkCudaErrors(cudaMemcpy2D(host_IFITS, sizeof(cufftComplex), I,
                                  sizeof(cufftComplex), sizeof(cufftComplex),
@@ -226,7 +238,7 @@ __host__ void OCopyFITSCufftComplex(cufftComplex *I,
   free(name);
 }
 
-__host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits) {
+__host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
   int status_header = 0;
   int status_noise = 0;
   int status_dirty_beam = 0;
@@ -269,12 +281,13 @@ __host__ headerValues readOpenedFITSHeader(fitsfile *&hdu_in, bool close_fits) {
   h_values.DELTAX = fabs(h_values.DELTAX);
   h_values.DELTAY *= -1.0;
 
-  if (close_fits) closeFITS(hdu_in);
+  if (close_fits)
+    closeFITS(hdu_in);
 
   return h_values;
 }
 
-__host__ headerValues readFITSHeader(const char *filename) {
+__host__ headerValues readFITSHeader(const char* filename) {
   int status_header = 0;
   int status_noise = 0;
   int status_dirty_beam = 0;
@@ -283,7 +296,7 @@ __host__ headerValues readFITSHeader(const char *filename) {
   headerValues h_values;
   int bitpix;
 
-  fitsfile *hdu_in = openFITS(filename);
+  fitsfile* hdu_in = openFITS(filename);
 
   fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL,
                 &status_header);
@@ -335,14 +348,19 @@ __host__ cufftComplex addNoiseToVis(cufftComplex vis, float weights) {
   return noise_vis;
 }
 
-constexpr unsigned int str2int(const char *str, int h = 0) {
+constexpr unsigned int str2int(const char* str, int h = 0) {
   return !str[h] ? 5381 : (str2int(str, h + 1) * 33) ^ str[h];
 }
 
-__host__ void readMS(const char *MS_name, std::vector<MSAntenna> &antennas,
-                     std::vector<Field> &fields, MSData *data, bool noise,
-                     bool W_projection, float random_prob, int gridding) {
-  char *error = 0;
+__host__ void readMS(const char* MS_name,
+                     std::vector<MSAntenna>& antennas,
+                     std::vector<Field>& fields,
+                     MSData* data,
+                     bool noise,
+                     bool W_projection,
+                     float random_prob,
+                     int gridding) {
+  char* error = 0;
   int g = 0, h = 0;
 
   std::string dir(MS_name);
@@ -490,7 +508,7 @@ __host__ void readMS(const char *MS_name, std::vector<MSAntenna> &antennas,
       field_tab, casacore::stringToVector("ID,REFERENCE_DIR,PHASE_DIR"));
 
   for (int f = 0; f < data->nfields; f++) {
-    const casacore::TableRecord &values = field_row.get(f);
+    const casacore::TableRecord& values = field_row.get(f);
     pointing_id = values.asInt("ID");
     pointing_ref = values.asArrayDouble("REFERENCE_DIR");
     pointing_phs = values.asArrayDouble("PHASE_DIR");
@@ -687,11 +705,16 @@ __host__ void readMS(const char *MS_name, std::vector<MSAntenna> &antennas,
   data->max_number_visibilities_in_channel_and_stokes = max;
 }
 
-__host__ void readMS(const char *MS_name, std::string data_column,
-                     std::vector<MSAntenna> &antennas,
-                     std::vector<Field> &fields, MSData *data, bool noise,
-                     bool W_projection, float random_prob, int gridding) {
-  char *error = 0;
+__host__ void readMS(const char* MS_name,
+                     std::string data_column,
+                     std::vector<MSAntenna>& antennas,
+                     std::vector<Field>& fields,
+                     MSData* data,
+                     bool noise,
+                     bool W_projection,
+                     float random_prob,
+                     int gridding) {
+  char* error = 0;
   int g = 0, h = 0;
 
   std::string dir(MS_name);
@@ -831,7 +854,7 @@ __host__ void readMS(const char *MS_name, std::string data_column,
       field_tab, casacore::stringToVector("ID,REFERENCE_DIR,PHASE_DIR"));
 
   for (int f = 0; f < data->nfields; f++) {
-    const casacore::TableRecord &values = field_row.get(f);
+    const casacore::TableRecord& values = field_row.get(f);
     pointing_id = values.asInt("ID");
     pointing_ref = values.asArrayDouble("REFERENCE_DIR");
     pointing_phs = values.asArrayDouble("PHASE_DIR");
@@ -1028,7 +1051,7 @@ __host__ void readMS(const char *MS_name, std::string data_column,
   data->max_number_visibilities_in_channel_and_stokes = max;
 }
 
-__host__ void MScopy(const char *in_dir, const char *in_dir_dest) {
+__host__ void MScopy(const char* in_dir, const char* in_dir_dest) {
   string dir_origin = in_dir;
   string dir_dest = in_dir_dest;
 
@@ -1036,7 +1059,9 @@ __host__ void MScopy(const char *in_dir, const char *in_dir_dest) {
   tab_src.deepCopy(dir_dest, casacore::Table::New);
 }
 
-__host__ void modelToHost(std::vector<Field> &fields, MSData data, int num_gpus,
+__host__ void modelToHost(std::vector<Field>& fields,
+                          MSData data,
+                          int num_gpus,
                           int firstgpu) {
   for (int f = 0; f < data.nfields; f++) {
     for (int i = 0; i < data.total_frequencies; i++) {
@@ -1060,9 +1085,13 @@ __host__ void modelToHost(std::vector<Field> &fields, MSData data, int num_gpus,
   }
 }
 
-__host__ void writeMS(const char *outfile, const char *out_col,
-                      std::vector<Field> fields, MSData data,
-                      float random_probability, bool sim, bool noise,
+__host__ void writeMS(const char* outfile,
+                      const char* out_col,
+                      std::vector<Field> fields,
+                      MSData data,
+                      float random_probability,
+                      bool sim,
+                      bool noise,
                       bool W_projection) {
   std::string dir = outfile;
   casacore::Table main_tab(dir, casacore::Table::Update);
@@ -1083,7 +1112,7 @@ __host__ void writeMS(const char *outfile, const char *out_col,
   }
 
   for (int f = 0; f < data.nfields; f++) {
-    for (auto &i : fields[f].numVisibilitiesPerFreqPerStoke)
+    for (auto& i : fields[f].numVisibilitiesPerFreqPerStoke)
       std::fill(i.begin(), i.end(), 0);
   }
 
@@ -1109,7 +1138,8 @@ __host__ void writeMS(const char *outfile, const char *out_col,
               std::to_string(data.n_internal_frequencies_ids[i]) +
               " and !FLAG_ROW giving [ROWID()]] and FIELD_ID=" +
               std::to_string(fields[f].id) + " and !FLAG_ROW and ANY(!FLAG)";
-      if (W_projection) query += " ORDERBY ASC UVW[2]";
+      if (W_projection)
+        query += " ORDERBY ASC UVW[2]";
 
       casacore::Table query_tab = casacore::tableCommand(query.c_str());
 
@@ -1155,7 +1185,8 @@ __host__ void writeMS(const char *outfile, const char *out_col,
                          " and !FLAG_ROW giving [ROWID()]] and FIELD_ID=" +
                          std::to_string(fields[f].id) +
                          " and !FLAG_ROW and ANY(!FLAG)";
-      if (W_projection) sub_query += " ORDERBY ASC UVW[2]";
+      if (W_projection)
+        sub_query += " ORDERBY ASC UVW[2]";
 
       query = "update [" + sub_query + "], $1 tq set " + column_name +
               "[!FLAG]=tq." + column_name + "[!tq.FLAG], WEIGHT=tq.WEIGHT";

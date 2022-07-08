@@ -8,8 +8,8 @@
 
 class WeightingScheme {
  public:
-  virtual void apply(std::vector<MSDataset> &d) = 0;
-  virtual void configure(void *params) = 0;
+  virtual void apply(std::vector<MSDataset>& d) = 0;
+  virtual void configure(void* params) = 0;
 
   WeightingScheme() {
     this->threads = omp_get_num_procs() - 2;
@@ -23,13 +23,13 @@ class WeightingScheme {
     this->modify_weights = false;
   };
 
-  WeightingScheme(int threads, UVTaper *uvtaper) {
+  WeightingScheme(int threads, UVTaper* uvtaper) {
     this->threads = threads;
     this->uvtaper = uvtaper;
     this->modify_weights = false;
   };
 
-  WeightingScheme(int threads, UVTaper *uvtaper, bool modify_weights) {
+  WeightingScheme(int threads, UVTaper* uvtaper, bool modify_weights) {
     this->threads = threads;
     this->uvtaper = uvtaper;
     this->modify_weights = modify_weights;
@@ -49,9 +49,9 @@ class WeightingScheme {
               << this->threads << std::endl;
   };
 
-  UVTaper *getUVTaper() { return this->uvtaper; };
+  UVTaper* getUVTaper() { return this->uvtaper; };
 
-  void setUVTaper(UVTaper *uvtaper) {
+  void setUVTaper(UVTaper* uvtaper) {
     this->uvtaper = uvtaper;
     std::cout << "UVTaper has been set" << std::endl;
     std::cout << "UVTaper Features - bmaj=" << this->uvtaper->getSigma_maj()
@@ -59,7 +59,7 @@ class WeightingScheme {
               << ", bpa=" << this->uvtaper->getBPA() << std::endl;
   };
 
-  void restoreWeights(std::vector<MSDataset> &d) {
+  void restoreWeights(std::vector<MSDataset>& d) {
     for (int j = 0; j < d.size(); j++) {
       for (int f = 0; f < d[j].data.nfields; f++) {
         for (int i = 0; i < d[j].data.total_frequencies; i++) {
@@ -75,7 +75,7 @@ class WeightingScheme {
 
  protected:
   int threads;
-  UVTaper *uvtaper = NULL;
+  UVTaper* uvtaper = NULL;
   bool modify_weights;
 };
 #endif

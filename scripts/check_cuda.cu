@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   cudaDeviceProp dP;
   float min_cc = 3.0;
 

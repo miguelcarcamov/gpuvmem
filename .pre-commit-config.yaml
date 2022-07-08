@@ -19,7 +19,7 @@ repos:
   hooks:
     # Hooks using native
   - id: clang-format           # formatter for C/C++ code based on a style guide
-    args: [-style=LLVM]        # use LLVM Coding Standards
+    args: [-style=Chromium]        # use LLVM Coding Standards
     # - id: cpplint              # linter (or style-error checker) for Google C++ Style Guide
     # - id: cppcheck             # static analyzer for C/C++ code
 

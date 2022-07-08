@@ -26,7 +26,7 @@ double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
 std::vector<float> initial_values;
 std::vector<MSDataset> datasets;
 
-varsPerGPU *vars_gpu;
+varsPerGPU* vars_gpu;
 
 bool verbose_flag, nopositivity, apply_noise, print_images, print_errors,
     save_model_input, radius_mask, modify_weights;
@@ -40,7 +40,7 @@ float noise_min = 1E32;
 
 Flags flags;
 
-inline bool IsGPUCapableP2P(cudaDeviceProp *pProp) {
+inline bool IsGPUCapableP2P(cudaDeviceProp* pProp) {
 #ifdef _WIN32
   return (bool)(pProp->tccDriver ? true : false);
 #else
@@ -56,7 +56,7 @@ std::vector<std::string> MFS::countAndSeparateStrings(std::string long_str,
   return ret;
 }
 
-void MFS::configure(int argc, char **argv) {
+void MFS::configure(int argc, char** argv) {
   if (ioImageHandler == NULL) {
     ioImageHandler = createObject<Io, std::string>("IoFITS");
   }
@@ -119,14 +119,15 @@ void MFS::configure(int argc, char **argv) {
     exit(-1);
   }
 
-  if (verbose_flag) printf("Number of input datasets %d\n", nMeasurementSets);
+  if (verbose_flag)
+    printf("Number of input datasets %d\n", nMeasurementSets);
 
   for (int i = 0; i < nMeasurementSets; i++) {
     datasets.push_back(MSDataset());
     datasets[i].name =
-        (char *)malloc((string_values[i].length() + 1) * sizeof(char));
+        (char*)malloc((string_values[i].length() + 1) * sizeof(char));
     datasets[i].oname =
-        (char *)malloc((s_output_values[i].length() + 1) * sizeof(char));
+        (char*)malloc((s_output_values[i].length() + 1) * sizeof(char));
     strcpy(datasets[i].name, string_values[i].c_str());
     strcpy(datasets[i].oname, s_output_values[i].c_str());
   }
@@ -255,7 +256,8 @@ void MFS::configure(int argc, char **argv) {
     numBlocksNN.y = iDivUp(N, threadsPerBlockNN.y);
   }
 
-  if (verbose_flag) printf("Reading data from MSs\n");
+  if (verbose_flag)
+    printf("Reading data from MSs\n");
 
   std::vector<float> ms_ref_freqs;
   std::vector<float> ms_max_freqs;
@@ -341,7 +343,7 @@ void MFS::configure(int argc, char **argv) {
     string_values =
         countAndSeparateStrings(variables.penalization_factors, ",");
     nPenalizators = string_values.size();
-    penalizators = (float *)malloc(sizeof(float) * nPenalizators);
+    penalizators = (float*)malloc(sizeof(float) * nPenalizators);
     for (int i = 0; i < nPenalizators; i++) {
       penalizators[i] = std::stof(string_values[i]);
     }
@@ -452,7 +454,7 @@ void MFS::configure(int argc, char **argv) {
     }
   }
 
-  vars_gpu = (varsPerGPU *)malloc(num_gpus * sizeof(varsPerGPU));
+  vars_gpu = (varsPerGPU*)malloc(num_gpus * sizeof(varsPerGPU));
 
   this->visibilities = new Visibilities();
   this->visibilities->setMSDataset(datasets);
@@ -468,7 +470,8 @@ void MFS::configure(int argc, char **argv) {
         Singleton<WeightingSchemeFactory>::Instance().CreateWeightingScheme(0);
   }
 
-  if (this->gridding) this->scheme->setThreads(this->griddingThreads);
+  if (this->gridding)
+    this->scheme->setThreads(this->griddingThreads);
 
   this->scheme->configure(&robust_param);
   this->scheme->setModifyWeights(modify_weights);
@@ -522,7 +525,7 @@ void MFS::setDevice() {
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
       cudaSetDevice(firstgpu);
-      checkCudaErrors(cudaMalloc((void **)&datasets[d].fields[f].atten_image,
+      checkCudaErrors(cudaMalloc((void**)&datasets[d].fields[f].atten_image,
                                  sizeof(float) * M * N));
       checkCudaErrors(cudaMemset(datasets[d].fields[f].atten_image, 0,
                                  sizeof(float) * M * N));
@@ -623,7 +626,8 @@ void MFS::setDevice() {
   double dcosines_l_pix_ref, dcosines_m_pix_ref, dcosines_l_pix_phs,
       dcosines_m_pix_phs;
   for (int d = 0; d < nMeasurementSets; d++) {
-    if (verbose_flag) printf("Dataset: %s\n", datasets[d].name);
+    if (verbose_flag)
+      printf("Dataset: %s\n", datasets[d].name);
     for (int f = 0; f < datasets[d].data.nfields; f++) {
       direccos(datasets[d].fields[f].ref_ra, datasets[d].fields[f].ref_dec,
                raimage, decimage, &lobs, &mobs);
@@ -689,7 +693,7 @@ void MFS::setDevice() {
   ////////////////////////////////////////////////////////MAKE STARTING
   /// IMAGE////////////////////////////////////////////////////////
 
-  host_I = (float *)malloc(M * N * sizeof(float) * image_count);
+  host_I = (float*)malloc(M * N * sizeof(float) * image_count);
 
   for (int k = 0; k < image_count; k++) {
     for (int i = 0; i < M; i++) {
@@ -725,7 +729,7 @@ void MFS::setDevice() {
   cudaSetDevice(firstgpu);
 
   checkCudaErrors(
-      cudaMalloc((void **)&device_Image, sizeof(float) * M * N * image_count));
+      cudaMalloc((void**)&device_Image, sizeof(float) * M * N * image_count));
   checkCudaErrors(
       cudaMemset(device_Image, 0, sizeof(float) * M * N * image_count));
 
@@ -734,20 +738,20 @@ void MFS::setDevice() {
                              cudaMemcpyHostToDevice));
 
   checkCudaErrors(
-      cudaMalloc((void **)&device_noise_image, sizeof(float) * M * N));
+      cudaMalloc((void**)&device_noise_image, sizeof(float) * M * N));
   checkCudaErrors(cudaMemset(device_noise_image, 0, sizeof(float) * M * N));
 
   checkCudaErrors(
-      cudaMalloc((void **)&device_weight_image, sizeof(float) * M * N));
+      cudaMalloc((void**)&device_weight_image, sizeof(float) * M * N));
   checkCudaErrors(cudaMemset(device_weight_image, 0, sizeof(float) * M * N));
 
   if (radius_mask)
     checkCudaErrors(
-        cudaMalloc((void **)&device_distance_image, sizeof(float) * M * N));
+        cudaMalloc((void**)&device_distance_image, sizeof(float) * M * N));
 
   /////////// MAKING IMAGE OBJECT /////////////
   image = new Image(device_Image, image_count);
-  imageMap *functionPtr = (imageMap *)malloc(sizeof(imageMap) * image_count);
+  imageMap* functionPtr = (imageMap*)malloc(sizeof(imageMap) * image_count);
   image->setFunctionMapping(functionPtr);
 
   for (int i = 0; i < image_count; i++) {
@@ -836,7 +840,7 @@ void MFS::setDevice() {
     }
   }
 
-  float *host_weight_image = (float *)malloc(M * N * sizeof(float));
+  float* host_weight_image = (float*)malloc(M * N * sizeof(float));
   checkCudaErrors(cudaMemcpy2D(host_weight_image, sizeof(float),
                                device_weight_image, sizeof(float),
                                sizeof(float), M * N, cudaMemcpyDeviceToHost));
@@ -854,7 +858,7 @@ void MFS::setDevice() {
                                               "distance.fits", "", 0, 0, true);
   }
 
-  float *host_noise_image = (float *)malloc(M * N * sizeof(float));
+  float* host_noise_image = (float*)malloc(M * N * sizeof(float));
   checkCudaErrors(cudaMemcpy2D(host_noise_image, sizeof(float),
                                device_noise_image, sizeof(float), sizeof(float),
                                M * N, cudaMemcpyDeviceToHost));
@@ -882,7 +886,8 @@ void MFS::setDevice() {
   free(host_noise_image);
   free(host_weight_image);
   cudaFree(device_weight_image);
-  if (radius_mask) cudaFree(device_distance_image);
+  if (radius_mask)
+    cudaFree(device_distance_image);
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
       cudaFree(datasets[d].fields[f].atten_image);
@@ -927,7 +932,7 @@ void MFS::run() {
   optimizer->getObjectiveFunction()->setIo(ioImageHandler);
 
   if (this->gridding) {
-    Fi *chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+    Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
     chi2->setCKernel(this->ckernel);
   }
 
@@ -954,11 +959,11 @@ void MFS::run() {
   float chi2_final = 0.0f;
   float final_S = 0.0f;
   float lambda_S = 0.0f;
-  Fi *chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
   if (NULL != chi2) {
     chi2_final = chi2->get_fivalue();
   }
-  Fi *entropy = optimizer->getObjectiveFunction()->getFiByName("Entropy");
+  Fi* entropy = optimizer->getObjectiveFunction()->getFiByName("Entropy");
   if (NULL != entropy) {
     final_S = entropy->get_fivalue();
     lambda_S = entropy->getPenalizationFactor();
@@ -987,7 +992,7 @@ void MFS::run() {
   printf("Wall time: %lf\n\n\n", wall_time);
 
   if (variables.ofile != "NULL") {
-    FILE *outfile = fopen(variables.ofile.c_str(), "w");
+    FILE* outfile = fopen(variables.ofile.c_str(), "w");
     if (outfile == NULL) {
       printf("Error opening output file!\n");
       goToError();
@@ -1182,7 +1187,9 @@ void MFS::unSetDevice() {
 };
 
 namespace {
-Synthesizer *CreateMFS() { return new MFS; }
+Synthesizer* CreateMFS() {
+  return new MFS;
+}
 const std::string name = "MFS";
 const bool RegisteredMFS =
     registerCreationFunction<Synthesizer, std::string>(name, CreateMFS);

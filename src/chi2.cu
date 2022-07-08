@@ -7,7 +7,7 @@
 extern long M, N;
 extern int image_count;
 extern int flag_opt;
-extern float *penalizators;
+extern float* penalizators;
 extern int nPenalizators;
 
 Chi2::Chi2() {
@@ -31,29 +31,34 @@ void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd) {
   }
 
   checkCudaErrors(
-      cudaMalloc((void **)&result_dchi2, sizeof(float) * M * N * image_count));
+      cudaMalloc((void**)&result_dchi2, sizeof(float) * M * N * image_count));
   checkCudaErrors(
       cudaMemset(result_dchi2, 0, sizeof(float) * M * N * image_count));
 }
 
-float Chi2::calcFi(float *p) {
+float Chi2::calcFi(float* p) {
   float result = 0.0;
   this->set_fivalue(chi2(p, ip));
   result = (penalization_factor) * (this->get_fivalue());
   return result;
 };
 
-void Chi2::calcGi(float *p, float *xi) { dchi2(p, xi, result_dchi2, ip); };
+void Chi2::calcGi(float* p, float* xi) {
+  dchi2(p, xi, result_dchi2, ip);
+};
 
-void Chi2::simulateModel(float *p) { simulate(p, ip); };
+void Chi2::simulateModel(float* p) {
+  simulate(p, ip);
+};
 
 void Chi2::restartDGi() {
   checkCudaErrors(
       cudaMemset(result_dchi2, 0, sizeof(float) * M * N * image_count));
 };
 
-void Chi2::addToDphi(float *device_dphi) {
-  if (image_count == 1) linkAddToDPhi(device_dphi, result_dchi2, 0);
+void Chi2::addToDphi(float* device_dphi) {
+  if (image_count == 1)
+    linkAddToDPhi(device_dphi, result_dchi2, 0);
   if (image_count > 1) {
     checkCudaErrors(
         cudaMemset(device_dphi, 0, sizeof(float) * M * N * image_count));
@@ -63,10 +68,14 @@ void Chi2::addToDphi(float *device_dphi) {
   }
 };
 
-void Chi2::setCKernel(CKernel *ckernel) { this->ip->setCKernel(ckernel); };
+void Chi2::setCKernel(CKernel* ckernel) {
+  this->ip->setCKernel(ckernel);
+};
 
 namespace {
-Fi *CreateChi2() { return new Chi2; }
+Fi* CreateChi2() {
+  return new Chi2;
+}
 
 const std::string name = "Chi2";
 const bool RegisteredChi2 =

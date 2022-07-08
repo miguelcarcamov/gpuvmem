@@ -61,15 +61,23 @@ __host__ float pswf_11D(float amp, float x, float x0, float sigma, float w) {
   return val;
 };
 
-__host__ float pswf_12D(float amp, float x, float y, float x0, float y0,
-                        float sigma_x, float sigma_y, float w) {
+__host__ float pswf_12D(float amp,
+                        float x,
+                        float y,
+                        float x0,
+                        float y0,
+                        float sigma_x,
+                        float sigma_y,
+                        float w) {
   float xval = pswf_11D(1.0f, x, x0, sigma_x, w);
   float yval = pswf_11D(1.0f, y, y0, sigma_y, w);
   float val = amp * xval * yval;
   return val;
 };
 
-__host__ PSWF_12D::PSWF_12D() : CKernel() { this->w = 6.0f; };
+__host__ PSWF_12D::PSWF_12D() : CKernel() {
+  this->w = 6.0f;
+};
 
 __host__ PSWF_12D::PSWF_12D(int m, int n) : CKernel(m, n) {
   this->w = 6.0f;
@@ -80,18 +88,18 @@ __host__ PSWF_12D::PSWF_12D(int m, int n, float w) : CKernel(m, n, w) {
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, CKernel *gcf) : CKernel(m, n, gcf) {
+__host__ PSWF_12D::PSWF_12D(int m, int n, CKernel* gcf) : CKernel(m, n, gcf) {
   this->w = 6.0f;
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, Io *imageHandler)
+__host__ PSWF_12D::PSWF_12D(int m, int n, Io* imageHandler)
     : CKernel(m, n, imageHandler) {
   this->w = 6.0f;
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, Io *imageHandler, CKernel *gcf)
+__host__ PSWF_12D::PSWF_12D(int m, int n, Io* imageHandler, CKernel* gcf)
     : CKernel(m, n, imageHandler, gcf) {
   this->w = 6.0f;
   this->nameSelf();
@@ -103,32 +111,39 @@ __host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy)
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, CKernel *gcf)
+__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, CKernel* gcf)
     : CKernel(m, n, dx, dy, gcf) {
   this->w = 6.0f;
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, Io *imageHandler)
+__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, Io* imageHandler)
     : CKernel(m, n, dx, dy, imageHandler) {
   this->w = 6.0f;
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, Io *imageHandler,
-                            CKernel *gcf)
+__host__ PSWF_12D::PSWF_12D(int m,
+                            int n,
+                            float dx,
+                            float dy,
+                            Io* imageHandler,
+                            CKernel* gcf)
     : CKernel(m, n, dx, dy, imageHandler, gcf) {
   this->w = 6.0f;
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float w, CKernel *gcf)
+__host__ PSWF_12D::PSWF_12D(int m, int n, float w, CKernel* gcf)
     : CKernel(m, n, w, gcf) {
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float w, Io *imageHandler,
-                            CKernel *gcf)
+__host__ PSWF_12D::PSWF_12D(int m,
+                            int n,
+                            float w,
+                            Io* imageHandler,
+                            CKernel* gcf)
     : CKernel(m, n, w, imageHandler, gcf) {
   this->nameSelf();
 };
@@ -138,26 +153,42 @@ __host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, float w)
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, float w,
-                            CKernel *gcf)
+__host__ PSWF_12D::PSWF_12D(int m,
+                            int n,
+                            float dx,
+                            float dy,
+                            float w,
+                            CKernel* gcf)
     : CKernel(m, n, dx, dy, w, gcf) {
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, float w,
-                            Io *imageHandler)
+__host__ PSWF_12D::PSWF_12D(int m,
+                            int n,
+                            float dx,
+                            float dy,
+                            float w,
+                            Io* imageHandler)
     : CKernel(m, n, dx, dy, w, imageHandler) {
   this->nameSelf();
 };
 
-__host__ PSWF_12D::PSWF_12D(int m, int n, float dx, float dy, float w,
-                            Io *imageHandler, CKernel *gcf)
+__host__ PSWF_12D::PSWF_12D(int m,
+                            int n,
+                            float dx,
+                            float dy,
+                            float w,
+                            Io* imageHandler,
+                            CKernel* gcf)
     : CKernel(m, n, dx, dy, w, imageHandler, gcf) {
   this->nameSelf();
 };
 
-__host__ void PSWF_12D::buildKernel(float amp, float x0, float y0,
-                                    float sigma_x, float sigma_y) {
+__host__ void PSWF_12D::buildKernel(float amp,
+                                    float x0,
+                                    float y0,
+                                    float sigma_x,
+                                    float sigma_y) {
   this->setKernelMemory();
   float x, y;
   float val;
@@ -192,7 +223,10 @@ __host__ void PSWF_12D::buildKernel() {
   }
 };
 
-__host__ void PSWF_12D::buildGCF(float amp, float x0, float y0, float sigma_x,
+__host__ void PSWF_12D::buildGCF(float amp,
+                                 float x0,
+                                 float y0,
+                                 float sigma_x,
                                  float sigma_y) {
   this->setKernelMemory();
   float x, y;
@@ -224,21 +258,31 @@ __host__ void PSWF_12D::buildGCF() {
   this->copyKerneltoGPU();
 };
 
-__host__ float PSWF_12D::GCF(float amp, float x, float y, float x0, float y0,
-                             float sigma_x, float sigma_y, float w,
+__host__ float PSWF_12D::GCF(float amp,
+                             float x,
+                             float y,
+                             float x0,
+                             float y0,
+                             float sigma_x,
+                             float sigma_y,
+                             float w,
                              float alpha) {
   float val = pswf_12D(amp, x, y, x0, y0, sigma_x, sigma_y, w);
   return 1.0f / val;
 };
 
-__host__ CKernel *PSWF_12D::clone() const { return new PSWF_12D(*this); };
+__host__ CKernel* PSWF_12D::clone() const {
+  return new PSWF_12D(*this);
+};
 
 __host__ void PSWF_12D::nameSelf() {
   this->name = "Prolate Spheroidal Wave Function (PSWF)";
 };
 
 namespace {
-CKernel *CreateCKernel() { return new PSWF_12D; }
+CKernel* CreateCKernel() {
+  return new PSWF_12D;
+}
 
 const std::string name = "PSWF";
 const bool RegisteredPSWF =

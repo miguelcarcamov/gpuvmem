@@ -36,8 +36,8 @@
 extern long M;
 extern long N;
 
-extern ObjectiveFunction *testof;
-extern Image *I;
+extern ObjectiveFunction* testof;
+extern Image* I;
 
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
@@ -55,37 +55,41 @@ extern int flag_opt;
   cudaFree(p_old);  \
   cudaFree(norm_vector);
 
-__host__ int LBFGS::getK() { return this->K; };
+__host__ int LBFGS::getK() {
+  return this->K;
+};
 
-__host__ void LBFGS::setK(int K) { this->K = K; };
+__host__ void LBFGS::setK(int K) {
+  this->K = K;
+};
 
 __host__ void LBFGS::allocateMemoryGpu() {
   checkCudaErrors(cudaMalloc(
-      (void **)&d_y, sizeof(float) * M * N * K * image->getImageCount()));
+      (void**)&d_y, sizeof(float) * M * N * K * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(d_y, 0, sizeof(float) * M * N * K * image->getImageCount()));
 
   checkCudaErrors(cudaMalloc(
-      (void **)&d_s, sizeof(float) * M * N * K * image->getImageCount()));
+      (void**)&d_s, sizeof(float) * M * N * K * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(d_s, 0, sizeof(float) * M * N * K * image->getImageCount()));
 
-  checkCudaErrors(cudaMalloc((void **)&p_old,
+  checkCudaErrors(cudaMalloc((void**)&p_old,
                              sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(p_old, 0, sizeof(float) * M * N * image->getImageCount()));
 
   checkCudaErrors(
-      cudaMalloc((void **)&xi, sizeof(float) * M * N * image->getImageCount()));
+      cudaMalloc((void**)&xi, sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(xi, 0, sizeof(float) * M * N * image->getImageCount()));
 
-  checkCudaErrors(cudaMalloc((void **)&xi_old,
+  checkCudaErrors(cudaMalloc((void**)&xi_old,
                              sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(xi_old, 0, sizeof(float) * M * N * image->getImageCount()));
 
-  checkCudaErrors(cudaMalloc((void **)&norm_vector,
+  checkCudaErrors(cudaMalloc((void**)&norm_vector,
                              sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(cudaMemset(norm_vector, 0,
                              sizeof(float) * M * N * image->getImageCount()));
@@ -195,8 +199,13 @@ __host__ void LBFGS::optimize() {
   return;
 };
 
-__host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi,
-                                     int par_M, int lbfgs_it, int M, int N) {
+__host__ void LBFGS::LBFGS_recursion(float* d_y,
+                                     float* d_s,
+                                     float* xi,
+                                     int par_M,
+                                     int lbfgs_it,
+                                     int M,
+                                     int N) {
   float **alpha, *aux_vector;
   float *d_r, *d_q;
   float rho = 0.0f;
@@ -205,20 +214,20 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi,
   float sy = 0.0f;
   float yy = 0.0f;
   float sy_yy = 0.0f;
-  alpha = (float **)malloc(image->getImageCount() * sizeof(float *));
+  alpha = (float**)malloc(image->getImageCount() * sizeof(float*));
   for (int i = 0; i < image->getImageCount(); i++) {
-    alpha[i] = (float *)malloc(par_M * sizeof(float));
+    alpha[i] = (float*)malloc(par_M * sizeof(float));
   }
 
   for (int i = 0; i < image->getImageCount(); i++) {
     memset(alpha[i], 0, par_M * sizeof(float));
   }
 
-  checkCudaErrors(cudaMalloc((void **)&aux_vector, sizeof(float) * M * N));
-  checkCudaErrors(cudaMalloc((void **)&d_q,
-                             sizeof(float) * M * N * image->getImageCount()));
-  checkCudaErrors(cudaMalloc((void **)&d_r,
-                             sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(cudaMalloc((void**)&aux_vector, sizeof(float) * M * N));
+  checkCudaErrors(
+      cudaMalloc((void**)&d_q, sizeof(float) * M * N * image->getImageCount()));
+  checkCudaErrors(
+      cudaMalloc((void**)&d_r, sizeof(float) * M * N * image->getImageCount()));
 
   checkCudaErrors(cudaMemset(aux_vector, 0, sizeof(float) * M * N));
   checkCudaErrors(
@@ -332,7 +341,9 @@ __host__ void LBFGS::LBFGS_recursion(float *d_y, float *d_s, float *xi,
 };
 
 namespace {
-Optimizer *CreateLbfgs() { return new LBFGS; };
+Optimizer* CreateLbfgs() {
+  return new LBFGS;
+};
 
 const std::string name = "CG-LBFGS";
 const bool RegisteredLbgs =

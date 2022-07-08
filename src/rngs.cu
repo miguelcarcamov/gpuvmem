@@ -138,19 +138,22 @@ void PutSeed(long x)
 {
   char ok = 0;
 
-  if (x > 0) x = x % MODULUS; /* correct if x is too large  */
-  if (x < 0) x = ((unsigned long)time((time_t *)NULL)) % MODULUS;
+  if (x > 0)
+    x = x % MODULUS; /* correct if x is too large  */
+  if (x < 0)
+    x = ((unsigned long)time((time_t*)NULL)) % MODULUS;
   if (x == 0)
     while (!ok) {
       printf("\nEnter a positive integer seed (9 digits or less) >> ");
       scanf("%ld", &x);
       ok = (0 < x) && (x < MODULUS);
-      if (!ok) printf("\nInput out of range ... try again\n");
+      if (!ok)
+        printf("\nInput out of range ... try again\n");
     }
   seed[stream] = x;
 }
 
-void GetSeed(long *x)
+void GetSeed(long* x)
 /* ---------------------------------------------------------------
  * Use this function to get the state of the current random number
  * generator stream.
@@ -185,7 +188,8 @@ void TestRandom(void)
 
   SelectStream(0); /* select the default stream */
   PutSeed(1);      /* and set the state to 1    */
-  for (i = 0; i < 10000; i++) u = Random();
+  for (i = 0; i < 10000; i++)
+    u = Random();
   GetSeed(&x);       /* get the new state value   */
   ok = (x == CHECK); /* and check for correctness */
 

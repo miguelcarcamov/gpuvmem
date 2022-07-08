@@ -4,9 +4,11 @@ extern double deltau, deltav;
 extern long M, N;
 extern int num_gpus;
 
-Gridding::Gridding() { this->threads = 1; };
+Gridding::Gridding() {
+  this->threads = 1;
+};
 
-void Gridding::applyCriteria(Visibilities *v) {
+void Gridding::applyCriteria(Visibilities* v) {
   double3 valzero;
   cufftComplex complexValZero;
   valzero.x = 0.0;
@@ -28,8 +30,8 @@ Gridding::Gridding(int threads) {
     printf("Number of threads set to 1\n");
 };
 
-void Gridding::configure(void *params) {
-  int *threads = (int *)params;
+void Gridding::configure(void* params) {
+  int* threads = (int*)params;
   printf("Number of threads = %d\n", *threads);
   if (*threads != 1 && *threads >= 1)
     this->threads = *threads;
@@ -38,7 +40,9 @@ void Gridding::configure(void *params) {
 };
 
 namespace {
-Filter *CreateGridding() { return new Gridding; }
+Filter* CreateGridding() {
+  return new Gridding;
+}
 const std::string GriddingId = "Gridding";
 const bool RegisteredGridding =
     registerCreationFunction<Filter, std::string>(GriddingId, CreateGridding);

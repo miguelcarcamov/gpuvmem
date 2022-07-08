@@ -57,12 +57,13 @@ inline bool IsAppBuiltAs64() {
    according to the Belge et al. 2002 paper.
  */
 std::vector<float> runGpuvmem(std::vector<float> args,
-                              Synthesizer *synthesizer) {
+                              Synthesizer* synthesizer) {
   int cter = 0;
-  std::vector<Fi *> fis =
+  std::vector<Fi*> fis =
       synthesizer->getOptimizator()->getObjectiveFunction()->getFi();
-  for (std::vector<Fi *>::iterator it = fis.begin(); it != fis.end(); it++) {
-    if (cter) (*it)->setPenalizationFactor(args[cter]);
+  for (std::vector<Fi*>::iterator it = fis.begin(); it != fis.end(); it++) {
+    if (cter)
+      (*it)->setPenalizationFactor(args[cter]);
     cter++;
   }
 
@@ -76,14 +77,15 @@ std::vector<float> runGpuvmem(std::vector<float> args,
     if (i > 0) {
       lambdas[i] = fi_values[0] / fi_values[i] *
                    (logf(fi_values[i]) / logf(fi_values[0]));
-      if (lambdas[i] < 0.0f) lambdas[i] = 0.0f;
+      if (lambdas[i] < 0.0f)
+        lambdas[i] = 0.0f;
     }
   }
 
   return lambdas;
 }
 
-void optimizationOrder(Optimizer *optimizer, Image *image) {
+void optimizationOrder(Optimizer* optimizer, Image* image) {
   optimizer->setImage(image);
   optimizer->setFlag(0);
   optimizer->optimize();
@@ -95,7 +97,7 @@ void optimizationOrder(Optimizer *optimizer, Image *image) {
      optimizer->optimize();*/
 }
 
-__host__ int main(int argc, char **argv) {
+__host__ int main(int argc, char** argv) {
   ////CHECK FOR AVAILABLE GPUs
   cudaGetDeviceCount(&num_gpus);
 
@@ -123,27 +125,27 @@ __host__ int main(int argc, char **argv) {
     exit(EXIT_SUCCESS);
   }
 
-  Synthesizer *sy = createObject<Synthesizer, std::string>("MFS");
-  Optimizer *cg = createObject<Optimizer, std::string>("CG-FRPRMN");
+  Synthesizer* sy = createObject<Synthesizer, std::string>("MFS");
+  Optimizer* cg = createObject<Optimizer, std::string>("CG-FRPRMN");
   // Optimizer *cg = createObject<Optimizer, std::string>("CG-LBFGS");
   // cg->setK(15);
   //  Choose your antialiasing kernel!
-  CKernel *sc = new PillBox2D();
+  CKernel* sc = new PillBox2D();
   // CKernel *sc = new Gaussian2D(7,7);
   // CKernel *sc = new Sinc2D(7,7);
   // CKernel *sc = new GaussianSinc2D(7, 7);
   // CKernel *sc = new PSWF_12D(9,9);
   // CKernel *sc = createObject<CKernel, std::string>("GaussianSinc2D");
-  ObjectiveFunction *of =
+  ObjectiveFunction* of =
       createObject<ObjectiveFunction, std::string>("ObjectiveFunction");
-  Io *ioms =
+  Io* ioms =
       createObject<Io, std::string>("IoMS");  // This is the default Io Class
-  Io *iofits =
+  Io* iofits =
       createObject<Io, std::string>("IoFITS");  // This is the default Io Class
 
   // UVTaper *uvtaper = new UVTaper(200000.0f); // Initialize your uvtaper in
   // units of lambda
-  WeightingScheme *scheme =
+  WeightingScheme* scheme =
       createObject<WeightingScheme, std::string>("Briggs");
   // scheme->setUVTaper(uvtaper);
 
@@ -160,11 +162,11 @@ __host__ int main(int argc, char **argv) {
   // sy->applyFilter(g); // delete this line for no gridding
 
   sy->setDevice();  // This routine sends the data to GPU memory
-  Fi *chi2 = createObject<Fi, std::string>("Chi2");
-  Fi *e = createObject<Fi, std::string>("Entropy");
-  Fi *l1 = createObject<Fi, std::string>("L1-Norm");
-  Fi *tsqv = createObject<Fi, std::string>("TotalSquaredVariation");
-  Fi *lap = createObject<Fi, std::string>("Laplacian");
+  Fi* chi2 = createObject<Fi, std::string>("Chi2");
+  Fi* e = createObject<Fi, std::string>("Entropy");
+  Fi* l1 = createObject<Fi, std::string>("L1-Norm");
+  Fi* tsqv = createObject<Fi, std::string>("TotalSquaredVariation");
+  Fi* lap = createObject<Fi, std::string>("Laplacian");
 
   chi2->configure(-1, 0, 0);  // (penalizatorIndex, ImageIndex, imageToaddDphi)
   e->configure(0, 0, 0);

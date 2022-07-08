@@ -50,21 +50,28 @@ class Flags {
   Flags() : autoId(256) {}
 
   template <typename T>
-  void Var(T& var, char shortFlag, std::string longFlag, T defaultValue,
-           std::string description, std::string descriptionGroup = "");
+  void Var(T& var,
+           char shortFlag,
+           std::string longFlag,
+           T defaultValue,
+           std::string description,
+           std::string descriptionGroup = "");
 
-  void Bool(bool& var, char shortFlag, std::string longFlag,
-            std::string description, std::string descriptionGroup = "");
+  void Bool(bool& var,
+            char shortFlag,
+            std::string longFlag,
+            std::string description,
+            std::string descriptionGroup = "");
 
   bool Parse(int argc, char** argv);
   void PrintHelp(std::ostream& to = std::cout);
 
  private:
   int autoId;
-  std::map<int, std::function<void(std::string optarg)> >
+  std::map<int, std::function<void(std::string optarg)>>
       setters;  // flag id -> setters
   std::set<std::string> longFlags;
-  std::map<std::string, std::vector<std::string> > help;  // group -> help itmes
+  std::map<std::string, std::vector<std::string>> help;  // group -> help itmes
   std::vector<struct option> options;
   std::string optionStr;
   std::string argv0;
@@ -73,14 +80,19 @@ class Flags {
   void set(T& var, std::string optarg);
 
   template <typename T>
-  void entry(struct option& op, char shortFlag, std::string longFlag,
-             T& defaultValue, std::string description,
+  void entry(struct option& op,
+             char shortFlag,
+             std::string longFlag,
+             T& defaultValue,
+             std::string description,
              std::string descriptionGroup);
 };
 
 template <typename T>
-inline void Flags::entry(struct option& op, char shortFlag,
-                         std::string longFlag, T& defaultValue,
+inline void Flags::entry(struct option& op,
+                         char shortFlag,
+                         std::string longFlag,
+                         T& defaultValue,
                          std::string description,
                          std::string descriptionGroup) {
   if (!shortFlag && !longFlag.size()) {
@@ -129,8 +141,11 @@ inline void Flags::entry(struct option& op, char shortFlag,
 }
 
 template <typename T>
-inline void Flags::Var(T& var, char shortFlag, std::string longFlag,
-                       T defaultValue, std::string description,
+inline void Flags::Var(T& var,
+                       char shortFlag,
+                       std::string longFlag,
+                       T defaultValue,
+                       std::string description,
                        std::string descriptionGroup) {
   struct option op;
 
@@ -147,8 +162,11 @@ inline void Flags::Var(T& var, char shortFlag, std::string longFlag,
   this->options.push_back(op);
 }
 
-inline void Flags::Bool(bool& var, char shortFlag, std::string longFlag,
-                        std::string description, std::string descriptionGroup) {
+inline void Flags::Bool(bool& var,
+                        char shortFlag,
+                        std::string longFlag,
+                        std::string description,
+                        std::string descriptionGroup) {
   struct option op;
   this->entry(op, shortFlag, longFlag, "(unset)", description,
               descriptionGroup);

@@ -89,7 +89,8 @@ class UVTaper {
     this->v_0 = v_0;
   };
 
-  __host__ void setGaussianParameters(float sigma_maj, float sigma_min,
+  __host__ void setGaussianParameters(float sigma_maj,
+                                      float sigma_min,
                                       float bpa) {
     this->sigma_maj = sigma_maj;
     this->sigma_min = sigma_min;

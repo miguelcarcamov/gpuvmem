@@ -6,7 +6,7 @@
 class SecondDerivateError : public Error {
  public:
   SecondDerivateError(){};
-  void calculateErrorImage(Image *I, Visibilities *v);
+  void calculateErrorImage(Image* I, Visibilities* v);
 };
 
 #endif

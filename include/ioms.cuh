@@ -7,12 +7,22 @@ class IoMS : public Io {
  public:
   IoMS();
   IoMS(std::string input, std::string output, std::string path);
-  IoMS(std::string input, std::string output, std::string path,
-       std::string datacolumn_input, std::string datacolumn_output);
-  IoMS(std::string input, std::string output, std::string path,
-       std::string datacolumn_input, std::string datacolumn_output,
-       float random_probability, int gridding, bool apply_noise_input,
-       bool apply_noise_output, bool W_projection, bool store_model_vis_input);
+  IoMS(std::string input,
+       std::string output,
+       std::string path,
+       std::string datacolumn_input,
+       std::string datacolumn_output);
+  IoMS(std::string input,
+       std::string output,
+       std::string path,
+       std::string datacolumn_input,
+       std::string datacolumn_output,
+       float random_probability,
+       int gridding,
+       bool apply_noise_input,
+       bool apply_noise_output,
+       bool W_projection,
+       bool store_model_vis_input);
   float getRandomProbability() override;
   int getGridding() override;
   bool getApplyNoiseInput() override;
@@ -32,62 +42,104 @@ class IoMS : public Io {
   void setDataColumnOutput(std::string datacolumn_output) override;
   void setDataColumns(std::string datacolumn_input,
                       std::string datacolumn_output) override;
-  void read(std::vector<MSAntenna>& antennas, std::vector<Field>& fields,
+  void read(std::vector<MSAntenna>& antennas,
+            std::vector<Field>& fields,
             MSData* data) override;
-  void read(char const* MS_name, std::vector<MSAntenna>& antennas,
-            std::vector<Field>& fields, MSData* data, bool noise,
-            bool W_projection, float random_probability, int gridding) override;
-  void read(char const* MS_name, std::vector<MSAntenna>& antennas,
-            std::vector<Field>& fields, MSData* data) override;
+  void read(char const* MS_name,
+            std::vector<MSAntenna>& antennas,
+            std::vector<Field>& fields,
+            MSData* data,
+            bool noise,
+            bool W_projection,
+            float random_probability,
+            int gridding) override;
+  void read(char const* MS_name,
+            std::vector<MSAntenna>& antennas,
+            std::vector<Field>& fields,
+            MSData* data) override;
   void readSpecificColumn(std::vector<MSAntenna>& antennas,
-                          std::vector<Field>& fields, MSData* data) override;
+                          std::vector<Field>& fields,
+                          MSData* data) override;
   void readSpecificColumn(std::vector<MSAntenna>& antennas,
-                          std::vector<Field>& fields, MSData* data,
+                          std::vector<Field>& fields,
+                          MSData* data,
                           std::string data_column) override;
-  void readSpecificColumn(char const* MS_name, std::vector<MSAntenna>& antennas,
-                          std::vector<Field>& fields, MSData* data, bool noise,
-                          bool W_projection, float random_probability,
-                          int gridding) override;
-  void readSpecificColumn(char const* MS_name, std::string data_column,
+  void readSpecificColumn(char const* MS_name,
                           std::vector<MSAntenna>& antennas,
-                          std::vector<Field>& fields, MSData* data, bool noise,
-                          bool W_projection, float random_probability,
+                          std::vector<Field>& fields,
+                          MSData* data,
+                          bool noise,
+                          bool W_projection,
+                          float random_probability,
                           int gridding) override;
-  void readSpecificColumn(char const* MS_name, std::vector<MSAntenna>& antennas,
-                          std::vector<Field>& fields, MSData* data) override;
-  void readSpecificColumn(char const* MS_name, std::string data_column,
+  void readSpecificColumn(char const* MS_name,
+                          std::string data_column,
                           std::vector<MSAntenna>& antennas,
-                          std::vector<Field>& fields, MSData* data) override;
+                          std::vector<Field>& fields,
+                          MSData* data,
+                          bool noise,
+                          bool W_projection,
+                          float random_probability,
+                          int gridding) override;
+  void readSpecificColumn(char const* MS_name,
+                          std::vector<MSAntenna>& antennas,
+                          std::vector<Field>& fields,
+                          MSData* data) override;
+  void readSpecificColumn(char const* MS_name,
+                          std::string data_column,
+                          std::vector<MSAntenna>& antennas,
+                          std::vector<Field>& fields,
+                          MSData* data) override;
   void copy(char const* infile, char const* outfile) override;
   void copy() override;
-  void write(char const* outfile, char const* out_col,
-             std::vector<Field>& fields, MSData data, float random_probability,
-             bool store_model_vis_input, bool noise,
+  void write(char const* outfile,
+             char const* out_col,
+             std::vector<Field>& fields,
+             MSData data,
+             float random_probability,
+             bool store_model_vis_input,
+             bool noise,
              bool W_projection) override;
-  void write(char const* out_col, std::vector<Field>& fields,
+  void write(char const* out_col,
+             std::vector<Field>& fields,
              MSData data) override;
-  void write(char const* outfile, char const* out_col,
-             std::vector<Field>& fields, MSData data) override;
-  void write(char const* outfile, char const* out_col,
-             std::vector<Field>& fields, MSData data,
+  void write(char const* outfile,
+             char const* out_col,
+             std::vector<Field>& fields,
+             MSData data) override;
+  void write(char const* outfile,
+             char const* out_col,
+             std::vector<Field>& fields,
+             MSData data,
              bool store_model_vis_input) override;
-  void write(char const* out_col, std::vector<Field>& fields, MSData data,
+  void write(char const* out_col,
+             std::vector<Field>& fields,
+             MSData data,
              bool store_model) override;
-  void writeSpecificColumn(char const* outfile, std::vector<Field>& fields,
-                           MSData data, float random_probability,
-                           bool store_model_vis_input, bool noise,
+  void writeSpecificColumn(char const* outfile,
+                           std::vector<Field>& fields,
+                           MSData data,
+                           float random_probability,
+                           bool store_model_vis_input,
+                           bool noise,
                            bool W_projection) override;
   void writeSpecificColumn(std::vector<Field>& fields, MSData data) override;
-  void writeSpecificColumn(char const* outfile, std::vector<Field>& fields,
+  void writeSpecificColumn(char const* outfile,
+                           std::vector<Field>& fields,
                            MSData data) override;
-  void writeSpecificColumn(char const* outfile, std::vector<Field>& fields,
-                           MSData data, bool store_model_vis_input) override;
-  void writeModelVisibilities(char const* outfile, std::vector<Field>& fields,
+  void writeSpecificColumn(char const* outfile,
+                           std::vector<Field>& fields,
+                           MSData data,
+                           bool store_model_vis_input) override;
+  void writeModelVisibilities(char const* outfile,
+                              std::vector<Field>& fields,
                               MSData data) override;
   void writeModelVisibilities(std::vector<Field>& fields, MSData data) override;
   void writeResidualsAndModel(std::vector<Field>& fields, MSData data) override;
-  void writeResidualsAndModel(std::string input, std::string output,
-                              std::vector<Field>& fields, MSData data) override;
+  void writeResidualsAndModel(std::string input,
+                              std::string output,
+                              std::vector<Field>& fields,
+                              MSData data) override;
 
  protected:
   float random_probability;

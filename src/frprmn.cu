@@ -36,8 +36,8 @@
 extern long M;
 extern long N;
 
-ObjectiveFunction *testof;
-Image *I;
+ObjectiveFunction* testof;
+Image* I;
 
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
@@ -56,29 +56,28 @@ int flag_opt;
   cudaFree(temp);
 
 __host__ void ConjugateGradient::allocateMemoryGpu() {
-  checkCudaErrors(cudaMalloc((void **)&device_g,
+  checkCudaErrors(cudaMalloc((void**)&device_g,
                              sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(device_g, 0, sizeof(float) * M * N * image->getImageCount()));
-  checkCudaErrors(cudaMalloc((void **)&device_h,
+  checkCudaErrors(cudaMalloc((void**)&device_h,
                              sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(device_h, 0, sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
-      cudaMalloc((void **)&xi, sizeof(float) * M * N * image->getImageCount()));
+      cudaMalloc((void**)&xi, sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(xi, 0, sizeof(float) * M * N * image->getImageCount()));
-  checkCudaErrors(cudaMalloc((void **)&temp,
+  checkCudaErrors(cudaMalloc((void**)&temp,
                              sizeof(float) * M * N * image->getImageCount()));
   checkCudaErrors(
       cudaMemset(temp, 0, sizeof(float) * M * N * image->getImageCount()));
 
-  checkCudaErrors(
-      cudaMalloc((void **)&device_gg_vector, sizeof(float) * M * N));
+  checkCudaErrors(cudaMalloc((void**)&device_gg_vector, sizeof(float) * M * N));
   checkCudaErrors(cudaMemset(device_gg_vector, 0, sizeof(float) * M * N));
 
   checkCudaErrors(
-      cudaMalloc((void **)&device_dgg_vector, sizeof(float) * M * N));
+      cudaMalloc((void**)&device_dgg_vector, sizeof(float) * M * N));
   checkCudaErrors(cudaMemset(device_dgg_vector, 0, sizeof(float) * M * N));
 };
 __host__ void ConjugateGradient::deallocateMemoryGpu(){FREEALL};
@@ -196,7 +195,9 @@ __host__ void ConjugateGradient::optimize() {
 };
 
 namespace {
-Optimizer *CreateFrprmn() { return new ConjugateGradient; };
+Optimizer* CreateFrprmn() {
+  return new ConjugateGradient;
+};
 
 const std::string name = "CG-FRPRMN";
 const bool RegisteredFrprmn =

@@ -40,7 +40,8 @@ class DefaultFactoryError {
   }
 };
 
-template <class AbstractProduct, class IdentifierType,
+template <class AbstractProduct,
+          class IdentifierType,
           class ProductCreator = AbstractProduct* (*)(),
           template <typename, class> class FactoryErrorPolicy =
               DefaultFactoryError>

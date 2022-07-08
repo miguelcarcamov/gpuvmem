@@ -3,8 +3,8 @@
 
 class Filter {
  public:
-  virtual void applyCriteria(Visibilities *v) = 0;
-  virtual void configure(void *params) = 0;
+  virtual void applyCriteria(Visibilities* v) = 0;
+  virtual void configure(void* params) = 0;
 };
 
 #endif  // FILTER_CUH

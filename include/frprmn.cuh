@@ -2,8 +2,11 @@
 #define FRPRMN_CUH
 #include "linmin.cuh"
 
-__host__ void frprmn(float *p, float ftol, float *fret, float (*func)(float *),
-                     void (*dfunc)(float *, float *));
+__host__ void frprmn(float* p,
+                     float ftol,
+                     float* fret,
+                     float (*func)(float*),
+                     void (*dfunc)(float*, float*));
 
 class ConjugateGradient : public Optimizer {
  public:

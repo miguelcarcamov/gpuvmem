@@ -85,7 +85,8 @@ long Binomial(long n, double p)
 {
   long i, x = 0;
 
-  for (i = 0; i < n; i++) x += Bernoulli(p);
+  for (i = 0; i < n; i++)
+    x += Bernoulli(p);
   return (x);
 }
 
@@ -118,7 +119,8 @@ long Pascal(long n, double p)
 {
   long i, x = 0;
 
-  for (i = 0; i < n; i++) x += Geometric(p);
+  for (i = 0; i < n; i++)
+    x += Geometric(p);
   return (x);
 }
 
@@ -169,7 +171,8 @@ double Erlang(long n, double b)
   long i;
   double x = 0.0;
 
-  for (i = 0; i < n; i++) x += Exponential(b);
+  for (i = 0; i < n; i++)
+    x += Exponential(b);
   return (x);
 }
 

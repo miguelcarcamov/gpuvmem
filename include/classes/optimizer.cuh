@@ -35,8 +35,8 @@ class Optimizer {
 
   __host__ int getCurrentIteration() { return this->current_iteration; };
 
-  __host__ void setImage(Image *image) { this->image = image; };
-  __host__ void setObjectiveFunction(ObjectiveFunction *of) { this->of = of; };
+  __host__ void setImage(Image* image) { this->image = image; };
+  __host__ void setObjectiveFunction(ObjectiveFunction* of) { this->of = of; };
   void setFlag(int flag) { this->flag = flag; };
 
   void setFTol(float ftol) { this->ftol = ftol; };
@@ -47,11 +47,11 @@ class Optimizer {
     this->total_iterations = iterations;
   };
 
-  ObjectiveFunction *getObjectiveFunction() { return this->of; };
+  ObjectiveFunction* getObjectiveFunction() { return this->of; };
 
  protected:
-  ObjectiveFunction *of;
-  Image *image;
+  ObjectiveFunction* of;
+  Image* image;
   int flag;
   int total_iterations;
   int current_iteration = 0;

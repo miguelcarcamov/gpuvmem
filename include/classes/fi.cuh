@@ -7,7 +7,7 @@
 
 extern long M, N;
 extern int image_count;
-extern float *penalizators;
+extern float* penalizators;
 extern int nPenalizators;
 
 class Fi {
@@ -19,16 +19,16 @@ class Fi {
     this->iteration = 0;
   }
 
-  virtual float calcFi(float *p) = 0;
-  virtual void calcGi(float *p, float *xi) = 0;
-  virtual void simulateModel(float *p){};
+  virtual float calcFi(float* p) = 0;
+  virtual void calcGi(float* p, float* xi) = 0;
+  virtual void simulateModel(float* p){};
   virtual void restartDGi() = 0;
-  virtual void addToDphi(float *device_dphi) = 0;
+  virtual void addToDphi(float* device_dphi) = 0;
   virtual void setPrior(float prior){};
-  virtual void setPrior(float *prior){};
+  virtual void setPrior(float* prior){};
   virtual float getEta(){};
   virtual void setEta(float eta){};
-  virtual void setCKernel(CKernel *ckernel){};
+  virtual void setCKernel(CKernel* ckernel){};
 
   std::string getName() { return this->name; };
 
@@ -38,13 +38,13 @@ class Fi {
   float getPenalizationFactor() { return this->penalization_factor; };
   void set_fivalue(float fi) { this->fi_value = fi; };
   void setPenalizationFactor(float p) { this->penalization_factor = p; };
-  void setInu(cufftComplex *Inu) { this->Inu = Inu; }
-  cufftComplex *getInu() { return this->Inu; }
-  void setS(float *S) {
+  void setInu(cufftComplex* Inu) { this->Inu = Inu; }
+  cufftComplex* getInu() { return this->Inu; }
+  void setS(float* S) {
     cudaFree(device_S);
     this->device_S = S;
   };
-  void setDS(float *DS) {
+  void setDS(float* DS) {
     cudaFree(device_DS);
     this->device_DS = DS;
   };
@@ -73,17 +73,17 @@ class Fi {
       }
     }
 
-    checkCudaErrors(cudaMalloc((void **)&device_S, sizeof(float) * M * N));
+    checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float) * M * N));
     checkCudaErrors(cudaMemset(device_S, 0, sizeof(float) * M * N));
 
-    checkCudaErrors(cudaMalloc((void **)&device_DS, sizeof(float) * M * N));
+    checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float) * M * N));
     checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
   };
 
  protected:
   float fi_value;
-  float *device_S;
-  float *device_DS;
+  float* device_S;
+  float* device_DS;
   float penalization_factor;
   int imageIndex;
   int iteration;
@@ -91,7 +91,7 @@ class Fi {
   int order;
   std::string name;
   ;
-  cufftComplex *Inu;
+  cufftComplex* Inu;
   int imageToAdd;
 };
 
