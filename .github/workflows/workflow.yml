@@ -3,8 +3,22 @@ name: gpuvmem CI
 on:
   push:
     branches: [master, framework_dev]
+    paths:
+    - '**.cu'
+    - '**.cuh'
+    - '**.c'
+    - '**.h'
+    - '**.cpp'
+    - '**.hpp'
   pull_request:
     branches: [master, framework_dev]
+    paths:
+    - '**.cu'
+    - '**.cuh'
+    - '**.c'
+    - '**.h'
+    - '**.cpp'
+    - '**.hpp'
 
 env:
   BUILD_DIR: build
