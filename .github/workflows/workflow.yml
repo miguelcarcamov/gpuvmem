@@ -10,6 +10,8 @@ on:
     - '**.h'
     - '**.cpp'
     - '**.hpp'
+    - '**.cmake'
+    - CMakeLists.txt
   pull_request:
     branches: [master, framework_dev]
     paths:
@@ -19,6 +21,8 @@ on:
     - '**.h'
     - '**.cpp'
     - '**.hpp'
+    - '**.cmake'
+    - CMakeLists.txt
 
 env:
   BUILD_DIR: build
