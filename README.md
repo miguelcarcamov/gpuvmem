@@ -11,18 +11,20 @@
 
 If you use GPUVMEM for your research please do not forget to cite Cárcamo et al.
 
-    @article{CARCAMO201816,
-    title = "Multi-GPU maximum entropy image synthesis for radio astronomy",
-    journal = "Astronomy and Computing",
-    volume = "22",
-    pages = "16 - 27",
-    year = "2018",
-    issn = "2213-1337",
-    doi = "https://doi.org/10.1016/j.ascom.2017.11.003",
-    url = "http://www.sciencedirect.com/science/article/pii/S2213133717300094",
-    author = "M. Cárcamo and P.E. Román and S. Casassus and V. Moral and F.R. Rannou",
-    keywords = "Maximum entropy, GPU, ALMA, Inverse problem, Radio interferometry, Image synthesis"
-    }
+   ```tex
+   @article{CARCAMO201816,
+   title = "Multi-GPU maximum entropy image synthesis for radio astronomy",
+   journal = "Astronomy and Computing",
+   volume = "22",
+   pages = "16 - 27",
+   year = "2018",
+   issn = "2213-1337",
+   doi = "https://doi.org/10.1016/j.ascom.2017.11.003",
+   url = "http://www.sciencedirect.com/science/article/pii/S2213133717300094",
+   author = "M. Cárcamo and P.E. Román and S. Casassus and V. Moral and F.R. Rannou",
+   keywords = "Maximum entropy, GPU, ALMA, Inverse problem, Radio interferometry, Image synthesis"
+   }
+   ```
 
 # Installation
 
