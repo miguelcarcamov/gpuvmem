@@ -1,4 +1,4 @@
-name: build-base-container
+name: build-latest-container
 
 on:
   push:
