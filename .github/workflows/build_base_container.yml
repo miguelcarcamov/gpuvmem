@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - framework_dev
+    - development
     paths:
     - Dockerfile
   pull_request:
