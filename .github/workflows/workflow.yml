@@ -7,7 +7,7 @@ on:
     branches: ["master", "framework_dev"]
 
 env:
-  REGISTRY: ghcr.io
+  REGISTRY: "ghcr.io"
   build_dir: "build"
   config: "Debug"
 
