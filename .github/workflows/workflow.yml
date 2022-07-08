@@ -9,7 +9,7 @@ on:
 env:
   REGISTRY: ghcr.io
   build_dir: "build"
-  config: "Release"
+  config: "Debug"
 
 
 permissions:
