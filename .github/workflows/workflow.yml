@@ -7,9 +7,8 @@ on:
     branches: ["master", "framework_dev"]
 
 env:
-  REGISTRY: "ghcr.io"
-  build_dir: "build"
-  config: "Debug"
+  BUILD_DIR: "build"
+  CONFIG: "Debug"
 
 
 permissions:
@@ -19,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.REGISTRY }}/${{ github.repository }}:base
+      image: ghcr.io/${{ github.repository }}:base
       credentials:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.REGISTRY_TOKEN }}
@@ -33,11 +32,11 @@ jobs:
       - name: Create build folder
         run: mkdir build
       - name: Run cmake
-        working-directory: ${{ env.build_dir }}
+        working-directory: ${{ env.BUILD_DIR }}
         run: cmake ..
       - name: Configure Error Processing
         if: ${{ failure() && steps.configure.outcome == 'failure' }}
-        working-directory: ${{ env.build_dir }}
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
             if [[ -f "CMakeFiles/CMakeOutput.log" ]]; then
               echo "---- CMakeFiles/CMakeOutput.log"
@@ -50,5 +49,5 @@ jobs:
               echo "----"
             fi
       - name: Build everything else
-        working-directory: ${{ env.build_dir }}
+        working-directory: ${{ env.BUILD_DIR }}
         run:  cmake --build . --target all --verbose -j `nproc`
