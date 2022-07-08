@@ -8,6 +8,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  build_dir: "build"
+  config: "Release"
+
 
 permissions:
   contents: read
@@ -16,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}:base
+      image: ${{ env.REGISTRY }}/${{ github.repository }}:base
       credentials:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.REGISTRY_TOKEN }}
@@ -30,19 +33,22 @@ jobs:
       - name: Create build folder
         run: mkdir build
       - name: Run cmake
+        working-directory: ${{ env.build_dir }}
+        run: cmake ..
+      - name: Configure Error Processing
+        if: ${{ failure() && steps.configure.outcome == 'failure' }}
+        working-directory: ${{ env.build_dir }}
         run: |
-            cd build
-            cmake ..
-      - name: Run make
-        run: |
-            cd build
-            make -j2
-      - name: Run tests
-        run: |
-            cd build
-            make test
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: gpuvmem
-          path: build/bin/*
+            if [[ -f "CMakeFiles/CMakeOutput.log" ]]; then
+              echo "---- CMakeFiles/CMakeOutput.log"
+              cat CMakeFiles/CMakeOutput.log
+              echo "----"
+            fi
+            if [[ -f "CMakeFiles/CMakeError.log" ]]; then
+              echo "---- CMakeFiles/CMakeError.log"
+              cat CMakeFiles/CMakeError.log
+              echo "----"
+            fi
+      - name: Build everything else
+        working-directory: ${{ env.build_dir }}
+        run:  cmake --build . --target all --verbose -j `nproc`
