@@ -1345,7 +1345,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
      Private variables - parallel for loop
    */
   int j, k;
-  double grid_pos_x, grid_pos_y;
+  int grid_pos_x, grid_pos_y;
   double3 uvw;
   float w;
   cufftComplex Vo;
@@ -1715,9 +1715,12 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
   std::fill_n(Vm_gridded.begin(), M * N, complex_zero);
 
   int j, k;
+  int grid_pos_x, grid_pos_y;
   for (int i = 0; i < numvis; i++) {
-    j = round((uvw_gridded_sp[i].x / deltau_meters) + N / 2);
-    k = round((uvw_gridded_sp[i].y / deltav_meters) + M / 2);
+    grid_pos_x = uvw_gridded_sp[i].x / deltau_meters;
+    grid_pos_y = uvw_gridded_sp[i].y / deltav_meters;
+    j = grid_pos_x + N / 2;
+    k = grid_pos_y + M / 2;
     Vm_gridded[N * k + j] = Vm_gridded_sp[i];
   }
 }
