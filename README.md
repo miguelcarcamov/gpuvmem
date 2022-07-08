@@ -74,7 +74,7 @@ If you use GPUVMEM for your research please do not forget to cite Cárcamo et al
 # Installation using Docker
 
    ```bash
-   docker pull ghcr.io/miguelcarcamov/gpuvmem:base
+   docker pull ghcr.io/miguelcarcamov/gpuvmem:latest
    ```
 
 # Compiling
