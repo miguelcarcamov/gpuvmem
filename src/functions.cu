@@ -1376,8 +1376,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
 
           // Backing up original visibilities and (u,v) positions
           fields[f].backup_visibilities[i][s].uvw[z] = uvw;
-          fields[f].backup_visibilities[i][s].Vo[z] = Vo;
           fields[f].backup_visibilities[i][s].weight[z] = w;
+          fields[f].backup_visibilities[i][s].Vo[z] = Vo;
 
           // Visibilities from metres to klambda
           uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
@@ -1745,8 +1745,12 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
 
       for (int s = 0; s < data.nstokes; s++) {
         // Now the number of visibilities will be the original one.
+        printf("Vis before: %d\n",
+               fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].numVisibilitiesPerFreqPerStoke[i][s] =
             fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
+        printf("Vis after: %d\n",
+               fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
         fields[f].visibilities[i][s].uvw.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
