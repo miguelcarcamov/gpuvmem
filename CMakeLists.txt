@@ -116,6 +116,11 @@ if(Boost_FOUND)
                          ${CUDA_cufft_LIBRARY})
   set(ALL_LIBRARIES ${CASACORE_LIBRARIES} ${CFITSIO_LIBRARY} ${Boost_LIBRARIES})
 
+  # Filtering empty libraries
+  list(FILTER ALL_LIBRARIES EXCLUDE REGEX
+       "/usr/lib/x86_64-linux-gnu/libpthread.a")
+  list(FILTER ALL_LIBRARIES EXCLUDE REGEX "/usr/lib/x86_64-linux-gnu/libdl.a")
+
   target_link_libraries(gpuvmem m stdc++ gomp ${ALL_CUDA_LIBRARIES}
                         ${ALL_LIBRARIES})
   # Adding install target
