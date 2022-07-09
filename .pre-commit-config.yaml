@@ -4,8 +4,6 @@ repos:
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, '2']
-  - id: pretty-format-toml
-    args: [--autofix]
 
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.2.0
@@ -13,6 +11,7 @@ repos:
   - id: check-yaml
   - id: end-of-file-fixer
   - id: trailing-whitespace
+  - id: requirements-txt-fixer
 
 - repo: https://gitlab.com/daverona/pre-commit/cpp
   rev: 0.8.0                 # use the most recent version

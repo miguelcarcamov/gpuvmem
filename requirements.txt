@@ -1,0 +1,10 @@
+almatasks==1.5.2
+casadata==2022.1.17
+casampi==0.5.0
+casaplotms==1.6.2
+casaplotserver==1.2.1
+casashell==6.5.0.15
+casatasks==6.5.0.15
+casatestutils==6.5.0.15
+casatools==6.5.0.15
+casaviewer==1.5.2
