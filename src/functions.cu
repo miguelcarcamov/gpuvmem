@@ -1733,6 +1733,8 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
                                           int num_gpus,
                                           int firstgpu,
                                           int blockSizeV) {
+  int local_max = 0;
+  int max = 0;
   for (int f = 0; f < data.nfields; f++) {
 #pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
     for (int i = 0; i < data.total_frequencies; i++) {
@@ -1836,6 +1838,18 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
       }
     }
   }
+
+  for (int f = 0; f < data.nfields; f++) {
+    for (int i = 0; i < data.total_frequencies; i++) {
+      local_max =
+          *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
+                            fields[f].numVisibilitiesPerFreqPerStoke[i].end());
+      if (local_max > max) {
+        max = local_max;
+      }
+    }
+  }
+  data.max_number_visibilities_in_channel_and_stokes = max;
 }
 
 __host__ void degridding(std::vector<Field>& fields,
@@ -4155,6 +4169,7 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
                       .threadsPerBlockUV);
               // REDUCTIONS
               // chi2
+              printf("Partial chi2=%f\n", result);
               resultchi2 += result;
             }
           }
