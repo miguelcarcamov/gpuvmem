@@ -1,15 +1,18 @@
 name: build-latest-container
 
 on:
-  push:
-    branches:
-    - master
-    paths:
-    - Dockerfile.prod
   pull_request:
     branches:
     - master
     paths:
+    - '**.cu'
+    - '**.cuh'
+    - '**.c'
+    - '**.h'
+    - '**.cpp'
+    - '**.hpp'
+    - '**.cmake'
+    - CMakeLists.txt
     - Dockerfile.prod
 env:
   REGISTRY: ghcr.io

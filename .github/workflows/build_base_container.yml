@@ -3,7 +3,6 @@ name: build-base-container
 on:
   push:
     branches:
-    - master
     - framework_dev
     - development
     paths:
