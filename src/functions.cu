@@ -1790,19 +1790,18 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
 
         checkCudaErrors(cudaMemcpy(
             fields[f].device_visibilities[i][s].uvw,
-            fields[f].backup_visibilities[i][s].uvw.data(),
-            sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
+            fields[f].visibilities[i][s].uvw.data(),
+            sizeof(double3) * fields[f].visibilities[i][s].uvw.size(),
             cudaMemcpyHostToDevice));
-        checkCudaErrors(
-            cudaMemcpy(fields[f].device_visibilities[i][s].Vo,
-                       fields[f].backup_visibilities[i][s].Vo.data(),
-                       sizeof(cufftComplex) *
-                           fields[f].backup_visibilities[i][s].Vo.size(),
-                       cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy(
+            fields[f].device_visibilities[i][s].Vo,
+            fields[f].visibilities[i][s].Vo.data(),
+            sizeof(cufftComplex) * fields[f].visibilities[i][s].Vo.size(),
+            cudaMemcpyHostToDevice));
         checkCudaErrors(cudaMemcpy(
             fields[f].device_visibilities[i][s].weight,
-            fields[f].backup_visibilities[i][s].weight.data(),
-            sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(),
+            fields[f].visibilities[i][s].weight.data(),
+            sizeof(float) * fields[f].visibilities[i][s].weight.size(),
             cudaMemcpyHostToDevice));
 
         if (blockSizeV == -1) {
