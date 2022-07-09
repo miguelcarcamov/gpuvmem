@@ -83,8 +83,7 @@ if(Boost_FOUND)
       PROPERTIES COMPILE_FLAGS ${TEMP}
                  CUDA_SEPARABLE_COMPILATION ON
                  CUDA_STANDARD 11)
-    set(CMAKE_CUDA_FLAGS
-        "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp")
   else()
     message(NOTICE "MEMORY DEBUG IS OFF")
     if(USE_FAST_MATH)
@@ -97,8 +96,7 @@ if(Boost_FOUND)
                    CUDA_SEPARABLE_COMPILATION ON
                    CUDA_STANDARD 11)
       set(CMAKE_CUDA_FLAGS
-          "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}"
-      )
+          "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp")
     else()
       set(COMPFLAGS "-D_FORCE_INLINES -w -O3")
       set(TEMP "${TEMP}${COMPFLAGS}")
