@@ -1850,6 +1850,7 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
     }
   }
   data.max_number_visibilities_in_channel_and_stokes = max;
+  max_number_vis = max;
 }
 
 __host__ void degridding(std::vector<Field>& fields,
