@@ -4181,7 +4181,6 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
                       .threadsPerBlockUV);
               // REDUCTIONS
               // chi2
-              printf("Partial chi2=%f\n", result);
               resultchi2 += result;
             }
           }
