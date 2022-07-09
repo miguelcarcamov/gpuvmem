@@ -71,6 +71,9 @@ if(Boost_FOUND)
     set(TEMP "${TEMP} ") # A space to cleanly separate from existing content
   endif()
 
+  set_property(TARGET gpuvmem PROPERTY CUDA_ARCHITECTURES
+                                       ${CUDA_NVCC_ARCH_FLAGS})
+
   if(MEMORY_DEBUG)
     message(NOTICE "MEMORY DEBUG IS ON")
     set(COMPFLAGS "-g -G -D_FORCE_INLINES -w")
@@ -105,14 +108,14 @@ if(Boost_FOUND)
                    CUDA_SEPARABLE_COMPILATION ON
                    CUDA_STANDARD 11)
       set(CMAKE_CUDA_FLAGS
-          "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp ${CUDA_NVCC_ARCH_FLAGS}"
-      )
+          "${CMAKE_CUDA_FLAGS} -Xptxas -O3 -Xcompiler -fopenmp")
     endif()
   endif()
 
   set(ALL_CUDA_LIBRARIES ${CUDA_cuda_LIBRARY} ${CUDA_cudart_LIBRARY}
                          ${CUDA_cufft_LIBRARY})
   set(ALL_LIBRARIES ${CASACORE_LIBRARIES} ${CFITSIO_LIBRARY} ${Boost_LIBRARIES})
+
   target_link_libraries(gpuvmem m stdc++ gomp ${ALL_CUDA_LIBRARIES}
                         ${ALL_LIBRARIES})
   # Adding install target
