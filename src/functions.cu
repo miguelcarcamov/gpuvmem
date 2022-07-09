@@ -1852,6 +1852,16 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
 
   data.max_number_visibilities_in_channel_and_stokes = max;
   max_number_vis = max;
+
+  for (int g = 0; g < num_gpus; g++) {
+    cudaSetDevice((g % num_gpus) + firstgpu);
+    checkCudaErrors(
+        cudaMalloc(&vars_gpu[g].device_chi2, sizeof(float) * max_number_vis));
+    checkCudaErrors(
+        cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float) * max_number_vis));
+  }
+
+  cudaSetDevice(firstgpu);
 }
 
 __host__ void degridding(std::vector<Field>& fields,
@@ -4055,8 +4065,6 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
   float resultchi2 = 0.0f;
 
   ip->clipWNoise(I);
-
-  printf("In simulate function - max_number_vis %d\n", max_number_vis);
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
