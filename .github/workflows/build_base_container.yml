@@ -7,6 +7,7 @@ on:
     - Dockerfile
   pull_request:
     branches: [master]
+    types: [opened, reopened]
     paths:
     - Dockerfile
 env:

@@ -3,6 +3,7 @@ name: build-latest-container
 on:
   pull_request:
     branches: [master]
+    types: [opened, reopened]
     paths:
     - '**.cu'
     - '**.cuh'
