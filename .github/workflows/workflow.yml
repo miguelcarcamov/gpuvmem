@@ -2,7 +2,7 @@ name: gpuvmem CI
 
 on:
   push:
-    branches: [framework_dev, development]
+    branches: [master, framework_dev, development]
     paths:
     - '**.cu'
     - '**.cuh'
