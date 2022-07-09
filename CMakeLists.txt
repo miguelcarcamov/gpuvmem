@@ -133,19 +133,6 @@ if(Boost_FOUND)
 else()
   message(
     NOTICE
-    Boost
-    is
-    not
-    installed
-    in
-    your
-    system.
-    Please
-    make
-    sure
-    Boost
-    is
-    installed
-    before
-    compiling.)
+    "Boost is not installed in your system. Please make sure Boost is installed before compiling."
+  )
 endif()
