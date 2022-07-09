@@ -1852,8 +1852,6 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
 
   data.max_number_visibilities_in_channel_and_stokes = max;
   max_number_vis = max;
-  printf("Max number of vis: %d\n", max_number_vis);
-  exit(-1);
 }
 
 __host__ void degridding(std::vector<Field>& fields,
@@ -4057,6 +4055,8 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
   float resultchi2 = 0.0f;
 
   ip->clipWNoise(I);
+
+  print("In simulate function - max_number_vis %d\n", max_number_vis);
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
