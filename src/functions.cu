@@ -4056,7 +4056,7 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
 
   ip->clipWNoise(I);
 
-  print("In simulate function - max_number_vis %d\n", max_number_vis);
+  printf("In simulate function - max_number_vis %d\n", max_number_vis);
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
