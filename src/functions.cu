@@ -1793,8 +1793,8 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
             fields[f].backup_visibilities[i][s].weight.begin(),
             fields[f].backup_visibilities[i][s].weight.end());
 
-        for (auto i : fields[f].visibilities[i][s].weight) {
-          printf("New weights %f\n", i);
+        for (auto i : fields[f].visibilities[i][s].Vo) {
+          printf("New vis (%f,%f)\n", i.x, i.y);
         }
 
         checkCudaErrors(cudaMemcpy(
@@ -1813,11 +1813,11 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
             sizeof(float) * fields[f].visibilities[i][s].weight.size(),
             cudaMemcpyHostToDevice));
 
+        long UVpow2 =
+            NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         if (blockSizeV == -1) {
           int threads1D, blocks1D;
           int threadsV, blocksV;
-          long UVpow2 =
-              NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
           threads1D = 512;
           blocks1D = iDivUp(UVpow2, threads1D);
           getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV,
@@ -1826,10 +1826,10 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
           fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
         } else {
           fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-          fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(
-              NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]),
-              blockSizeV);
+          fields[f].device_visibilities[i][s].numBlocksUV =
+              iDivUp(UVpow2, blockSizeV);
         }
+        printf("uvpow2 %d\n", UVpow2);
         printf("threads per block %d\n",
                fields[f].device_visibilities[i][s].threadsPerBlockUV);
         printf("num block %d\n",
