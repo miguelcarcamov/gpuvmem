@@ -2,8 +2,7 @@ name: build-latest-container
 
 on:
   pull_request:
-    branches:
-    - master
+    branches: [master]
     paths:
     - '**.cu'
     - '**.cuh'

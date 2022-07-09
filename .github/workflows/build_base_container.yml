@@ -2,14 +2,11 @@ name: build-base-container
 
 on:
   push:
-    branches:
-    - framework_dev
-    - development
+    branches: [framework_dev, development]
     paths:
     - Dockerfile
   pull_request:
-    branches:
-    - master
+    branches: [master]
     paths:
     - Dockerfile
 env:
