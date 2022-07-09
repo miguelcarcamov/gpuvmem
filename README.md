@@ -184,14 +184,14 @@ Usage: `./bin/gpuvmem [options]`
 
 # TO RESTORE YOUR IMAGE PLEASE SEE CARCAMO ET AL. 2018 FOR MORE INFORMATION
 
-- This will return a restored image: A convolution of the model image with the CLEAN BEAM + residuals (JY/BEAM)
-- Residuals (JY/BEAM)
-- The script file is on the scripts folder and it is named restore_continuum_ms_SC.py
+- This will return a restored image: A convolution of the model image with the CLEAN beam + residuals (Jy/beam)
+- Residuals (Jy/beam)
+- The script file is on the scripts folder and it is named `restore.py`
 
 Restoring usage:
 
    ```bash
-   casa --nologger -c restore_continuum_ms_SC.py residual_folder.ms mem_model.fits restored_output 2.0
+   python restore.py residual_folder.ms mem_model.fits restored_output 2.0
    ```
 
 The last parameter, is the robust parameter that you want to use to clean the residuals.

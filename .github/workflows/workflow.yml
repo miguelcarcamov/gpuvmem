@@ -2,7 +2,7 @@ name: gpuvmem CI
 
 on:
   push:
-    branches: [framework_dev, development]
+    branches: [master, framework_dev, development]
     paths:
     - '**.cu'
     - '**.cuh'
@@ -14,6 +14,7 @@ on:
     - CMakeLists.txt
   pull_request:
     branches: [master]
+    types: [opened, reopened]
     paths:
     - '**.cu'
     - '**.cuh'
