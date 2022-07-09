@@ -1745,12 +1745,9 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
 
       for (int s = 0; s < data.nstokes; s++) {
         // Now the number of visibilities will be the original one.
-        printf("Vis before: %d\n",
-               fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+
         fields[f].numVisibilitiesPerFreqPerStoke[i][s] =
             fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
-        printf("Vis after: %d\n",
-               fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
         fields[f].visibilities[i][s].uvw.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
@@ -1796,6 +1793,10 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
             fields[f].backup_visibilities[i][s].weight.begin(),
             fields[f].backup_visibilities[i][s].weight.end());
 
+        for (auto i : fields[f].visibilities[i][s].weight) {
+          printf("New weights %f\n", i);
+        }
+
         checkCudaErrors(cudaMemcpy(
             fields[f].device_visibilities[i][s].uvw,
             fields[f].visibilities[i][s].uvw.data(),
@@ -1829,7 +1830,11 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
               NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]),
               blockSizeV);
         }
-
+        printf("threads per block %d\n",
+               fields[f].device_visibilities[i][s].threadsPerBlockUV);
+        printf("num block %d\n",
+               fields[f].device_visibilities[i][s].numBlocksUV);
+        exit(-1);
         hermitianSymmetry<<<
             fields[f].device_visibilities[i][s].numBlocksUV,
             fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
