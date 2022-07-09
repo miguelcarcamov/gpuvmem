@@ -37,7 +37,7 @@ void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd) {
 }
 
 float Chi2::calcFi(float* p) {
-  float result = 0.0;
+  float result = 0.0f;
   this->set_fivalue(chi2(p, ip));
   result = (penalization_factor) * (this->get_fivalue());
   return result;
@@ -47,8 +47,10 @@ void Chi2::calcGi(float* p, float* xi) {
   dchi2(p, xi, result_dchi2, ip);
 };
 
-void Chi2::simulateModel(float* p) {
-  simulate(p, ip);
+float Chi2::simulateModel(float* p) {
+  float result = 0.0f;
+  result = simulate(p, ip);
+  return result;
 };
 
 void Chi2::restartDGi() {

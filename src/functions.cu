@@ -1793,10 +1793,6 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
             fields[f].backup_visibilities[i][s].weight.begin(),
             fields[f].backup_visibilities[i][s].weight.end());
 
-        for (auto i : fields[f].visibilities[i][s].uvw) {
-          printf("New vis (%lf,%lf,%lf)\n", i.x, i.y, i.z);
-        }
-
         checkCudaErrors(cudaMemcpy(
             fields[f].device_visibilities[i][s].uvw,
             fields[f].visibilities[i][s].uvw.data(),
@@ -1829,7 +1825,7 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
           fields[f].device_visibilities[i][s].numBlocksUV =
               iDivUp(UVpow2, blockSizeV);
         }
-        exit(-1);
+
         hermitianSymmetry<<<
             fields[f].device_visibilities[i][s].numBlocksUV,
             fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
@@ -4040,11 +4036,13 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
 __host__ void simulate(float* I, VirtualImageProcessor* ip) {
   cudaSetDevice(firstgpu);
 
+  float resultchi2 = 0.0f;
+
   ip->clipWNoise(I);
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
+#pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
         unsigned int j = omp_get_thread_num();
@@ -4079,6 +4077,7 @@ __host__ void simulate(float* I, VirtualImageProcessor* ip) {
             vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs,
             datasets[d].fields[f].phs_yobs);
         checkCudaErrors(cudaDeviceSynchronize());
+
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].data.corr_type[s] == LL ||
               datasets[d].data.corr_type[s] == RR ||
@@ -4086,6 +4085,9 @@ __host__ void simulate(float* I, VirtualImageProcessor* ip) {
               datasets[d].data.corr_type[s] == YY) {
             if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] >
                 0) {
+              checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
+                                         sizeof(float) * max_number_vis));
+
               if (NULL != ip->getCKernel()) {
                 getGriddedVisFromPix<<<
                     datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
@@ -4117,12 +4119,53 @@ __host__ void simulate(float* I, VirtualImageProcessor* ip) {
                     N);
               }
               checkCudaErrors(cudaDeviceSynchronize());
+
+              // RESIDUAL CALCULATION
+              residual<<<
+                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV>>>(
+                  datasets[d].fields[f].device_visibilities[i][s].Vr,
+                  datasets[d].fields[f].device_visibilities[i][s].Vm,
+                  datasets[d].fields[f].device_visibilities[i][s].Vo,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              checkCudaErrors(cudaDeviceSynchronize());
+
+              ////chi2 VECTOR
+              chi2Vector<<<
+                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV>>>(
+                  vars_gpu[gpu_idx].device_chi2,
+                  datasets[d].fields[f].device_visibilities[i][s].Vr,
+                  datasets[d].fields[f].device_visibilities[i][s].weight,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              checkCudaErrors(cudaDeviceSynchronize());
+
+              result = deviceReduce<float>(
+                  vars_gpu[gpu_idx].device_chi2,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV);
+              // REDUCTIONS
+              // chi2
+              resultchi2 += result;
             }
           }
         }
       }
     }
   }
+
+  cudaSetDevice(firstgpu);
+
+  return 0.5f * resultchi2;
 };
 
 __host__ float chi2(float* I, VirtualImageProcessor* ip) {
