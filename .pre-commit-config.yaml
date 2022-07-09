@@ -29,3 +29,9 @@ repos:
   - id: markdownlint-fix
     entry: markdownlint -f README.md --disable MD013 MD036 MD033 MD046
         # args: [--disable MD013 MD036]
+
+- repo: https://github.com/cheshirekow/cmake-format-precommit
+  rev: v0.6.13
+  hooks:
+  - id: cmake-format
+  # - id: cmake-lint

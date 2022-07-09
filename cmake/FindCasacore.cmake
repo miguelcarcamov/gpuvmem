@@ -1,12 +1,10 @@
-# - Try to find Casacore include dirs and libraries
-# Usage:
-#   find_package(Casacore [REQUIRED] [COMPONENTS components...])
-# Valid components are:
-#   casa, coordinates, derivedmscal, fits, images, lattices,
-#   meas, measures, mirlib, ms, msfits, python, scimath, scimath_f, tables
+# * Try to find Casacore include dirs and libraries Usage: find_package(Casacore
+#   [REQUIRED] [COMPONENTS components...]) Valid components are: casa,
+#   coordinates, derivedmscal, fits, images, lattices, meas, measures, mirlib,
+#   ms, msfits, python, scimath, scimath_f, tables
 #
-# Note that most components are dependent on other (more basic) components.
-# In that case, it suffices to specify the "top-level" components; dependent
+# Note that most components are dependent on other (more basic) components. In
+# that case, it suffices to specify the "top-level" components; dependent
 # components will be searched for automatically.
 #
 # The dependency tree can be generated using the script get_casacore_deps.sh.
@@ -15,64 +13,57 @@
 #
 # The dependencies in this macro were generated against casacore release 1.7.0.
 #
-# Variables used by this module:
-#  CASACORE_ROOT_DIR         - Casacore root directory.
+# Variables used by this module: CASACORE_ROOT_DIR         - Casacore root
+# directory.
 #
-# Variables defined by this module:
-#  CASACORE_FOUND            - System has Casacore, which means that the
-#                              include dir was found, as well as all
-#                              libraries specified (not cached)
-#  CASACORE_INCLUDE_DIR      - Casacore include directory (cached)
-#  CASACORE_INCLUDE_DIRS     - Casacore include directories (not cached)
-#                              identical to CASACORE_INCLUDE_DIR
-#  CASACORE_LIBRARIES        - The Casacore libraries (not cached)
-#  CASA_${COMPONENT}_LIBRARY - The absolute path of Casacore library
-#                              "component" (cached)
-#  HAVE_AIPSPP               - True if system has Casacore (cached)
-#                              for backward compatibility with AIPS++
-#  HAVE_CASACORE             - True if system has Casacore (cached)
-#                              identical to CASACORE_FOUND
-#  TAQL_EXECUTABLE           - The absolute path of the TaQL executable
-#                              (cached)
+# Variables defined by this module: CASACORE_FOUND            - System has
+# Casacore, which means that the include dir was found, as well as all libraries
+# specified (not cached) CASACORE_INCLUDE_DIR      - Casacore include directory
+# (cached) CASACORE_INCLUDE_DIRS     - Casacore include directories (not cached)
+# identical to CASACORE_INCLUDE_DIR CASACORE_LIBRARIES        - The Casacore
+# libraries (not cached) CASA_${COMPONENT}_LIBRARY - The absolute path of
+# Casacore library "component" (cached) HAVE_AIPSPP               - True if
+# system has Casacore (cached) for backward compatibility with AIPS++
+# HAVE_CASACORE             - True if system has Casacore (cached) identical to
+# CASACORE_FOUND TAQL_EXECUTABLE           - The absolute path of the TaQL
+# executable (cached)
 #
-# ATTENTION: The component names need to be in lower case, just as the
-# casacore library names. However, the CMake variables use all upper case.
+# ATTENTION: The component names need to be in lower case, just as the casacore
+# library names. However, the CMake variables use all upper case.
 
-# Copyright (C) 2009
-# ASTRON (Netherlands Institute for Radio Astronomy)
-# P.O.Box 2, 7990 AA Dwingeloo, The Netherlands
+# Copyright (C) 2009 ASTRON (Netherlands Institute for Radio Astronomy) P.O.Box
+# 2, 7990 AA Dwingeloo, The Netherlands
 #
-# This file is part of the LOFAR software suite.
-# The LOFAR software suite is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# This file is part of the LOFAR software suite. The LOFAR software suite is
+# free software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# either version 3 of the License, or (at your option) any later version.
 #
 # The LOFAR software suite is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
 #
-# You should have received a copy of the GNU General Public License along
-# with the LOFAR software suite. If not, see <http://www.gnu.org/licenses/>.
+# You should have received a copy of the GNU General Public License along with
+# the LOFAR software suite. If not, see <http://www.gnu.org/licenses/>.
 #
 # $Id: FindCasacore.cmake 31487 2015-04-16 11:28:17Z dijkema $
 
-# - casacore_resolve_dependencies(_result)
+# * casacore_resolve_dependencies(_result)
 #
-# Resolve the Casacore library dependencies for the given components.
-# The list of dependent libraries will be returned in the variable result.
-# It is sorted from least dependent to most dependent library, so it can be
-# directly fed to the linker.
+# Resolve the Casacore library dependencies for the given components. The list
+# of dependent libraries will be returned in the variable result. It is sorted
+# from least dependent to most dependent library, so it can be directly fed to
+# the linker.
 #
-#   Usage: casacore_resolve_dependencies(result components...)
+# Usage: casacore_resolve_dependencies(result components...)
 #
 macro(casacore_resolve_dependencies _result)
   set(${_result} ${ARGN})
   set(_index 0)
-  # Do a breadth-first search through the dependency graph; append to the
-  # result list the dependent components for each item in that list.
-  # Duplicates will be removed later.
+  # Do a breadth-first search through the dependency graph; append to the result
+  # list the dependent components for each item in that list. Duplicates will be
+  # removed later.
   while(1)
     list(LENGTH ${_result} _length)
     if(NOT _index LESS _length)
@@ -89,19 +80,20 @@ macro(casacore_resolve_dependencies _result)
   list(REVERSE ${_result})
 endmacro(casacore_resolve_dependencies _result)
 
-
-# - casacore_find_library(_name)
+# * casacore_find_library(_name)
 #
-# Search for the library ${_name}.
-# If library is found, add it to CASACORE_LIBRARIES; if not, add ${_name}
-# to CASACORE_MISSING_COMPONENTS and set CASACORE_FOUND to false.
+# Search for the library ${_name}. If library is found, add it to
+# CASACORE_LIBRARIES; if not, add ${_name} to CASACORE_MISSING_COMPONENTS and
+# set CASACORE_FOUND to false.
 #
-#   Usage: casacore_find_library(name)
+# Usage: casacore_find_library(name)
 #
 macro(casacore_find_library _name)
   string(TOUPPER ${_name} _NAME)
-  find_library(${_NAME}_LIBRARY ${_name}
-    HINTS ${CASACORE_ROOT_DIR} PATH_SUFFIXES lib)
+  find_library(
+    ${_NAME}_LIBRARY ${_name}
+    HINTS ${CASACORE_ROOT_DIR}
+    PATH_SUFFIXES lib)
   mark_as_advanced(${_NAME}_LIBRARY)
   if(${_NAME}_LIBRARY)
     list(APPEND CASACORE_LIBRARIES ${${_NAME}_LIBRARY})
@@ -111,25 +103,24 @@ macro(casacore_find_library _name)
   endif(${_NAME}_LIBRARY)
 endmacro(casacore_find_library _name)
 
-
-# - casacore_find_package(_name)
+# * casacore_find_package(_name)
 #
-# Search for the package ${_name}.
-# If the package is found, add the contents of ${_name}_INCLUDE_DIRS to
-# CASACORE_INCLUDE_DIRS and ${_name}_LIBRARIES to CASACORE_LIBRARIES.
+# Search for the package ${_name}. If the package is found, add the contents of
+# ${_name}_INCLUDE_DIRS to CASACORE_INCLUDE_DIRS and ${_name}_LIBRARIES to
+# CASACORE_LIBRARIES.
 #
 # If Casacore itself is required, then, strictly speaking, the packages it
-# requires must be present. However, when linking against static libraries
-# they may not be needed. One can override the REQUIRED setting by switching
+# requires must be present. However, when linking against static libraries they
+# may not be needed. One can override the REQUIRED setting by switching
 # CASACORE_MAKE_REQUIRED_EXTERNALS_OPTIONAL to ON. Beware that this might cause
 # compile and/or link errors.
 #
-#   Usage: casacore_find_package(name [REQUIRED])
+# Usage: casacore_find_package(name [REQUIRED])
 #
 macro(casacore_find_package _name)
-  if("${ARGN}" MATCHES "^REQUIRED$" AND
-      Casacore_FIND_REQUIRED AND
-      NOT CASACORE_MAKE_REQUIRED_EXTERNALS_OPTIONAL)
+  if("${ARGN}" MATCHES "^REQUIRED$"
+     AND Casacore_FIND_REQUIRED
+     AND NOT CASACORE_MAKE_REQUIRED_EXTERNALS_OPTIONAL)
     find_package(${_name} REQUIRED)
   else()
     find_package(${_name})
@@ -142,39 +133,46 @@ endmacro(casacore_find_package _name)
 
 # Define the Casacore components.
 set(Casacore_components
-  casa
-  coordinates
-  derivedmscal
-  fits
-  images
-  lattices
-  meas
-  measures
-  mirlib
-  ms
-  msfits
-  python
-  scimath
-  scimath_f
-  tables
-)
+    casa
+    coordinates
+    derivedmscal
+    fits
+    images
+    lattices
+    meas
+    measures
+    mirlib
+    ms
+    msfits
+    python
+    scimath
+    scimath_f
+    tables)
 
 # Define the Casacore components' inter-dependencies.
 set(Casacore_casa_DEPENDENCIES)
-set(Casacore_coordinates_DEPENDENCIES   fits measures casa)
-set(Casacore_derivedmscal_DEPENDENCIES  ms measures tables casa)
-set(Casacore_fits_DEPENDENCIES          measures tables casa)
-set(Casacore_images_DEPENDENCIES        mirlib lattices coordinates fits measures scimath tables casa)
-set(Casacore_lattices_DEPENDENCIES      tables scimath casa)
-set(Casacore_meas_DEPENDENCIES          measures tables casa)
-set(Casacore_measures_DEPENDENCIES      tables casa)
+set(Casacore_coordinates_DEPENDENCIES fits measures casa)
+set(Casacore_derivedmscal_DEPENDENCIES ms measures tables casa)
+set(Casacore_fits_DEPENDENCIES measures tables casa)
+set(Casacore_images_DEPENDENCIES
+    mirlib
+    lattices
+    coordinates
+    fits
+    measures
+    scimath
+    tables
+    casa)
+set(Casacore_lattices_DEPENDENCIES tables scimath casa)
+set(Casacore_meas_DEPENDENCIES measures tables casa)
+set(Casacore_measures_DEPENDENCIES tables casa)
 set(Casacore_mirlib_DEPENDENCIES)
-set(Casacore_ms_DEPENDENCIES            measures scimath tables casa)
-set(Casacore_msfits_DEPENDENCIES        ms fits measures tables casa)
-set(Casacore_python_DEPENDENCIES        casa)
-set(Casacore_scimath_DEPENDENCIES       scimath_f casa)
+set(Casacore_ms_DEPENDENCIES measures scimath tables casa)
+set(Casacore_msfits_DEPENDENCIES ms fits measures tables casa)
+set(Casacore_python_DEPENDENCIES casa)
+set(Casacore_scimath_DEPENDENCIES scimath_f casa)
 set(Casacore_scimath_f_DEPENDENCIES)
-set(Casacore_tables_DEPENDENCIES        casa)
+set(Casacore_tables_DEPENDENCIES casa)
 
 # Initialize variables.
 set(CASACORE_FOUND FALSE)
@@ -184,31 +182,38 @@ set(CASACORE_MISSING_COMPONENTS)
 
 # Search for the header file first.
 if(NOT CASACORE_INCLUDE_DIR)
-  find_path(CASACORE_INCLUDE_DIR casacore/casa/aips.h
-    HINTS ${CASACORE_ROOT_DIR} PATH_SUFFIXES include)
+  find_path(
+    CASACORE_INCLUDE_DIR casacore/casa/aips.h
+    HINTS ${CASACORE_ROOT_DIR}
+    PATH_SUFFIXES include)
   mark_as_advanced(CASACORE_INCLUDE_DIR)
 endif(NOT CASACORE_INCLUDE_DIR)
 
-# Fallback for systems that have old casacore installed in directory not called 'casacore'
-# This fallback can be removed once we move to casacore 2.0 which always puts headers in 'casacore'
+# Fallback for systems that have old casacore installed in directory not called
+# 'casacore' This fallback can be removed once we move to casacore 2.0 which
+# always puts headers in 'casacore'
 if(NOT CASACORE_INCLUDE_DIR)
-  find_path(CASACORE_INCLUDE_DIR casa/aips.h
-    HINTS ${CASACORE_ROOT_DIR} PATH_SUFFIXES include)
+  find_path(
+    CASACORE_INCLUDE_DIR casa/aips.h
+    HINTS ${CASACORE_ROOT_DIR}
+    PATH_SUFFIXES include)
   mark_as_advanced(CASACORE_INCLUDE_DIR)
 endif(NOT CASACORE_INCLUDE_DIR)
 
 if(NOT CASACORE_INCLUDE_DIR)
-  set(CASACORE_ERROR_MESSAGE "Casacore: unable to find the header file casa/aips.h.\nPlease set CASACORE_ROOT_DIR to the root directory containing Casacore.")
+  set(CASACORE_ERROR_MESSAGE
+      "Casacore: unable to find the header file casa/aips.h.\nPlease set CASACORE_ROOT_DIR to the root directory containing Casacore."
+  )
 else(NOT CASACORE_INCLUDE_DIR)
   # We've found the header file; let's continue.
   set(CASACORE_FOUND TRUE)
-  # Note that new Casacore uses #include<casacore/casa/...>, while
-  # LOFAR still uses #include<casa/...>. Hence use both in -I path.
-  set(CASACORE_INCLUDE_DIRS ${CASACORE_INCLUDE_DIR} ${CASACORE_INCLUDE_DIR}/casacore)
+  # Note that new Casacore uses #include<casacore/casa/...>, while LOFAR still
+  # uses #include<casa/...>. Hence use both in -I path.
+  set(CASACORE_INCLUDE_DIRS ${CASACORE_INCLUDE_DIR}
+                            ${CASACORE_INCLUDE_DIR}/casacore)
 
   # Search for some often used binaries.
-  find_program(TAQL_EXECUTABLE taql
-    HINTS ${CASACORE_ROOT_DIR}/bin)
+  find_program(TAQL_EXECUTABLE taql HINTS ${CASACORE_ROOT_DIR}/bin)
   mark_as_advanced(TAQL_EXECUTABLE)
 
   # If the user specified components explicity, use that list; otherwise we'll
@@ -239,13 +244,19 @@ endif(NOT CASACORE_INCLUDE_DIR)
 
 # Set HAVE_CASACORE; and HAVE_AIPSPP (for backward compatibility with AIPS++).
 if(CASACORE_FOUND)
-  set(HAVE_CASACORE TRUE CACHE INTERNAL "Define if Casacore is installed")
-  set(HAVE_AIPSPP TRUE CACHE INTERNAL "Define if AIPS++/Casacore is installed")
+  set(HAVE_CASACORE
+      TRUE
+      CACHE INTERNAL "Define if Casacore is installed")
+  set(HAVE_AIPSPP
+      TRUE
+      CACHE INTERNAL "Define if AIPS++/Casacore is installed")
 endif(CASACORE_FOUND)
 
 # Compose diagnostic message if not all necessary components were found.
 if(CASACORE_MISSING_COMPONENTS)
-  set(CASACORE_ERROR_MESSAGE "Casacore: the following components could not be found:\n     ${CASACORE_MISSING_COMPONENTS}")
+  set(CASACORE_ERROR_MESSAGE
+      "Casacore: the following components could not be found:\n     ${CASACORE_MISSING_COMPONENTS}"
+  )
 endif(CASACORE_MISSING_COMPONENTS)
 
 # Print diagnostics.
