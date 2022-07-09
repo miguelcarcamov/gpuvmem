@@ -1793,8 +1793,8 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
             fields[f].backup_visibilities[i][s].weight.begin(),
             fields[f].backup_visibilities[i][s].weight.end());
 
-        for (auto i : fields[f].visibilities[i][s].Vo) {
-          printf("New vis (%f,%f)\n", i.x, i.y);
+        for (auto i : fields[f].visibilities[i][s].uvw) {
+          printf("New vis (%lf,%lf,%lf)\n", i.x, i.y, i.z);
         }
 
         checkCudaErrors(cudaMemcpy(
@@ -1829,11 +1829,6 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
           fields[f].device_visibilities[i][s].numBlocksUV =
               iDivUp(UVpow2, blockSizeV);
         }
-        printf("uvpow2 %d\n", UVpow2);
-        printf("threads per block %d\n",
-               fields[f].device_visibilities[i][s].threadsPerBlockUV);
-        printf("num block %d\n",
-               fields[f].device_visibilities[i][s].numBlocksUV);
         exit(-1);
         hermitianSymmetry<<<
             fields[f].device_visibilities[i][s].numBlocksUV,
