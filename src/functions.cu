@@ -1849,8 +1849,11 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
       }
     }
   }
+
+  printf("Max number of vis: %d\n", max);
   data.max_number_visibilities_in_channel_and_stokes = max;
   max_number_vis = max;
+  exit(-1);
 }
 
 __host__ void degridding(std::vector<Field>& fields,
