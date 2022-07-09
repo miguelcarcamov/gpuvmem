@@ -27,6 +27,11 @@ repos:
   hooks:
   - id: yapf
 
+- repo: https://github.com/lovesegfault/beautysh
+  rev: v6.2.1
+  hooks:
+  - id: beautysh
+
 - repo: https://github.com/igorshubovych/markdownlint-cli
   rev: v0.31.1
   hooks:
