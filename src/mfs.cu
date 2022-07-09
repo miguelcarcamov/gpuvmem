@@ -1082,7 +1082,7 @@ void MFS::writeResiduals() {
     Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
     chi2->setCKernel(NULL);
     chi2->calcFi(image->getImage());
-    printf("Non-gridded chi2 %0.4f\n", chi2->get_fivalue());
+    printf("Non-gridded chi2 %f\n", chi2->get_fivalue());
   }
 
   for (int d = 0; d < nMeasurementSets; d++)
