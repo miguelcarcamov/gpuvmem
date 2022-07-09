@@ -4033,7 +4033,7 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
     noise_I[N * M + N * i + j] = 0.0f;
 }
 
-__host__ void simulate(float* I, VirtualImageProcessor* ip) {
+__host__ float simulate(float* I, VirtualImageProcessor* ip) {
   cudaSetDevice(firstgpu);
 
   float resultchi2 = 0.0f;

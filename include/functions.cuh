@@ -144,7 +144,7 @@ template <class T>
 __host__ T deviceReduce(T* in, long N, int input_threads);
 __host__ float deviceMaxReduce(float* in, long N, int input_threads);
 __host__ float deviceMinReduce(float* in, long N, int input_threads);
-__host__ void simulate(float* I, VirtualImageProcessor* ip);
+__host__ float simulate(float* I, VirtualImageProcessor* ip);
 __host__ float chi2(float* I, VirtualImageProcessor* ip);
 __host__ void linkRestartDGi(float* dgi);
 __host__ void linkAddToDPhi(float* dphi, float* dgi, int index);
