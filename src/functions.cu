@@ -1768,6 +1768,14 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
             cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
                        sizeof(cufftComplex) *
                            fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+        checkCudaErrors(
+            cudaMalloc(&fields[f].device_visibilities[i][s].Vr,
+                       sizeof(cufftComplex) *
+                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+        checkCudaErrors(
+            cudaMemset(fields[f].device_visibilities[i][s].Vr, 0,
+                       sizeof(cufftComplex) *
+                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
         checkCudaErrors(cudaMalloc(
             &fields[f].device_visibilities[i][s].uvw,
