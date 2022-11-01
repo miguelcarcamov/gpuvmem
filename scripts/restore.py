@@ -13,7 +13,7 @@ def restore(model_fits="",
             robust=2.0):
     ia = image()
     qa = quanta()
-    residual_image = residual_ms.partition(".ms")[0] + ".residual"
+    residual_image = residual_ms[0].partition(".ms")[0] + ".residual"
     residual_casa_image = residual_image + ".image"
 
     os.system("rm -rf *.log *.last " + residual_image +
@@ -86,7 +86,7 @@ def restore(model_fits="",
 
 
 model_fits = sys.argv[1]
-residual_ms = sys.argv[2]
+residual_ms = sys.argv[2].split(",")
 restored = sys.argv[3]
 weighting = sys.argv[4]
 robust = float(sys.argv[5])
