@@ -1362,6 +1362,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].backup_visibilities[i][s].Vo.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+        fields[f].backup_visibilities[i][s].weight.resize(
+            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 #pragma omp parallel for schedule(static, 1) num_threads(gridding)      \
     shared(g_weights, g_weights_aux, g_Vo) private(                     \
         j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
@@ -1374,6 +1376,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
 
           // Backing up original visibilities and (u,v) positions
           fields[f].backup_visibilities[i][s].uvw[z] = uvw;
+          fields[f].backup_visibilities[i][s].weight[z] = w;
           fields[f].backup_visibilities[i][s].Vo[z] = Vo;
 
           // Visibilities from metres to klambda
@@ -1730,6 +1733,8 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
                                           int num_gpus,
                                           int firstgpu,
                                           int blockSizeV) {
+  int local_max = 0;
+  int max = 0;
   for (int f = 0; f < data.nfields; f++) {
 #pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
     for (int i = 0; i < data.total_frequencies; i++) {
@@ -1742,6 +1747,7 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
 
       for (int s = 0; s < data.nstokes; s++) {
         // Now the number of visibilities will be the original one.
+
         fields[f].numVisibilitiesPerFreqPerStoke[i][s] =
             fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
 
@@ -1750,7 +1756,7 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
         fields[f].visibilities[i][s].weight.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].visibilities[i][s].Vm.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+            fields[f].numVisibilitiesPerFreqPerStoke[i][s], floatComplexZero());
         fields[f].visibilities[i][s].Vo.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
@@ -1760,6 +1766,14 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
                            fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
         checkCudaErrors(
             cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
+                       sizeof(cufftComplex) *
+                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+        checkCudaErrors(
+            cudaMalloc(&fields[f].device_visibilities[i][s].Vr,
+                       sizeof(cufftComplex) *
+                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+        checkCudaErrors(
+            cudaMemset(fields[f].device_visibilities[i][s].Vr, 0,
                        sizeof(cufftComplex) *
                            fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
@@ -1784,32 +1798,32 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
         fields[f].visibilities[i][s].uvw.assign(
             fields[f].backup_visibilities[i][s].uvw.begin(),
             fields[f].backup_visibilities[i][s].uvw.end());
+
         fields[f].visibilities[i][s].weight.assign(
             fields[f].backup_visibilities[i][s].weight.begin(),
             fields[f].backup_visibilities[i][s].weight.end());
 
         checkCudaErrors(cudaMemcpy(
             fields[f].device_visibilities[i][s].uvw,
-            fields[f].backup_visibilities[i][s].uvw.data(),
-            sizeof(double3) * fields[f].backup_visibilities[i][s].uvw.size(),
+            fields[f].visibilities[i][s].uvw.data(),
+            sizeof(double3) * fields[f].visibilities[i][s].uvw.size(),
             cudaMemcpyHostToDevice));
-        checkCudaErrors(
-            cudaMemcpy(fields[f].device_visibilities[i][s].Vo,
-                       fields[f].backup_visibilities[i][s].Vo.data(),
-                       sizeof(cufftComplex) *
-                           fields[f].backup_visibilities[i][s].Vo.size(),
-                       cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy(
+            fields[f].device_visibilities[i][s].Vo,
+            fields[f].visibilities[i][s].Vo.data(),
+            sizeof(cufftComplex) * fields[f].visibilities[i][s].Vo.size(),
+            cudaMemcpyHostToDevice));
         checkCudaErrors(cudaMemcpy(
             fields[f].device_visibilities[i][s].weight,
-            fields[f].backup_visibilities[i][s].weight.data(),
-            sizeof(float) * fields[f].backup_visibilities[i][s].weight.size(),
+            fields[f].visibilities[i][s].weight.data(),
+            sizeof(float) * fields[f].visibilities[i][s].weight.size(),
             cudaMemcpyHostToDevice));
 
+        long UVpow2 =
+            NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         if (blockSizeV == -1) {
           int threads1D, blocks1D;
           int threadsV, blocksV;
-          long UVpow2 =
-              NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
           threads1D = 512;
           blocks1D = iDivUp(UVpow2, threads1D);
           getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV,
@@ -1818,9 +1832,8 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
           fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
         } else {
           fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-          fields[f].device_visibilities[i][s].numBlocksUV = iDivUp(
-              NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]),
-              blockSizeV);
+          fields[f].device_visibilities[i][s].numBlocksUV =
+              iDivUp(UVpow2, blockSizeV);
         }
 
         hermitianSymmetry<<<
@@ -1833,6 +1846,30 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
       }
     }
   }
+
+  for (int f = 0; f < data.nfields; f++) {
+    for (int i = 0; i < data.total_frequencies; i++) {
+      local_max =
+          *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
+                            fields[f].numVisibilitiesPerFreqPerStoke[i].end());
+      if (local_max > max) {
+        max = local_max;
+      }
+    }
+  }
+
+  data.max_number_visibilities_in_channel_and_stokes = max;
+  max_number_vis = max;
+
+  for (int g = 0; g < num_gpus; g++) {
+    cudaSetDevice((g % num_gpus) + firstgpu);
+    checkCudaErrors(
+        cudaMalloc(&vars_gpu[g].device_chi2, sizeof(float) * max_number_vis));
+    checkCudaErrors(
+        cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float) * max_number_vis));
+  }
+
+  cudaSetDevice(firstgpu);
 }
 
 __host__ void degridding(std::vector<Field>& fields,
@@ -4030,14 +4067,16 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
     noise_I[N * M + N * i + j] = 0.0f;
 }
 
-__host__ void simulate(float* I, VirtualImageProcessor* ip) {
+__host__ float simulate(float* I, VirtualImageProcessor* ip) {
   cudaSetDevice(firstgpu);
+
+  float resultchi2 = 0.0f;
 
   ip->clipWNoise(I);
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
+#pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
         unsigned int j = omp_get_thread_num();
@@ -4072,6 +4111,7 @@ __host__ void simulate(float* I, VirtualImageProcessor* ip) {
             vars_gpu[gpu_idx].device_V, M, N, datasets[d].fields[f].phs_xobs,
             datasets[d].fields[f].phs_yobs);
         checkCudaErrors(cudaDeviceSynchronize());
+
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].data.corr_type[s] == LL ||
               datasets[d].data.corr_type[s] == RR ||
@@ -4079,6 +4119,9 @@ __host__ void simulate(float* I, VirtualImageProcessor* ip) {
               datasets[d].data.corr_type[s] == YY) {
             if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] >
                 0) {
+              checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
+                                         sizeof(float) * max_number_vis));
+
               if (NULL != ip->getCKernel()) {
                 getGriddedVisFromPix<<<
                     datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
@@ -4110,12 +4153,53 @@ __host__ void simulate(float* I, VirtualImageProcessor* ip) {
                     N);
               }
               checkCudaErrors(cudaDeviceSynchronize());
+
+              // RESIDUAL CALCULATION
+              residual<<<
+                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV>>>(
+                  datasets[d].fields[f].device_visibilities[i][s].Vr,
+                  datasets[d].fields[f].device_visibilities[i][s].Vm,
+                  datasets[d].fields[f].device_visibilities[i][s].Vo,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              checkCudaErrors(cudaDeviceSynchronize());
+
+              ////chi2 VECTOR
+              chi2Vector<<<
+                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV>>>(
+                  vars_gpu[gpu_idx].device_chi2,
+                  datasets[d].fields[f].device_visibilities[i][s].Vr,
+                  datasets[d].fields[f].device_visibilities[i][s].weight,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              checkCudaErrors(cudaDeviceSynchronize());
+
+              result = deviceReduce<float>(
+                  vars_gpu[gpu_idx].device_chi2,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV);
+              // REDUCTIONS
+              // chi2
+              resultchi2 += result;
             }
           }
         }
       }
     }
   }
+
+  cudaSetDevice(firstgpu);
+
+  return 0.5f * resultchi2;
 };
 
 __host__ float chi2(float* I, VirtualImageProcessor* ip) {
