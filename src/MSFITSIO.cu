@@ -399,10 +399,10 @@ __host__ void readMS(const char* MS_name,
 
   data->telescope_name = obs_col(0);
 
-  std::string field_query = "select meas.j2000(REFERENCE_DIR) as " +
-                            "REFERENCE_DIR,meas.j2000(PHASE_DIR) " +
-                            "as PHASE_DIR,ROWID() AS ID FROM " + dir +
-                            "/FIELD where !FLAG_ROW";
+  std::string field_query =
+      "select meas.j2000(REFERENCE_DIR) as REFERENCE_DIR,meas.j2000(PHASE_DIR) "
+      "as PHASE_DIR,ROWID() AS ID FROM " +
+      dir + "/FIELD where !FLAG_ROW";
   casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
 
   std::string aux_query = "select DATA_DESC_ID FROM " + dir +
