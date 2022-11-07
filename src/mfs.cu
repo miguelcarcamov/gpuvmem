@@ -303,8 +303,8 @@ void MFS::configure(int argc, char** argv) {
   if (nu_0 < 0.0) {
     printf(
         "WARNING: Reference frequency not provided. It will be calculated as "
-        "the median "
-        "of all the arrays of frequencies.\n");
+        "the middle"
+        "of the frequency range.\n");
     nu_0 = 0.5f * (max_freq + min_freq);
   }
   printf("Reference frequency: %e Hz\n", nu_0);
