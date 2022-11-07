@@ -261,6 +261,7 @@ void MFS::configure(int argc, char** argv) {
 
   std::vector<float> ms_ref_freqs;
   std::vector<float> ms_max_freqs;
+  std::vector<float> ms_min_freqs;
   std::vector<float> ms_max_blength;
   std::vector<float> ms_min_blength;
   std::vector<float> ms_uvmax_wavelength;
@@ -269,6 +270,7 @@ void MFS::configure(int argc, char** argv) {
                                 datasets[d].fields, &datasets[d].data);
     ms_ref_freqs.push_back(datasets[d].data.ref_freq);
     ms_max_freqs.push_back(datasets[d].data.max_freq);
+    ms_min_freqs.push_back(datasets[d].data.min_freq);
     ms_max_blength.push_back(datasets[d].data.max_blength);
     ms_min_blength.push_back(datasets[d].data.min_blength);
     ms_uvmax_wavelength.push_back(datasets[d].data.uvmax_wavelength);
@@ -280,6 +282,7 @@ void MFS::configure(int argc, char** argv) {
      Calculating theoretical resolution
    */
   float max_freq = *max_element(ms_max_freqs.begin(), ms_max_freqs.end());
+  float min_freq = *min_element(ms_min_freqs.begin(), ms_min_freqs.end());
   float max_blength =
       *max_element(ms_max_blength.begin(), ms_max_blength.end());
   float min_wlength = freq_to_wavelength(max_freq);
@@ -299,9 +302,10 @@ void MFS::configure(int argc, char** argv) {
 
   if (nu_0 < 0.0) {
     printf(
-        "Reference frequency not provided. It will be calculated as the median "
+        "WARNING: Reference frequency not provided. It will be calculated as "
+        "the median "
         "of all the arrays of frequencies.\n");
-    nu_0 = median(ms_ref_freqs);
+    nu_0 = 0.5f * (max_freq + min_freq);
   }
   printf("Reference frequency: %e Hz\n", nu_0);
   double deltau_theo = 2.0 * max_uvmax_wavelength / (M - 1);
