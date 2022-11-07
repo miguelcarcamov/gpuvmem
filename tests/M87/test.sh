@@ -1,10 +1,10 @@
 function valid () {
-  if [ $? -eq 0 ]; then
-    echo OK
-  else
-    echo ERROR
-    exit 1
-  fi
+    if [ $? -eq 0 ]; then
+        echo OK
+    else
+        echo ERROR
+        exit 1
+    fi
 }
 
 test=$($1 -i $2/SR1_M87_2017_101_hi_hops_netcal_StokesI.selfcal.LLRR.ms -o $2/residuals.ms -O $2/mod_out.fits -m $2/mod_in_0.fits -p $2/mem/ -X 16 -Y 16 -V 256 --verbose --print-images -z 0.0,0.0 -Z 0.0,0.001,0.005 -R -2.0 -t 500000000 --use-radius-mask)

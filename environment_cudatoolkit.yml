@@ -10,6 +10,7 @@ dependencies:
 - cuda-toolkit
 - cuda-samples
 - openmpi
+- mpi4py
 - python=3.8
 - numpy=1.23
 - pip
