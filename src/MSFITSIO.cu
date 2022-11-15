@@ -290,13 +290,25 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
 __host__ headerValues readFITSHeader(const char* filename) {
   int status_header = 0;
   int status_noise = 0;
+  int status_radesys = 0;
+  int status_equinox = 0;
   int status_dirty_beam = 0;
   float aux_noise;
 
   headerValues h_values;
   int bitpix;
+  char* aux_radesys;
+  char* aux_equinox;
+  int radesys_length;
+  int equinox_length;
 
   fitsfile* hdu_in = openFITS(filename);
+
+  fits_get_key_strlen(hdu_in, "RADESYS", &radesys_length, &status_header);
+  fits_get_key_strlen(hdu_in, "EQUINOX", &equinox_length, &status_header);
+
+  aux_radesys = (char*)malloc(radesys_length * sizeof(char));
+  aux_equinox = (char*)malloc(equinox_length * sizeof(char));
 
   fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL,
                 &status_header);
@@ -317,6 +329,12 @@ __host__ headerValues readFITSHeader(const char* filename) {
   fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL,
                 &status_dirty_beam);
   fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
+  fits_read_key(hdu_in, TSTRING, "RADESYS", aux_radesys, NULL, &status_radesys);
+  fits_read_key(hdu_in, TSTRING, "EQUINOX", aux_equinox, NULL, &status_equinox);
+
+  h_values.radesys = aux_radesys;
+  h_values.equinox = aux_equinox;
+
   fits_get_img_type(hdu_in, &bitpix, &status_header);
   h_values.bitpix = bitpix;
 
@@ -398,10 +416,11 @@ __host__ void readMS(const char* MS_name,
                                                      "TELESCOPE_NAME");
 
   data->telescope_name = obs_col(0);
-
-  std::string field_query =
-      "select REFERENCE_DIR,PHASE_DIR,ROWID() AS ID FROM " + dir +
-      "/FIELD where !FLAG_ROW";
+  std::string ref_dir = "meas.direction('icrs',REFERENCE_DIR) as REFERENCE_DIR";
+  std::string phase_dir = "meas.direction('icrs',PHASE_DIR) as PHASE_DIR";
+  std::string field_query = "select " + ref_dir + "," + phase_dir +
+                            ",ROWID() AS ID FROM " + dir +
+                            "/FIELD where !FLAG_ROW";
   casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
 
   std::string aux_query = "select DATA_DESC_ID FROM " + dir +

@@ -142,6 +142,8 @@ typedef struct header_values {
   long M, N;
   double beam_bmaj, beam_bmin, beam_bpa;
   float beam_noise = -1.0f;
+  std::string radesys;
+  std::string equinox;
   int bitpix;
 } headerValues;
 

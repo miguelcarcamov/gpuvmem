@@ -23,6 +23,8 @@ extern int num_gpus;
 
 double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
 
+std::string radesys, equinox;
+
 std::vector<float> initial_values;
 std::vector<MSDataset> datasets;
 
@@ -173,6 +175,8 @@ void MFS::configure(int argc, char** argv) {
   DELTAY = header_vars.DELTAY;
   ra = header_vars.ra;
   dec = header_vars.dec;
+  radesys = header_vars.radesys;
+  equinox = header_vars.equinox;
   crpix1 = header_vars.crpix1;
   crpix2 = header_vars.crpix2;
   if (header_vars.beam_noise > 0.0f) {
