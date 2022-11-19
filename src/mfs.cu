@@ -308,7 +308,7 @@ void MFS::configure(int argc, char** argv) {
     printf(
         "WARNING: Reference frequency not provided. It will be calculated as "
         "the middle"
-        "of the frequency range.\n");
+        " of the frequency range.\n");
     nu_0 = 0.5f * (max_freq + min_freq);
   }
   printf("Reference frequency: %e Hz\n", nu_0);
@@ -622,6 +622,25 @@ void MFS::setDevice() {
 
   /////////////////////////////////////////////////////CALCULATE DIRECTION
   /// COSINES/////////////////////////////////////////////////
+  std::cout << "Checking frames..." << std::endl;
+  if (radesys == "FK5") {
+    std::cout << "Frame is " << radesys << " it will be converted to ICRS"
+              << std::endl;
+    std::cout << "Original direction is: (" << ra << "," << dec << ") deg"
+              << std::endl;
+    casacore::MDirection::Convert conv(
+        casacore::MDirection::Ref(casacore::MDirection::J2000),
+        casacore::MDirection::Ref(casacore::MDirection::ICRS));
+    casacore::MDirection coord = casacore::MDirection(
+        casacore::Quantity(ra, "deg"), casacore::Quantity(dec, "deg"),
+        casacore::MDirection::Ref(casacore::MDirection::J2000));
+    std::cout << "Converted direction " << conv(coord).getAngle("deg")
+              << std::endl;
+    std::cout << " \n\n" << std::endl;
+    ra = conv(coord).getAngle("deg").getValue()[0];
+    dec = conv(coord).getAngle("deg").getValue()[1];
+  }
+
   double raimage = ra * RPDEG_D;
   double decimage = dec * RPDEG_D;
 
