@@ -101,6 +101,10 @@ __host__ void OCopyFITS(float* I,
                         float fg_scale,
                         long M,
                         long N,
+                        double ra_center,
+                        double dec_center,
+                        std::string frame,
+                        float equinox,
                         bool isInGPU) {
   int status = 0;
   long fpixel = 1;
@@ -124,6 +128,15 @@ __host__ void OCopyFITS(float* I,
                   "Number of iteration in gpuvmem software", &status);
   fits_update_key(fpointer, TINT, "NAXIS1", &M, "", &status);
   fits_update_key(fpointer, TINT, "NAXIS2", &N, "", &status);
+  fits_update_key(fpointer, TSTRING, "RADESYS", (void*)frame.c_str(),
+                  "Changed by gpuvmem", &status);
+  fits_update_key(fpointer, TFLOAT, "EQUINOX", &equinox, "Changed by gpuvmem",
+                  &status);
+  fits_update_key(fpointer, TDOUBLE, "CRVAL1", &ra_center, "Changed by gpuvmem",
+                  &status);
+  fits_update_key(fpointer, TDOUBLE, "CRVAL2", &dec_center,
+                  "Changed by gpuvmem", &status);
+
   float* host_IFITS = (float*)malloc(M * N * sizeof(float));
 
   // unsigned int offset = M*N*index*sizeof(float);
@@ -242,10 +255,18 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
   int status_header = 0;
   int status_noise = 0;
   int status_dirty_beam = 0;
+  int status_radesys = 0;
+  int status_equinox = 0;
   float aux_noise;
 
   headerValues h_values;
   int bitpix;
+  char* aux_radesys;
+  int radesys_length;
+
+  fits_get_key_strlen(hdu_in, "RADESYS", &radesys_length, &status_header);
+
+  aux_radesys = (char*)malloc(radesys_length * sizeof(char));
 
   fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL,
                 &status_header);
@@ -266,6 +287,12 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
   fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL,
                 &status_dirty_beam);
   fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
+  fits_read_key(hdu_in, TSTRING, "RADESYS", aux_radesys, NULL, &status_radesys);
+  fits_read_key(hdu_in, TFLOAT, "EQUINOX", &h_values.equinox, NULL,
+                &status_equinox);
+
+  h_values.radesys = aux_radesys;
+
   fits_get_img_type(hdu_in, &bitpix, &status_header);
   h_values.bitpix = bitpix;
 
@@ -298,17 +325,13 @@ __host__ headerValues readFITSHeader(const char* filename) {
   headerValues h_values;
   int bitpix;
   char* aux_radesys;
-  char* aux_equinox;
   int radesys_length;
-  int equinox_length;
 
   fitsfile* hdu_in = openFITS(filename);
 
   fits_get_key_strlen(hdu_in, "RADESYS", &radesys_length, &status_header);
-  fits_get_key_strlen(hdu_in, "EQUINOX", &equinox_length, &status_header);
 
   aux_radesys = (char*)malloc(radesys_length * sizeof(char));
-  aux_equinox = (char*)malloc(equinox_length * sizeof(char));
 
   fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL,
                 &status_header);
@@ -330,10 +353,10 @@ __host__ headerValues readFITSHeader(const char* filename) {
                 &status_dirty_beam);
   fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
   fits_read_key(hdu_in, TSTRING, "RADESYS", aux_radesys, NULL, &status_radesys);
-  fits_read_key(hdu_in, TSTRING, "EQUINOX", aux_equinox, NULL, &status_equinox);
+  fits_read_key(hdu_in, TFLOAT, "EQUINOX", &h_values.equinox, NULL,
+                &status_equinox);
 
   h_values.radesys = aux_radesys;
-  h_values.equinox = aux_equinox;
 
   fits_get_img_type(hdu_in, &bitpix, &status_header);
   h_values.bitpix = bitpix;

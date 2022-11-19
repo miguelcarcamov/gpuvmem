@@ -459,7 +459,7 @@ class CKernel {
         this->gcf->getImageHandler()->getPrintImages())
       this->gcf->getImageHandler()->printImage(
           this->gcf->getKernelPointer(), "GCF.fits", "", 0, 0, 1.0f,
-          this->gcf->getm(), this->gcf->getn(), false);
+          this->gcf->getm(), this->gcf->getn(), 0.0, 0.0, "", 0, false);
     else
       std::cout << "No IO Image object to print the image or print images has "
                    "been set on false"
@@ -470,7 +470,7 @@ class CKernel {
     if (this->ioImageHandler != NULL && this->ioImageHandler->getPrintImages())
       this->ioImageHandler->printImage(this->getKernelPointer(), "ckernel.fits",
                                        "", 0, 0, 1.0f, this->getm(),
-                                       this->getn(), false);
+                                       this->getn(), 0.0, 0.0, "", 0, false);
     else
       std::cout << "No IO Image object to print the image or print images has "
                    "been set on false"
@@ -481,7 +481,7 @@ class CKernel {
     if (this->ioImageHandler != NULL && this->ioImageHandler->getPrintImages())
       this->ioImageHandler->printImage(this->getGPUKernel(), "ckernel_gpu.fits",
                                        "", 0, 0, 1.0f, this->getm(),
-                                       this->getn(), true);
+                                       this->getn(), 0.0, 0.0, "", 0, true);
     else
       std::cout << "No IO Image object to print the image or print images has "
                    "been set on false"
@@ -493,7 +493,7 @@ class CKernel {
         this->gcf->getImageHandler()->getPrintImages())
       this->gcf->getImageHandler()->printImage(
           this->gcf->getGPUKernel(), "ckernel_gpu.fits", "", 0, 0, 1.0f,
-          this->gcf->getm(), this->gcf->getn(), true);
+          this->gcf->getm(), this->gcf->getn(), 0.0, 0.0, "", 0, true);
     else
       std::cout << "No IO Image object to print the image or print images has "
                    "been set on false"

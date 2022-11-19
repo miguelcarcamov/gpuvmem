@@ -23,7 +23,9 @@ extern int num_gpus;
 
 double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
 
-std::string radesys, equinox;
+std::string radesys;
+
+float equinox;
 
 std::vector<float> initial_values;
 std::vector<MSDataset> datasets;
@@ -175,8 +177,11 @@ void MFS::configure(int argc, char** argv) {
   DELTAY = header_vars.DELTAY;
   ra = header_vars.ra;
   dec = header_vars.dec;
+  ioImageHandler->setRADec(ra, dec);
   radesys = header_vars.radesys;
+  ioImageHandler->setFrame(radesys);
   equinox = header_vars.equinox;
+  ioImageHandler->setEquinox(equinox);
   crpix1 = header_vars.crpix1;
   crpix2 = header_vars.crpix2;
   if (header_vars.beam_noise > 0.0f) {
@@ -639,6 +644,11 @@ void MFS::setDevice() {
     std::cout << " \n\n" << std::endl;
     ra = conv(coord).getAngle("deg").getValue()[0];
     dec = conv(coord).getAngle("deg").getValue()[1];
+
+    radesys = "ICRS";
+
+    ioImageHandler->setFrame(radesys);
+    ioImageHandler->setRADec(ra, dec);
   }
 
   double raimage = ra * RPDEG_D;

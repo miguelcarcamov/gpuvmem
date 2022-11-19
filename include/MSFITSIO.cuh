@@ -143,7 +143,7 @@ typedef struct header_values {
   double beam_bmaj, beam_bmin, beam_bpa;
   float beam_noise = -1.0f;
   std::string radesys;
-  std::string equinox;
+  float equinox;
   int bitpix;
 } headerValues;
 
@@ -238,6 +238,10 @@ __host__ void OCopyFITS(float* I,
                         float fg_scale,
                         long M,
                         long N,
+                        double ra_center,
+                        double dec_center,
+                        std::string frame,
+                        float equinox,
                         bool isInGPU);
 __host__ void OCopyFITSCufftComplex(cufftComplex* I,
                                     const char* original_filename,
