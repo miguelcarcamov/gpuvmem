@@ -652,11 +652,11 @@ void MFS::setDevice() {
 
     ioImageHandler->setFrame(radesys);
     ioImageHandler->setRADec(raimage / RPDEG_D, decimage / RPDEG_D);
-  }
 
-  if (verbose_flag) {
-    printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
-    printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
+    if (verbose_flag) {
+      printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
+      printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
+    }
   }
 
   double lobs, mobs, lphs, mphs;
