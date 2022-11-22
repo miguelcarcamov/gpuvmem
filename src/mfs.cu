@@ -23,7 +23,9 @@ extern int num_gpus;
 
 double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
 
-std::string radesys, equinox;
+std::string radesys;
+
+float equinox;
 
 std::vector<float> initial_values;
 std::vector<MSDataset> datasets;
@@ -643,17 +645,18 @@ void MFS::setDevice() {
     casacore::MDirection coord = casacore::MDirection(
         casacore::Quantity(raimage, "rad"), casacore::Quantity(decimage, "rad"),
         casacore::MDirection::Ref(casacore::MDirection::J2000));
-    std::cout << "Converted direction " << conv(coord).getAngle("rad")
-              << std::endl;
-    std::cout << " \n\n" << std::endl;
-    raimage = conv(coord).getAngle("rad").getValue()[0];
+    raimage = conv(coord).getAngle("rad").getValue()[0] + 2 * PI_D;
     decimage = conv(coord).getAngle("rad").getValue()[1];
 
-    if (verbose_flag) {
-      printf("Converted right ascension and declination\n");
-      printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
-      printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
-    }
+    radesys = "ICRS";
+
+    ioImageHandler->setFrame(radesys);
+    ioImageHandler->setRADec(raimage / RPDEG_D, decimage / RPDEG_D);
+  }
+
+  if (verbose_flag) {
+    printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
+    printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
   }
 
   double lobs, mobs, lphs, mphs;

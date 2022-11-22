@@ -17,6 +17,11 @@ class IoFITS : public Io {
   bool getPrintImages() override;
   void setM(int M) override;
   void setN(int N) override;
+  void setEquinox(float equinox) override;
+  void setFrame(std::string frame) override;
+  void setRA(double ra) override;
+  void setDec(double dec) override;
+  void setRADec(double ra, double dec) override;
   void setMN(int M, int N) override;
   void setNormalizationFactor(int normalization_factor) override;
   void setPrintImages(bool print_images) override;
@@ -41,6 +46,10 @@ class IoFITS : public Io {
                   float fg_scale,
                   long M,
                   long N,
+                  double ra_center,
+                  double dec_center,
+                  std::string frame,
+                  float equinox,
                   bool isInGPU) override;
   void printImage(float* I,
                   char* name_image,
@@ -50,6 +59,10 @@ class IoFITS : public Io {
                   float fg_scale,
                   long M,
                   long N,
+                  double ra_center,
+                  double dec_center,
+                  std::string frame,
+                  float equinox,
                   bool isInGPU) override;
   void printImage(float* I,
                   char* name_image,
@@ -64,6 +77,10 @@ class IoFITS : public Io {
                   float fg_scale,
                   long M,
                   long N,
+                  double ra_center,
+                  double dec_center,
+                  std::string frame,
+                  float equinox,
                   bool isInGPU) override;
   void printNotPathImage(float* I,
                          char* units,
@@ -72,6 +89,10 @@ class IoFITS : public Io {
                          float fg_scale,
                          long M,
                          long N,
+                         double ra_center,
+                         double dec_center,
+                         std::string frame,
+                         float equinox,
                          bool isInGPU) override;
   void printNotPathImage(float* I,
                          char* out_image,
@@ -81,6 +102,10 @@ class IoFITS : public Io {
                          float fg_scale,
                          long M,
                          long N,
+                         double ra_center,
+                         double dec_center,
+                         std::string frame,
+                         float equinox,
                          bool isInGPU) override;
   void printNotPathImage(float* I,
                          char* out_image,
@@ -121,6 +146,10 @@ class IoFITS : public Io {
                            float fg_scale,
                            long M,
                            long N,
+                           double ra_center,
+                           double dec_center,
+                           std::string frame,
+                           float equinox,
                            bool isInGPU) override;
   void printImageIteration(float* I,
                            char const* name_image,
@@ -144,6 +173,10 @@ class IoFITS : public Io {
                            float fg_scale,
                            long M,
                            long N,
+                           double ra_center,
+                           double dec_center,
+                           std::string frame,
+                           float equinox,
                            bool isInGPU) override;
   void printcuFFTComplex(cufftComplex* I,
                          fitsfile* canvas,
@@ -179,6 +212,10 @@ class IoFITS : public Io {
  protected:
   int M;
   int N;
+  double ra;   // in degrees
+  double dec;  // in degrees
+  std::string frame = "ICRS";
+  float equinox = 2000.0;
   float normalization_factor;
   bool print_images;
 };

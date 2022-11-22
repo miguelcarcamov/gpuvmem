@@ -48,6 +48,27 @@ void IoFITS::setMN(int M, int N) {
   this->N = N;
 };
 
+void IoFITS::setEquinox(float equinox) {
+  this->equinox = equinox;
+};
+
+void IoFITS::setFrame(std::string frame) {
+  this->frame = frame;
+};
+
+void IoFITS::setRA(double ra) {
+  this->ra = ra;
+};
+
+void IoFITS::setDec(double dec) {
+  this->dec = dec;
+};
+
+void IoFITS::setRADec(double ra, double dec) {
+  this->ra = ra;
+  this->dec = dec;
+};
+
 void IoFITS::setNormalizationFactor(int normalization_factor) {
   this->normalization_factor = normalization_factor;
 };
@@ -177,9 +198,14 @@ void IoFITS::printImage(float* I,
                         float fg_scale,
                         long M,
                         long N,
+                        double ra_center,
+                        double dec_center,
+                        std::string frame,
+                        float equinox,
                         bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input), path, name_image, units,
-            iteration, index, fg_scale, M, N, isInGPU);
+            iteration, index, fg_scale, M, N, ra_center, dec_center, frame,
+            equinox, isInGPU);
 };
 
 void IoFITS::printImage(float* I,
@@ -190,7 +216,8 @@ void IoFITS::printImage(float* I,
                         bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input),
             getConstCharFromString(this->path), name_image, units, iteration,
-            index, this->normalization_factor, this->M, this->N, isInGPU);
+            index, this->normalization_factor, this->M, this->N, this->ra,
+            this->dec, this->frame, this->equinox, isInGPU);
 };
 
 void IoFITS::printImage(float* I,
@@ -200,11 +227,15 @@ void IoFITS::printImage(float* I,
                         float fg_scale,
                         long M,
                         long N,
+                        double ra_center,
+                        double dec_center,
+                        std::string frame,
+                        float equinox,
                         bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input),
             getConstCharFromString(this->path),
             getConstCharFromString(this->output), units, iteration, index,
-            fg_scale, M, N, isInGPU);
+            fg_scale, M, N, ra_center, dec_center, frame, equinox, isInGPU);
 };
 
 void IoFITS::printImage(float* I,
@@ -215,10 +246,15 @@ void IoFITS::printImage(float* I,
                         float fg_scale,
                         long M,
                         long N,
+                        double ra_center,
+                        double dec_center,
+                        std::string frame,
+                        float equinox,
                         bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input),
             getConstCharFromString(this->path), name_image, units, iteration,
-            index, fg_scale, M, N, isInGPU);
+            index, fg_scale, M, N, ra_center, dec_center, frame, equinox,
+            isInGPU);
 };
 
 void IoFITS::printNotPathImage(float* I,
@@ -228,10 +264,14 @@ void IoFITS::printNotPathImage(float* I,
                                float fg_scale,
                                long M,
                                long N,
+                               double ra_center,
+                               double dec_center,
+                               std::string frame,
+                               float equinox,
                                bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input), "",
             getConstCharFromString(this->output), units, iteration, index,
-            fg_scale, M, N, isInGPU);
+            fg_scale, M, N, ra_center, dec_center, frame, equinox, isInGPU);
 };
 
 void IoFITS::printNotPathImage(float* I,
@@ -242,9 +282,14 @@ void IoFITS::printNotPathImage(float* I,
                                float fg_scale,
                                long M,
                                long N,
+                               double ra_center,
+                               double dec_center,
+                               std::string frame,
+                               float equinox,
                                bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input), "", out_image, units,
-            iteration, index, fg_scale, M, N, isInGPU);
+            iteration, index, fg_scale, M, N, ra_center, dec_center, frame,
+            equinox, isInGPU);
 };
 
 void IoFITS::printNotPathImage(float* I,
@@ -255,7 +300,7 @@ void IoFITS::printNotPathImage(float* I,
                                bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input), "", out_image, units,
             iteration, index, this->normalization_factor, this->M, this->N,
-            isInGPU);
+            this->ra, this->dec, this->frame, this->equinox, isInGPU);
 };
 
 void IoFITS::printNotPathImage(float* I,
@@ -266,7 +311,8 @@ void IoFITS::printNotPathImage(float* I,
                                float normalization_factor,
                                bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input), "", out_image, units,
-            iteration, index, normalization_factor, this->M, this->N, isInGPU);
+            iteration, index, normalization_factor, this->M, this->N, this->ra,
+            this->dec, this->frame, this->equinox, isInGPU);
 };
 
 void IoFITS::printNotPathImage(float* I,
@@ -277,7 +323,8 @@ void IoFITS::printNotPathImage(float* I,
                                bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input), "",
             getConstCharFromString(this->output), units, iteration, index,
-            normalization_factor, this->M, this->N, isInGPU);
+            normalization_factor, this->M, this->N, this->ra, this->dec,
+            this->frame, this->equinox, isInGPU);
 };
 
 void IoFITS::printNotNormalizedImage(float* I,
@@ -288,7 +335,8 @@ void IoFITS::printNotNormalizedImage(float* I,
                                      bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input),
             getConstCharFromString(this->path), name_image, units, iteration,
-            index, 1.0f, this->M, this->N, isInGPU);
+            index, 1.0f, this->M, this->N, this->ra, this->dec, this->frame,
+            this->equinox, isInGPU);
 };
 
 void IoFITS::printNotPathNotNormalizedImage(float* I,
@@ -298,7 +346,8 @@ void IoFITS::printNotPathNotNormalizedImage(float* I,
                                             int index,
                                             bool isInGPU) {
   OCopyFITS(I, getConstCharFromString(this->input), "", name_image, units,
-            iteration, index, 1.0f, this->M, this->N, isInGPU);
+            iteration, index, 1.0f, this->M, this->N, this->ra, this->dec,
+            this->frame, this->equinox, isInGPU);
 };
 
 void IoFITS::printImageIteration(float* I,
@@ -309,6 +358,10 @@ void IoFITS::printImageIteration(float* I,
                                  float fg_scale,
                                  long M,
                                  long N,
+                                 double ra_center,
+                                 double dec_center,
+                                 std::string frame,
+                                 float equinox,
                                  bool isInGPU) {
   size_t needed;
   char* full_name;
@@ -320,7 +373,8 @@ void IoFITS::printImageIteration(float* I,
 
   OCopyFITS(I, getConstCharFromString(this->input),
             getConstCharFromString(this->path), full_name, units, iteration,
-            index, fg_scale, M, N, isInGPU);
+            index, fg_scale, M, N, ra_center, dec_center, frame, equinox,
+            isInGPU);
   free(full_name);
 };
 
@@ -340,7 +394,8 @@ void IoFITS::printImageIteration(float* I,
 
   OCopyFITS(I, getConstCharFromString(this->input),
             getConstCharFromString(this->path), full_name, units, iteration,
-            index, this->normalization_factor, this->M, this->N, isInGPU);
+            index, this->normalization_factor, this->M, this->N, this->ra,
+            this->dec, this->frame, this->equinox, isInGPU);
   free(full_name);
 };
 
@@ -360,7 +415,8 @@ void IoFITS::printNotNormalizedImageIteration(float* I,
 
   OCopyFITS(I, getConstCharFromString(this->input),
             getConstCharFromString(this->path), full_name, units, iteration,
-            index, 1.0f, this->M, this->N, isInGPU);
+            index, 1.0f, this->M, this->N, this->ra, this->dec, this->frame,
+            this->equinox, isInGPU);
   free(full_name);
 };
 
@@ -374,6 +430,10 @@ void IoFITS::printImageIteration(float* I,
                                  float fg_scale,
                                  long M,
                                  long N,
+                                 double ra_center,
+                                 double dec_center,
+                                 std::string frame,
+                                 float equinox,
                                  bool isInGPU) {
   size_t needed;
   char* full_name;
@@ -384,7 +444,7 @@ void IoFITS::printImageIteration(float* I,
            iteration);
 
   OCopyFITS(I, model_input, path, full_name, units, iteration, index, fg_scale,
-            M, N, isInGPU);
+            M, N, ra_center, dec_center, frame, equinox, isInGPU);
   free(full_name);
 };
 
