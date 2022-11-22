@@ -630,15 +630,13 @@ void MFS::setDevice() {
 
   if (verbose_flag) {
     printf("Original right ascension and declination\n");
-    printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
+    printf("FITS: Ra: (%.16e, %.16e) rad\n", raimage, decimage);
     printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
   }
 
   if (radesys == "FK5") {
-    std::cout << "Frame is " << radesys << " it will be converted to ICRS"
+    std::cout << "Frame is " << radesys << "... It will be converted to ICRS"
               << std::endl;
-    std::cout << "Original direction is: (" << raimage << "," << decimage
-              << ") rad" << std::endl;
     casacore::MDirection::Convert conv(
         casacore::MDirection::Ref(casacore::MDirection::J2000),
         casacore::MDirection::Ref(casacore::MDirection::ICRS));
@@ -654,7 +652,7 @@ void MFS::setDevice() {
     ioImageHandler->setRADec(raimage / RPDEG_D, decimage / RPDEG_D);
 
     if (verbose_flag) {
-      printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
+      printf("FITS: Ra: (%.16e, %.16e) rad\n", raimage, decimage);
       printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
     }
   }
