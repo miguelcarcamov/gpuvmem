@@ -623,30 +623,37 @@ void MFS::setDevice() {
   /////////////////////////////////////////////////////CALCULATE DIRECTION
   /// COSINES/////////////////////////////////////////////////
   std::cout << "Checking frames..." << std::endl;
-  if (radesys == "FK5") {
-    std::cout << "Frame is " << radesys << " it will be converted to ICRS"
-              << std::endl;
-    std::cout << "Original direction is: (" << ra << "," << dec << ") deg"
-              << std::endl;
-    casacore::MDirection::Convert conv(
-        casacore::MDirection::Ref(casacore::MDirection::J2000),
-        casacore::MDirection::Ref(casacore::MDirection::ICRS));
-    casacore::MDirection coord = casacore::MDirection(
-        casacore::Quantity(ra, "deg"), casacore::Quantity(dec, "deg"),
-        casacore::MDirection::Ref(casacore::MDirection::J2000));
-    std::cout << "Converted direction " << conv(coord).getAngle("deg")
-              << std::endl;
-    std::cout << " \n\n" << std::endl;
-    ra = conv(coord).getAngle("deg").getValue()[0];
-    dec = conv(coord).getAngle("deg").getValue()[1];
-  }
-
   double raimage = ra * RPDEG_D;
   double decimage = dec * RPDEG_D;
 
   if (verbose_flag) {
+    printf("Original right ascension and declination\n");
     printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
     printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
+  }
+
+  if (radesys == "FK5") {
+    std::cout << "Frame is " << radesys << " it will be converted to ICRS"
+              << std::endl;
+    std::cout << "Original direction is: (" << raimage << "," << decimage
+              << ") rad" << std::endl;
+    casacore::MDirection::Convert conv(
+        casacore::MDirection::Ref(casacore::MDirection::J2000),
+        casacore::MDirection::Ref(casacore::MDirection::ICRS));
+    casacore::MDirection coord = casacore::MDirection(
+        casacore::Quantity(raimage, "rad"), casacore::Quantity(decimage, "rad"),
+        casacore::MDirection::Ref(casacore::MDirection::J2000));
+    std::cout << "Converted direction " << conv(coord).getAngle("rad")
+              << std::endl;
+    std::cout << " \n\n" << std::endl;
+    raimage = conv(coord).getAngle("rad").getValue()[0];
+    decimage = conv(coord).getAngle("rad").getValue()[1];
+
+    if (verbose_flag) {
+      printf("Converted right ascension and declination\n");
+      printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
+      printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
+    }
   }
 
   double lobs, mobs, lphs, mphs;
