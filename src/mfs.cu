@@ -181,7 +181,8 @@ void MFS::configure(int argc, char** argv) {
   radesys = header_vars.radesys;
   ioImageHandler->setFrame(radesys);
   equinox = header_vars.equinox;
-  ioImageHandler->setEquinox(equinox) crpix1 = header_vars.crpix1;
+  ioImageHandler->setEquinox(equinox);
+  crpix1 = header_vars.crpix1;
   crpix2 = header_vars.crpix2;
   if (header_vars.beam_noise > 0.0f) {
     this->setVisNoise(header_vars.beam_noise);
