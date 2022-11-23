@@ -637,29 +637,6 @@ void MFS::setDevice() {
     printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
   }
 
-  if (radesys == "FK5") {
-    std::cout << "Frame is " << radesys << "... It will be converted to ICRS"
-              << std::endl;
-    casacore::MDirection::Convert conv(
-        casacore::MDirection::Ref(casacore::MDirection::J2000),
-        casacore::MDirection::Ref(casacore::MDirection::ICRS));
-    casacore::MDirection coord = casacore::MDirection(
-        casacore::Quantity(raimage, "rad"), casacore::Quantity(decimage, "rad"),
-        casacore::MDirection::Ref(casacore::MDirection::J2000));
-    raimage = conv(coord).getAngle("rad").getValue()[0] + 2 * PI_D;
-    decimage = conv(coord).getAngle("rad").getValue()[1];
-
-    radesys = "ICRS";
-
-    ioImageHandler->setFrame(radesys);
-    ioImageHandler->setRADec(raimage / RPDEG_D, decimage / RPDEG_D);
-
-    if (verbose_flag) {
-      printf("FITS: Ra: (%.16e, %.16e) rad\n", raimage, decimage);
-      printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
-    }
-  }
-
   double lobs, mobs, lphs, mphs;
   double dcosines_l_pix_ref, dcosines_m_pix_ref, dcosines_l_pix_phs,
       dcosines_m_pix_phs;

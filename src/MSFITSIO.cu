@@ -439,8 +439,8 @@ __host__ void readMS(const char* MS_name,
                                                      "TELESCOPE_NAME");
 
   data->telescope_name = obs_col(0);
-  std::string ref_dir = "meas.direction('icrs',REFERENCE_DIR) as REFERENCE_DIR";
-  std::string phase_dir = "meas.direction('icrs',PHASE_DIR) as PHASE_DIR";
+  std::string ref_dir = "REFERENCE_DIR";
+  std::string phase_dir = "PHASE_DIR";
   std::string field_query = "select " + ref_dir + "," + phase_dir +
                             ",ROWID() AS ID FROM " + dir +
                             "/FIELD where !FLAG_ROW";
