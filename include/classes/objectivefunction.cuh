@@ -29,7 +29,7 @@ class ObjectiveFunction {
     if (io->getPrintImages()) {
       if (IoOrderIterations == NULL) {
         io->printImageIteration(p, "I_nu_0", "JY/PIXEL", iter, 0, true);
-        io->printImageIteration(p, "alpha", "JY/PIXEL", iter, 0, true);
+        io->printImageIteration(p, "alpha", "JY/PIXEL", iter, 1, true);
       } else {
         (IoOrderIterations)(p, io);
       }
