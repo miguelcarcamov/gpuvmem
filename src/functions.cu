@@ -197,6 +197,8 @@ __host__ Vars getOptions(int argc, char** argv) {
             "Mandatory");
   flags.Var(variables.noise, 'n', "noise", -1.0f, "Noise factor parameter",
             "Optional");
+  flags.Var(variables.noise, 's', "spec_index_noise", 1.0f,
+            "Spectral index noise factor parameter", "Optional");
   flags.Var(
       variables.eta, 'e', "eta", -1.0f,
       "Variable that controls the minimum image value in the entropy prior");

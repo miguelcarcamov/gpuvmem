@@ -72,6 +72,7 @@ typedef struct variables {
   int it_max;
   int gridding;
   float noise;
+  float spec_index_noise;
   float noise_cut;
   float randoms;
   float eta;
