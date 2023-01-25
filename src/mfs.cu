@@ -152,13 +152,13 @@ void MFS::configure(int argc, char** argv) {
     if (i == 0) {
       initial_values.push_back(std::stof(string_values[i]) * -1.0f * eta);
     } else {
-      initial_values.push_back(std::stof(string_values[i]));
+      initial_values.push_back(std::stof(string_values[i]) * spec_index_noise);
     }
   }
 
   string_values.clear();
   if (image_count == 1) {
-    initial_values.push_back(0.0f);
+    initial_values.push_back(0.0f * variables.spec_index_noise);
     image_count++;
     imagesChanged = 1;
   }
