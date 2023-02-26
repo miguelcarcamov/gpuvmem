@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 
 #include "ckernel.cuh"
+#include "virtualimageprocessor.cuh"
 
 extern long M, N;
 extern int image_count;
@@ -29,6 +30,7 @@ class Fi {
   virtual float getEta(){};
   virtual void setEta(float eta){};
   virtual void setCKernel(CKernel* ckernel){};
+  virtual VirtualImageProcessor* getVirtualImageProcessor(){};
 
   std::string getName() { return this->name; };
 

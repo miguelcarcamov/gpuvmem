@@ -15,6 +15,10 @@ Chi2::Chi2() {
   this->name = "Chi2";
 };
 
+VirtualImageProcessor* Chi2::getVirtualImageProcessor() {
+  return this->ip;
+};
+
 void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd) {
   this->imageIndex = imageIndex;
   this->order = order;

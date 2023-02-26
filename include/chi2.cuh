@@ -16,6 +16,7 @@ class Chi2 : public Fi {
   void setPenalizationFactorFromInputIndex(int index){};
   float calculateSecondDerivate(){};
   void setCKernel(CKernel* ckernel) override;
+  VirtualImageProcessor* getVirtualImageProcessor();
 
  private:
   VirtualImageProcessor* ip;

@@ -21,6 +21,10 @@ class VirtualImageProcessor {
   virtual void configure(int i) = 0;
   virtual CKernel* getCKernel() { return this->ckernel; };
   virtual void setCKernel(CKernel* ckernel) { this->ckernel = ckernel; };
+  virtual float getFgScale() = 0;
+  virtual void setFgScale(float fg_scale) = 0;
+  virtual float getSpectralIndexNoise() = 0;
+  virtual void setSpectralIndexNoise(float spec_index_noise) = 0;
 
  protected:
   float* chain;

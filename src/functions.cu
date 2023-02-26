@@ -197,7 +197,7 @@ __host__ Vars getOptions(int argc, char** argv) {
             "Mandatory");
   flags.Var(variables.noise, 'n', "noise", -1.0f, "Noise factor parameter",
             "Optional");
-  flags.Var(variables.noise, 's', "spec_index_noise", 1.0f,
+  flags.Var(variables.spec_index_noise, 's', "spec_index_noise", 1.0f,
             "Spectral index noise factor parameter", "Optional");
   flags.Var(
       variables.eta, 'e', "eta", -1.0f,
@@ -267,6 +267,8 @@ __host__ Vars getOptions(int argc, char** argv) {
   flags.Bool(help, 'h', "help", "Shows this help", "Help");
   flags.Bool(warranty, 'w', "warranty", "Shows warranty details", "Help");
   flags.Bool(copyright, 'c', "copyright", "Shows copyright conditions", "Help");
+
+  printf("After");
 
   if (!flags.Parse(argc, argv)) {
     print_help();
@@ -2322,29 +2324,6 @@ __global__ void apply_beam2I(float antenna_diameter,
       make_cuFloatComplex(image[N * i + j].x * atten * fg_scale, 0.0f);
 }
 
-__global__ void apply_beam2I(float antenna_diameter,
-                             float pb_factor,
-                             float pb_cutoff,
-                             float* gcf,
-                             cufftComplex* image,
-                             long N,
-                             float xobs,
-                             float yobs,
-                             float fg_scale,
-                             float freq,
-                             double DELTAX,
-                             double DELTAY,
-                             int primary_beam) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-  float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs,
-                            yobs, DELTAX, DELTAY, primary_beam);
-
-  image[N * i + j] = make_cuFloatComplex(
-      image[N * i + j].x * gcf[N * i + j] * atten * fg_scale, 0.0f);
-}
-
 __global__ void apply_GCF(cufftComplex* image, float* gcf, long N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -3817,6 +3796,7 @@ __global__ void calculateInu(cufftComplex* I_nu,
                              float nu_0,
                              float MINPIX,
                              float eta,
+                             float spec_index_noise,
                              long N,
                              long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -3827,7 +3807,7 @@ __global__ void calculateInu(cufftComplex* I_nu,
   nudiv = nu / nu_0;
 
   I_nu_0 = I[N * i + j];
-  alpha = I[M * N + N * i + j];
+  alpha = I[M * N + N * i + j] / spec_index_noise;
 
   nudiv_pow_alpha = powf(nudiv, alpha);
 
@@ -4496,9 +4476,12 @@ __host__ void linkApplyBeam2I(cufftComplex* image,
   checkCudaErrors(cudaDeviceSynchronize());
 };
 
-__host__ void linkCalculateInu2I(cufftComplex* image, float* I, float freq) {
+__host__ void linkCalculateInu2I(cufftComplex* image,
+                                 float* I,
+                                 float freq,
+                                 float spec_index_noise) {
   calculateInu<<<numBlocksNN, threadsPerBlockNN>>>(
-      image, I, freq, nu_0, initial_values[0], eta, N, M);
+      image, I, freq, nu_0, initial_values[0], eta, spec_index_noise, N, M);
   checkCudaErrors(cudaDeviceSynchronize());
 };
 

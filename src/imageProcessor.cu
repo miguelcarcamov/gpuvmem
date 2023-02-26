@@ -2,11 +2,35 @@
 
 extern long N, M;
 
-ImageProcessor::ImageProcessor() {}
+ImageProcessor::ImageProcessor() {
+  this->fg_scale = 0.0f;
+  this->spec_index_noise = 1.0f;
+}
+
+ImageProcessor::ImageProcessor(float fg_scale, float spec_index_noise) {
+  this->fg_scale = fg_scale;
+  this->spec_index_noise = spec_index_noise;
+}
+
+float ImageProcessor::getFgScale() {
+  return this->fg_scale;
+}
+
+void ImageProcessor::setFgScale(float fg_scale) {
+  this->fg_scale = fg_scale;
+}
+
+float ImageProcessor::getSpectralIndexNoise() {
+  return this->spec_index_noise;
+}
+
+void ImageProcessor::setSpectralIndexNoise(float spec_index_noise) {
+  this->spec_index_noise = spec_index_noise;
+}
 
 void ImageProcessor::calculateInu(cufftComplex* image, float* I, float freq) {
   if (image_count == 2) {
-    linkCalculateInu2I(image, I, freq);
+    linkCalculateInu2I(image, I, freq, this->spec_index_noise);
   }
 };
 

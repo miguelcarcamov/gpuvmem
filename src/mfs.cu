@@ -93,6 +93,10 @@ void MFS::configure(int argc, char** argv) {
   ioVisibilitiesHandler->setStoreModelVisInput(save_model_input);
   ioImageHandler->setPrintImages(print_images);
   this->ckernel->setIoImageHandler(ioImageHandler);
+  VirtualImageProcessor* ip = optimizer->getObjectiveFunction()
+                                  ->getFiByName("Chi2")
+                                  ->getVirtualImageProcessor();
+  ip->setSpectralIndexNoise(variables.spec_index_noise);
 
   std::vector<std::string> string_values;
   std::vector<std::string> s_output_values;
@@ -152,7 +156,8 @@ void MFS::configure(int argc, char** argv) {
     if (i == 0) {
       initial_values.push_back(std::stof(string_values[i]) * -1.0f * eta);
     } else {
-      initial_values.push_back(std::stof(string_values[i]) * spec_index_noise);
+      initial_values.push_back(std::stof(string_values[i]) *
+                               variables.spec_index_noise);
     }
   }
 
@@ -511,6 +516,10 @@ void MFS::configure(int argc, char** argv) {
 }
 
 void MFS::setDevice() {
+  VirtualImageProcessor* ip = optimizer->getObjectiveFunction()
+                                  ->getFiByName("Chi2")
+                                  ->getVirtualImageProcessor();
+
   double deltax = RPDEG_D * DELTAX;  // radians
   double deltay = RPDEG_D * DELTAY;  // radians
   deltau = 1.0 / (M * deltax);
@@ -713,7 +722,11 @@ void MFS::setDevice() {
   for (int k = 0; k < image_count; k++) {
     for (int i = 0; i < M; i++) {
       for (int j = 0; j < N; j++) {
-        host_I[N * M * k + N * i + j] = initial_values[k];
+        if (k == 1) {
+          host_I[N * M * k + N * i + j] =
+              initial_values[k] / ip->getSpectralIndexNoise();
+        } else
+          host_I[N * M * k + N * i + j] = initial_values[k];
       }
     }
   }
@@ -881,10 +894,13 @@ void MFS::setDevice() {
       *std::min_element(host_noise_image, host_noise_image + (M * N));
 
   fg_scale = noise_min;
+  ip->setFgScale(fg_scale);
+
   noise_cut = noise_cut * noise_min;
   if (verbose_flag) {
-    printf("fg_scale = %e\n", fg_scale);
+    printf("fg_scale = %e\n", ip->getFgScale());
     printf("noise (Jy/pix) = %e\n", noise_jypix);
+    printf("noise spectral index = %e\n", ip->getSpectralIndexNoise());
   }
 
   std::vector<float> u_mask;

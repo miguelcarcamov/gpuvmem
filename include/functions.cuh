@@ -173,7 +173,10 @@ __host__ void linkApplyBeam2I(cufftComplex* image,
                               float freq,
                               int primary_beam);
 __host__ void linkClipWNoise2I(float* I);
-__host__ void linkCalculateInu2I(cufftComplex* image, float* I, float freq);
+__host__ void linkCalculateInu2I(cufftComplex* image,
+                                 float* I,
+                                 float freq,
+                                 float spec_index_noise);
 __host__ void linkChain2I(float* chain, float freq, float* I);
 __host__ void normalizeImage(float* image, float normalization_factor);
 __host__ void linkClip(float* I);
