@@ -127,6 +127,7 @@ __host__ int main(int argc, char** argv) {
 
   Synthesizer* sy = createObject<Synthesizer, std::string>("MFS");
   Optimizer* cg = createObject<Optimizer, std::string>("CG-FRPRMN");
+
   // Optimizer *cg = createObject<Optimizer, std::string>("CG-LBFGS");
   // cg->setK(15);
   //  Choose your antialiasing kernel!
@@ -186,7 +187,6 @@ __host__ int main(int argc, char** argv) {
   // otherwise the first image image will be calculated with positivity and all
   // the others without positivity, to modify this, use these sentences, where i
   // corresponds to the index of the image ( particularly, means positivity)
-
   /*std::vector<float> lambdas = {1.0, 1e-5, 1e-5};
      std::vector<Fi*> fis = of->getFi();
      int i = 0;
@@ -198,11 +198,12 @@ __host__ int main(int argc, char** argv) {
 
      std::vector<float> final_lambdas = fixedPointOpt(lambdas, &runGpuvmem,
      1e-6, 60, sy);*/
+  /*
   sy->run();
 
   sy->writeImages();
   sy->writeResiduals();
   sy->unSetDevice();  // This routine performs memory cleanup and release
-
+  */
   return 0;
 }
