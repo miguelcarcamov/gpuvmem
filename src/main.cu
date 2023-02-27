@@ -157,12 +157,12 @@ __host__ int main(int argc, char** argv) {
   sy->setGriddingKernel(sc);
   sy->setOptimizator(cg);
   sy->configure(argc, argv);
+
   cg->setObjectiveFunction(of);
 
   // Filter *g = Singleton<FilterFactory>::Instance().CreateFilter(Gridding);
   // sy->applyFilter(g); // delete this line for no gridding
 
-  sy->setDevice();  // This routine sends the data to GPU memory
   Fi* chi2 = createObject<Fi, std::string>("Chi2");
   Fi* e = createObject<Fi, std::string>("Entropy");
   Fi* l1 = createObject<Fi, std::string>("L1-Norm");
@@ -181,6 +181,11 @@ __host__ int main(int argc, char** argv) {
   of->addFi(l1);
   of->addFi(tsqv);
   of->addFi(lap);
+
+  sy->setDevice();  // This routine sends the data to GPU memory
+
+  /*
+   */
   // sy->getImage()->getFunctionMapping()[i].evaluateXt = particularEvaluateXt;
   // sy->getImage()->getFunctionMapping()[i].newP = particularNewP;
   // if the nopositivity flag is on  all images will run with no posivity,
@@ -198,12 +203,11 @@ __host__ int main(int argc, char** argv) {
 
      std::vector<float> final_lambdas = fixedPointOpt(lambdas, &runGpuvmem,
      1e-6, 60, sy);*/
-  /*
-  sy->run();
 
+  sy->run();
   sy->writeImages();
   sy->writeResiduals();
-  sy->unSetDevice();  // This routine performs memory cleanup and release
-  */
+  sy->unSetDevice();  // This routine performs a memory cleanup and release
+
   return 0;
 }

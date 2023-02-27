@@ -70,6 +70,12 @@ class Synthesizer {
 
   __host__ void setVisNoise(float noise) { this->vis_noise = noise; };
 
+  __host__ float getSpecIndexNoise() { return this->spec_index_noise; };
+
+  __host__ void setSpecIndexNoise(float spec_index_noise) {
+    this->spec_index_noise = spec_index_noise;
+  };
+
  protected:
   cufftComplex* device_I;
   Image* image;
@@ -81,7 +87,8 @@ class Synthesizer {
   Error* error = NULL;
   int griddingThreads = 0;
   bool gridding = false;
-  float vis_noise = 0.0;
+  float vis_noise = 0.0f;
+  float spec_index_noise = 1.0f;
   void (*Order)(Optimizer* o, Image* I) = NULL;
   int imagesChanged = 0;
   void (*IoOrderIterations)(float* I, Io* io) = NULL;

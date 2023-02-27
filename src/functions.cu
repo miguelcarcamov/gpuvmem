@@ -3805,7 +3805,7 @@ __global__ void calculateInu(cufftComplex* I_nu,
   nudiv = nu / nu_0;
 
   I_nu_0 = I[N * i + j];
-  alpha = I[M * N + N * i + j] / spec_index_noise;
+  alpha = I[M * N + N * i + j] * spec_index_noise;
 
   nudiv_pow_alpha = powf(nudiv, alpha);
 
@@ -3826,6 +3826,7 @@ __global__ void DChi2_total_alpha(float* noise,
                                   float nu_0,
                                   float noise_cut,
                                   float fg_scale,
+                                  float spec_index_noise,
                                   float threshold,
                                   long N,
                                   long M) {
@@ -3836,7 +3837,7 @@ __global__ void DChi2_total_alpha(float* noise,
   float nudiv = nu / nu_0;
 
   I_nu_0 = I[N * i + j];
-  alpha = I[N * M + N * i + j];
+  alpha = I[N * M + N * i + j] * spec_index_noise;
 
   dI_nu_0 = powf(nudiv, alpha);
   dalpha = I_nu_0 * dI_nu_0 * fg_scale * logf(nudiv);
@@ -3858,6 +3859,7 @@ __global__ void DChi2_total_I_nu_0(float* noise,
                                    float nu_0,
                                    float noise_cut,
                                    float fg_scale,
+                                   float spec_index_noise,
                                    float threshold,
                                    long N,
                                    long M) {
@@ -3868,7 +3870,7 @@ __global__ void DChi2_total_I_nu_0(float* noise,
   float nudiv = nu / nu_0;
 
   I_nu_0 = I[N * i + j];
-  alpha = I[N * M + N * i + j];
+  alpha = I[N * M + N * i + j] * spec_index_noise;
 
   dI_nu_0 = powf(nudiv, alpha);
   // dalpha = I_nu_0 * dI_nu_0 * fg_scale * logf(nudiv);
@@ -4400,13 +4402,13 @@ __host__ void dchi2(float* I,
                       device_noise_image, result_dchi2,
                       vars_gpu[gpu_idx].device_dchi2, I,
                       datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale,
-                      threshold, N, M);
+                      ip->getSpectralIndexNoise(), threshold, N, M);
                 else
                   DChi2_total_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
                       device_noise_image, result_dchi2,
                       vars_gpu[gpu_idx].device_dchi2, I,
                       datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale,
-                      threshold, N, M);
+                      ip->getSpectralIndexNoise(), threshold, N, M);
                 checkCudaErrors(cudaDeviceSynchronize());
               }
             }

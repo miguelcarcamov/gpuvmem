@@ -93,10 +93,7 @@ void MFS::configure(int argc, char** argv) {
   ioVisibilitiesHandler->setStoreModelVisInput(save_model_input);
   ioImageHandler->setPrintImages(print_images);
   this->ckernel->setIoImageHandler(ioImageHandler);
-  VirtualImageProcessor* ip = optimizer->getObjectiveFunction()
-                                  ->getFiByName("Chi2")
-                                  ->getVirtualImageProcessor();
-  ip->setSpectralIndexNoise(variables.spec_index_noise);
+  this->spec_index_noise = variables.spec_index_noise;
 
   std::vector<std::string> string_values;
   std::vector<std::string> s_output_values;
@@ -156,7 +153,7 @@ void MFS::configure(int argc, char** argv) {
     if (i == 0) {
       initial_values.push_back(std::stof(string_values[i]) * -1.0f * eta);
     } else {
-      initial_values.push_back(std::stof(string_values[i]) *
+      initial_values.push_back(std::stof(string_values[i]) /
                                variables.spec_index_noise);
     }
   }
@@ -292,7 +289,7 @@ void MFS::configure(int argc, char** argv) {
            datasets[d].name, datasets[d].antennas[0].antenna_diameter);
   }
 
-  /*
+  /*sy->setDevice();
      Calculating theoretical resolution
    */
   float max_freq = *max_element(ms_max_freqs.begin(), ms_max_freqs.end());
@@ -516,9 +513,19 @@ void MFS::configure(int argc, char** argv) {
 }
 
 void MFS::setDevice() {
-  VirtualImageProcessor* ip = optimizer->getObjectiveFunction()
-                                  ->getFiByName("Chi2")
-                                  ->getVirtualImageProcessor();
+  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+  VirtualImageProcessor* ip;
+
+  if (chi2 != NULL) {
+    ip = chi2->getVirtualImageProcessor();
+  } else {
+    std::cout
+        << "Chi2 is NULL at this point and no Virtual Image Processor exists."
+        << std::endl;
+    exit(-1);
+  }
+
+  ip->setSpectralIndexNoise(this->spec_index_noise);
 
   double deltax = RPDEG_D * DELTAX;  // radians
   double deltay = RPDEG_D * DELTAY;  // radians
@@ -526,13 +533,14 @@ void MFS::setDevice() {
   deltav = 1.0 / (N * deltay);
 
   if (verbose_flag) {
-    printf("MS files reading ");
+    std::cout << "MS files reading" << std::endl;
     if (this->gridding) {
-      printf("and gridding ");
+      std::cout << "and gridding " << std::endl;
     }
-    printf("OK!\n");
+
     if (this->getVisNoise() < 0.0f) {
-      printf("Beam noise wasn't provided by the user... Calculating...\n");
+      std::cout << "Beam noise wasn't provided by the user... Calculating..."
+                << std::endl;
     }
   }
 
@@ -717,19 +725,12 @@ void MFS::setDevice() {
   ////////////////////////////////////////////////////////MAKE STARTING
   /// IMAGE////////////////////////////////////////////////////////
 
-  host_I = (float*)malloc(M * N * sizeof(float) * image_count);
+  host_I = (float*)malloc(M * N * image_count * sizeof(float));
 
-  for (int k = 0; k < image_count; k++) {
-    for (int i = 0; i < M; i++) {
-      for (int j = 0; j < N; j++) {
-        if (k == 1) {
-          host_I[N * M * k + N * i + j] =
-              initial_values[k] / ip->getSpectralIndexNoise();
-        } else
-          host_I[N * M * k + N * i + j] = initial_values[k];
-      }
-    }
-  }
+  for (int k = 0; k < image_count; k++)
+    for (int i = 0; i < M; i++)
+      for (int j = 0; j < N; j++)
+        host_I[N * M * k + N * i + j] = initial_values[k];
 
   ////////////////////////////////////////////////CUDA MEMORY ALLOCATION FOR
   /// DEVICE///////////////////////////////////////////////////
@@ -1050,15 +1051,27 @@ void MFS::run() {
 };
 
 void MFS::writeImages() {
+  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+  VirtualImageProcessor* ip;
+
+  if (chi2 != NULL) {
+    ip = chi2->getVirtualImageProcessor();
+  } else {
+    std::cout
+        << "Chi2 is NULL at this point and no Virtual Image Processor exists."
+        << std::endl;
+    exit(-1);
+  }
+
   printf("Saving final image to disk\n");
   if (IoOrderEnd == NULL) {
     ioImageHandler->printNotPathImage(image->getImage(), "JY/PIXEL",
                                       optimizer->getCurrentIteration(), 0,
                                       fg_scale, true);
-    if (print_images)
-      ioImageHandler->printNotNormalizedImage(
-          image->getImage(), "alpha.fits", "", optimizer->getCurrentIteration(),
-          1, true);
+
+    ioImageHandler->printNotPathImage(image->getImage(), "alpha.fits", "",
+                                      optimizer->getCurrentIteration(), 1,
+                                      ip->getSpectralIndexNoise(), true);
   } else {
     (IoOrderEnd)(image->getImage(), ioImageHandler);
   }
