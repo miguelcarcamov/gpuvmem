@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <boost/filesystem.hpp>
 #include <ckernel.cuh>
 #include <complexOps.cuh>
 #include <cstdint>

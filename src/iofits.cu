@@ -293,6 +293,24 @@ void IoFITS::printNotPathImage(float* I,
 };
 
 void IoFITS::printNotPathImage(float* I,
+                               const char* out_image,
+                               char* units,
+                               int iteration,
+                               int index,
+                               float fg_scale,
+                               long M,
+                               long N,
+                               double ra_center,
+                               double dec_center,
+                               std::string frame,
+                               float equinox,
+                               bool isInGPU) {
+  OCopyFITS(I, getConstCharFromString(this->input), "", out_image, units,
+            iteration, index, fg_scale, M, N, ra_center, dec_center, frame,
+            equinox, isInGPU);
+};
+
+void IoFITS::printNotPathImage(float* I,
                                char* out_image,
                                char* units,
                                int iteration,
@@ -304,7 +322,30 @@ void IoFITS::printNotPathImage(float* I,
 };
 
 void IoFITS::printNotPathImage(float* I,
+                               const char* out_image,
+                               char* units,
+                               int iteration,
+                               int index,
+                               bool isInGPU) {
+  OCopyFITS(I, getConstCharFromString(this->input), "", out_image, units,
+            iteration, index, this->normalization_factor, this->M, this->N,
+            this->ra, this->dec, this->frame, this->equinox, isInGPU);
+};
+
+void IoFITS::printNotPathImage(float* I,
                                char* out_image,
+                               char* units,
+                               int iteration,
+                               int index,
+                               float normalization_factor,
+                               bool isInGPU) {
+  OCopyFITS(I, getConstCharFromString(this->input), "", out_image, units,
+            iteration, index, normalization_factor, this->M, this->N, this->ra,
+            this->dec, this->frame, this->equinox, isInGPU);
+};
+
+void IoFITS::printNotPathImage(float* I,
+                               const char* out_image,
                                char* units,
                                int iteration,
                                int index,

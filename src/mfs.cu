@@ -1069,9 +1069,13 @@ void MFS::writeImages() {
                                       optimizer->getCurrentIteration(), 0,
                                       fg_scale, true);
 
-    ioImageHandler->printNotPathImage(image->getImage(), "alpha.fits", "",
-                                      optimizer->getCurrentIteration(), 1,
-                                      ip->getSpectralIndexNoise(), true);
+    boost::filesystem::path mod_out_path(ioImageHandler->getOutput());
+    boost::filesystem::path alpha_path =
+        mod_out_path.remove_filename() / "alpha.fits";
+
+    ioImageHandler->printNotPathImage(
+        image->getImage(), alpha_path.string().c_str(), "",
+        optimizer->getCurrentIteration(), 1, ip->getSpectralIndexNoise(), true);
   } else {
     (IoOrderEnd)(image->getImage(), ioImageHandler);
   }

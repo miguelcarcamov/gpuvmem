@@ -117,13 +117,39 @@ class Io {
                                  float equinox,
                                  bool isInGPU){};
   virtual void printNotPathImage(float* I,
+                                 const char* out_image,
+                                 char* units,
+                                 int iteration,
+                                 int index,
+                                 float fg_scale,
+                                 long M,
+                                 long N,
+                                 double ra_center,
+                                 double dec_center,
+                                 std::string frame,
+                                 float equinox,
+                                 bool isInGPU){};
+  virtual void printNotPathImage(float* I,
                                  char* out_image,
                                  char* units,
                                  int iteration,
                                  int index,
                                  bool isInGPU){};
   virtual void printNotPathImage(float* I,
+                                 const char* out_image,
+                                 char* units,
+                                 int iteration,
+                                 int index,
+                                 bool isInGPU){};
+  virtual void printNotPathImage(float* I,
                                  char* out_image,
+                                 char* units,
+                                 int iteration,
+                                 int index,
+                                 float normalization_factor,
+                                 bool isInGPU){};
+  virtual void printNotPathImage(float* I,
+                                 const char* out_image,
                                  char* units,
                                  int iteration,
                                  int index,
@@ -358,6 +384,9 @@ class Io {
 
   void setOutput(std::string output) { this->output = output; };
   void setOutput(char* output) { this->output = getStringFromChar(output); };
+
+  std::string getOutput() { return this->output; };
+  std::string getInput() { return this->input; };
 
  protected:
   std::string input;

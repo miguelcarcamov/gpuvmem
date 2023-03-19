@@ -24,7 +24,7 @@ if(CMAKE_CONFIGURATION_TYPES)
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED filesystem system)
 find_package(CFITSIO REQUIRED)
 set(CASACORE_MAKE_REQUIRED_EXTERNALS_OPTIONAL TRUE)
 find_package(Casacore REQUIRED COMPONENTS casa ms tables measures meas)
@@ -52,7 +52,7 @@ if(Boost_FOUND)
           "We are currently using the latest casacore stable version >=v3.2.1")
   message(
     NOTICE
-    "If one these versions are not installed in your computer, please make sure to install it"
+    "If one of these versions are not installed in your computer, please make sure to install it"
   )
   message(NOTICE "For more information please read the README.md file")
   target_include_directories(
