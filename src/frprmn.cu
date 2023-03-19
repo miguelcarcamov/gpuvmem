@@ -101,7 +101,7 @@ __host__ void ConjugateGradient::optimize() {
     std::cout << "Starting function value = " << std::setprecision(4)
               << std::fixed << fp << std::endl;
   }
-  of->calcGradient(image->getImage(), xi, 0);
+  of->calcGradient(image->getImage(), xi, 0, this->flag);
   // g=-xi
   // xi=h=g
 
@@ -132,7 +132,7 @@ __host__ void ConjugateGradient::optimize() {
       std::cout << "Function value = " << std::setprecision(4) << std::fixed
                 << fp << std::endl;
     }
-    of->calcGradient(image->getImage(), xi, i);
+    of->calcGradient(image->getImage(), xi, i, this->flag);
 
     den = std::max(fp, 1.0f);
 

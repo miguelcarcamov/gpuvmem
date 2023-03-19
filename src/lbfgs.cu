@@ -113,7 +113,7 @@ __host__ void LBFGS::optimize() {
     std::cout << "Starting function value = " << std::setprecision(4)
               << std::fixed << fp << std::endl;
   }
-  of->calcGradient(image->getImage(), xi, 0);
+  of->calcGradient(image->getImage(), xi, 0, this->flag);
 
   // checkCudaErrors(cudaMemcpy(p_old, image->getImage(),
   // sizeof(float)*M*N*image->getImageCount(), cudaMemcpyDeviceToDevice));
@@ -174,7 +174,7 @@ __host__ void LBFGS::optimize() {
       std::cout << "Function value = " << std::setprecision(4) << std::fixed
                 << fp << std::endl;
     }
-    of->calcGradient(image->getImage(), xi, i);
+    of->calcGradient(image->getImage(), xi, i, this->flag);
 
     for (int i = 0; i < image->getImageCount(); i++) {
       calculateSandY<<<numBlocksNN, threadsPerBlockNN>>>(

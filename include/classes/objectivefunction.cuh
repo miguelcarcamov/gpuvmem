@@ -25,11 +25,15 @@ class ObjectiveFunction {
     return value;
   };
 
-  void calcGradient(float* p, float* xi, int iter) {
+  void calcGradient(float* p, float* xi, int iter, int flag) {
     if (io->getPrintImages()) {
       if (IoOrderIterations == NULL) {
-        io->printImageIteration(p, "I_nu_0", "JY/PIXEL", iter, 0, true);
-        io->printImageIteration(p, "alpha", "JY/PIXEL", iter, 1, true);
+        std::string I_nu_0_name = "I_nu_0_" + std::to_string(flag);
+        std::string alpha_name = "alpha_" + std::to_string(flag);
+        io->printImageIteration(p, I_nu_0_name.c_str(), "JY/PIXEL", iter, 0,
+                                true);
+        io->printImageIteration(p, alpha_name.c_str(), "JY/PIXEL", iter, 1,
+                                true);
       } else {
         (IoOrderIterations)(p, io);
       }
