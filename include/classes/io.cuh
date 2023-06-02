@@ -26,6 +26,11 @@ class Io {
   virtual void setM(int M){};
   virtual void setN(int N){};
   virtual void setMN(int M, int N){};
+  virtual void setEquinox(float equinox){};
+  virtual void setFrame(std::string frame){};
+  virtual void setRA(double ra){};
+  virtual void setDec(double dec){};
+  virtual void setRADec(double ra, double dec){};
   virtual void setNormalizationFactor(int normalization_factor){};
   virtual void setPrintImages(bool print_images){};
 
@@ -50,6 +55,10 @@ class Io {
                           float fg_scale,
                           long M,
                           long N,
+                          double ra_center,
+                          double dec_center,
+                          std::string frame,
+                          float equinox,
                           bool isInGPU){};
   virtual void printImage(float* I,
                           char* name_image,
@@ -64,6 +73,10 @@ class Io {
                           float fg_scale,
                           long M,
                           long N,
+                          double ra_center,
+                          double dec_center,
+                          std::string frame,
+                          float equinox,
                           bool isInGPU){};
   virtual void printImage(float* I,
                           char* name_image,
@@ -73,6 +86,10 @@ class Io {
                           float fg_scale,
                           long M,
                           long N,
+                          double ra_center,
+                          double dec_center,
+                          std::string frame,
+                          float equinox,
                           bool isInGPU){};
   virtual void printNotPathImage(float* I,
                                  char* units,
@@ -81,6 +98,10 @@ class Io {
                                  float fg_scale,
                                  long M,
                                  long N,
+                                 double ra_center,
+                                 double dec_center,
+                                 std::string frame,
+                                 float equinox,
                                  bool isInGPU){};
   virtual void printNotPathImage(float* I,
                                  char* out_image,
@@ -90,6 +111,10 @@ class Io {
                                  float fg_scale,
                                  long M,
                                  long N,
+                                 double ra_center,
+                                 double dec_center,
+                                 std::string frame,
+                                 float equinox,
                                  bool isInGPU){};
   virtual void printNotPathImage(float* I,
                                  char* out_image,
@@ -130,6 +155,10 @@ class Io {
                                    float fg_scale,
                                    long M,
                                    long N,
+                                   double ra_center,
+                                   double dec_center,
+                                   std::string frame,
+                                   float equinox,
                                    bool isInGPU){};
   virtual void printImageIteration(float* I,
                                    char const* name_image,
@@ -153,6 +182,10 @@ class Io {
                                    float fg_scale,
                                    long M,
                                    long N,
+                                   double ra_center,
+                                   double dec_center,
+                                   std::string frame,
+                                   float equinox,
                                    bool isInGPU){};
   virtual void printcuFFTComplex(cufftComplex* I,
                                  fitsfile* canvas,

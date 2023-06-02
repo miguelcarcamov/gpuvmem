@@ -23,6 +23,10 @@ extern int num_gpus;
 
 double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
 
+std::string radesys;
+
+float equinox;
+
 std::vector<float> initial_values;
 std::vector<MSDataset> datasets;
 
@@ -173,6 +177,11 @@ void MFS::configure(int argc, char** argv) {
   DELTAY = header_vars.DELTAY;
   ra = header_vars.ra;
   dec = header_vars.dec;
+  ioImageHandler->setRADec(ra, dec);
+  radesys = header_vars.radesys;
+  ioImageHandler->setFrame(radesys);
+  equinox = header_vars.equinox;
+  ioImageHandler->setEquinox(equinox);
   crpix1 = header_vars.crpix1;
   crpix2 = header_vars.crpix2;
   if (header_vars.beam_noise > 0.0f) {
@@ -304,7 +313,7 @@ void MFS::configure(int argc, char** argv) {
     printf(
         "WARNING: Reference frequency not provided. It will be calculated as "
         "the middle"
-        "of the frequency range.\n");
+        " of the frequency range.\n");
     nu_0 = 0.5f * (max_freq + min_freq);
   }
   printf("Reference frequency: %e Hz\n", nu_0);
@@ -618,11 +627,13 @@ void MFS::setDevice() {
 
   /////////////////////////////////////////////////////CALCULATE DIRECTION
   /// COSINES/////////////////////////////////////////////////
+  std::cout << "Checking frames..." << std::endl;
   double raimage = ra * RPDEG_D;
   double decimage = dec * RPDEG_D;
 
   if (verbose_flag) {
-    printf("FITS: Ra: %.16e (rad), dec: %.16e (rad)\n", raimage, decimage);
+    printf("Original right ascension and declination\n");
+    printf("FITS: Ra: (%.16e, %.16e) rad\n", raimage, decimage);
     printf("FITS: Center pix: (%lf,%lf)\n", crpix1 - 1, crpix2 - 1);
   }
 

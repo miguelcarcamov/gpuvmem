@@ -3,6 +3,8 @@
 
 #include <time.h>
 
+#include <measures/Measures.h>
+#include <measures/Measures/MDirection.h>
 #include "directioncosines.cuh"
 #include "framework.cuh"
 #include "frprmn.cuh"

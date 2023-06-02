@@ -27,7 +27,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(Boost REQUIRED)
 find_package(CFITSIO REQUIRED)
 set(CASACORE_MAKE_REQUIRED_EXTERNALS_OPTIONAL TRUE)
-find_package(Casacore REQUIRED COMPONENTS casa ms tables measures)
+find_package(Casacore REQUIRED COMPONENTS casa ms tables measures meas)
 option(MEMORY_DEBUG "This sets the GDB debug for CUDA code")
 option(USE_FAST_MATH
        "This option accelerate CUDA math functions decreasing precision")
