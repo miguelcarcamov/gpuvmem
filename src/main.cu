@@ -146,7 +146,7 @@ __host__ int main(int argc, char** argv) {
   // UVTaper *uvtaper = new UVTaper(200000.0f); // Initialize your uvtaper in
   // units of lambda
   WeightingScheme* scheme =
-      createObject<WeightingScheme, std::string>("Natural");
+      createObject<WeightingScheme, std::string>("Briggs");
   // scheme->setUVTaper(uvtaper);
 
   sy->setIoVisibilitiesHandler(ioms);
