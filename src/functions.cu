@@ -1364,10 +1364,10 @@ __host__ void do_gridding(std::vector<Field>& fields,
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].backup_visibilities[i][s].weight.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-#pragma omp parallel for schedule(static, 1) num_threads(gridding)      \
-    shared(g_weights, g_weights_aux, g_Vo) private(                     \
-        j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
-        kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
+#pragma omp parallel for schedule(static, 1) num_threads(gridding)          \
+    shared(g_weights, g_weights_aux, g_Vo) private(                         \
+            j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
+                kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
         for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
              z++) {
           uvw = fields[f].visibilities[i][s].uvw[z];
@@ -3678,7 +3678,8 @@ __global__ void DChi2(float* noise,
   int y0 = phs_yobs;
   double x = (j - x0) * DELTAX * RPDEG_D;
   double y = (i - y0) * DELTAY * RPDEG_D;
-  // double z = sqrt(1-x*x-y*y)-1;
+  double z = sqrtf(1 - x * x - y * y);
+  double z_minus_one = z - 1.0;
 
   float Ukv, Vkv, Wkv, cosk, sink, atten;
 
@@ -3690,12 +3691,13 @@ __global__ void DChi2(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       Ukv = x * UVW[v].x;
       Vkv = y * UVW[v].y;
-// Wkv = z * UVW[v].z;
+      Wkv = z_minus_one * UVW[v].z;
+
 #if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
+      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
 #else
-      cosk = cospif(2.0 * (Ukv + Vkv));
-      sink = sinpif(2.0 * (Ukv + Vkv));
+      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
+      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
 #endif
       dchi2 += w[v] * ((Vr[v].x * cosk) - (Vr[v].y * sink));
     }
@@ -3733,7 +3735,8 @@ __global__ void DChi2(float* noise,
   int y0 = phs_yobs;
   double x = (j - x0) * DELTAX * RPDEG_D;
   double y = (i - y0) * DELTAY * RPDEG_D;
-  // double z = sqrt(1-x*x-y*y)-1;
+  double z = sqrtf(1 - x * x - y * y);
+  double z_minus_one = z - 1.0;
 
   float Ukv, Vkv, Wkv, cosk, sink, atten, gcf_i;
 
@@ -3745,12 +3748,12 @@ __global__ void DChi2(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       Ukv = x * UVW[v].x;
       Vkv = y * UVW[v].y;
-// Wkv = z * UVW[v].z;
+      Wkv = z_minus_one * UVW[v].z;
 #if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
+      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
 #else
-      cosk = cospif(2.0 * (Ukv + Vkv));
-      sink = sinpif(2.0 * (Ukv + Vkv));
+      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
+      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
 #endif
       dchi2 += w[v] * ((Vr[v].x * cosk) - (Vr[v].y * sink));
     }
@@ -4076,7 +4079,8 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
+#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
+    reduction(+ : resultchi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
         unsigned int j = omp_get_thread_num();
@@ -4211,7 +4215,8 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
+#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
+    reduction(+ : resultchi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
         unsigned int j = omp_get_thread_num();
