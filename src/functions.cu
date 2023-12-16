@@ -1575,10 +1575,10 @@ __host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv) {
   double uu_minus_vv = s_uu - s_vv;
   double uu_plus_vv = s_uu + s_vv;
   double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
-  beam_size.x = 2.0 * sqrt(log(2.0)) / PI_D /
-                sqrt(uu_plus_vv - sqrt_in);  // Major axis in radians
-  beam_size.y = 2.0 * sqrt(log(2.0)) / PI_D /
-                sqrt(uu_plus_vv + sqrt_in);             // Minor axis in radians
+  beam_size.x =
+      1.0 / 2.0 / PI_D / sqrt(uu_plus_vv - sqrt_in);  // Major axis in radians
+  beam_size.y =
+      1.0 / 2.0 / PI_D / sqrt(uu_plus_vv + sqrt_in);    // Minor axis in radians
   beam_size.z = -0.5 * atan2(2.0 * s_uv, uu_minus_vv);  // Angle in radians
 
   return beam_size;
