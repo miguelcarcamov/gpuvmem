@@ -1509,6 +1509,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
             if (weight > 0.0f) {
               fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
               fields[f].visibilities[i][s].uvw[l].y = g_uvw[N * k + j].y;
+              fields[f].visibilities[i][s].uvw[l].z = 0.0;
               fields[f].visibilities[i][s].Vo[l] =
                   make_cuFloatComplex(g_Vo[N * k + j].x, g_Vo[N * k + j].y);
               fields[f].visibilities[i][s].weight[l] = g_weights[N * k + j];
