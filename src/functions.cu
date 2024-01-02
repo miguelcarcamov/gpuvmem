@@ -4126,6 +4126,7 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                          sizeof(float) * max_number_vis));
 
+              // TODO: Here we could just use vis_mod and see what happens
               if (NULL != ip->getCKernel()) {
                 getGriddedVisFromPix<<<
                     datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
