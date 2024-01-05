@@ -1093,9 +1093,10 @@ void MFS::writeResiduals() {
                                   num_gpus, firstgpu, variables.blockSizeV);
     }
     Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
-    chi2->setCKernel(NULL);
-    float res = chi2->simulateModel(image->getImage());
-    printf("Non-gridded chi2 %f\n", res);
+    float res = chi2->calcFi(image->getImage());
+    printf(
+        "Non-gridded chi2 after de-gridding using bilinear interpolation %f\n",
+        res);
   }
 
   for (int d = 0; d < nMeasurementSets; d++)
