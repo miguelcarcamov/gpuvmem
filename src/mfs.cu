@@ -660,8 +660,8 @@ void MFS::setDevice() {
                dcosines_m_pix_phs);
       }
 
-      datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_ref;
-      datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_ref;
+      datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
+      datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
 
       datasets[d].fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
       datasets[d].fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
