@@ -8,17 +8,19 @@ dependencies:
 - cfitsio
 - openmpi
 - mpi4py
-- python=3.8
-- numpy=1.23
+- python=3.10
+- numpy=1.24
 - pip
 - pip:
-  - almatasks==1.5.2
-  - casadata==2022.9.5
-  - casampi==0.5.01
-  - casaplotms==1.8.7
-  - casaplotserver==1.4.6
-  - casashell==6.5.2.26
-  - casatasks==6.5.2.26
-  - casatestutils==6.5.2.26
-  - casatools==6.5.2.26
-  - casaviewer==1.6.6
+  - casadata==2023.9.18
+  - casafeather==0.0.20
+  - casalogger==1.0.17
+  - casampi==0.5.4
+  - casaplotms==2.2.4
+  - casaplotserver==1.7.1
+  - casashell==6.6.0.20
+  - casatablebrowser==0.0.33
+  - casatasks==6.6.0.20
+  - casatestutils==6.6.0.20
+  - casatools==6.6.0.20
+  - casaviewer==1.9.1
