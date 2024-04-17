@@ -1393,8 +1393,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
 
           grid_pos_x = uvw.x / fabs(deltau);
           grid_pos_y = uvw.y / fabs(deltav);
-          j = grid_pos_x + N / 2;
-          k = grid_pos_y + M / 2;
+          j = grid_pos_x + int(floor(N / 2)) + 0.5;
+          k = grid_pos_y + int(floor(M / 2)) + 0.5;
 
           for (int m = -ckernel->getSupportY(); m <= ckernel->getSupportY();
                m++) {
@@ -1723,8 +1723,8 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
   for (int i = 0; i < numvis; i++) {
     grid_pos_x = uvw_gridded_sp[i].x / deltau_meters;
     grid_pos_y = uvw_gridded_sp[i].y / deltav_meters;
-    j = grid_pos_x + N / 2;
-    k = grid_pos_y + M / 2;
+    j = grid_pos_x + int(floor(N / 2)) + 0.5;
+    k = grid_pos_y + int(floor(M / 2)) + 0.5;
     Vm_gridded[N * k + j] = Vm_gridded_sp[i];
   }
 }
@@ -2105,8 +2105,8 @@ __global__ void degriddingGPU(double3* uvw,
   float ckernel_result;
 
   if (i < visibilities) {
-    j = round(uvw[i].x / fabs(deltau) + N / 2);
-    k = round(uvw[i].y / fabs(deltav) + M / 2);
+    j = uvw[i].x / fabs(deltau) + int(floorf(N / 2)) + 0.5;
+    k = uvw[i].y / fabs(deltav) + int(floorf(M / 2)) + 0.5;
 
     for (int m = -supportY; m <= supportY; m++) {
       for (int n = -supportX; n <= supportX; n++) {
@@ -2413,10 +2413,10 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
 
     if (fabs(uv.x) < N / 2 && fabs(uv.y) < N / 2) {
       if (uv.x < 0.0)
-        uv.x = uv.x + N;
+        uv.x = uv.x + N + 0.5;
 
       if (uv.y < 0.0)
-        uv.y = uv.y + N;
+        uv.y = uv.y + N + 0.5;
 
       j1 = uv.x;
       i1 = uv.y;
@@ -2457,10 +2457,10 @@ __global__ void vis_mod(cufftComplex* Vm,
 
     if (fabs(uv.x) < N / 2 && fabs(uv.y) < N / 2) {
       if (uv.x < 0.0)
-        uv.x = uv.x + N;
+        uv.x = uv.x + N + 0.5;
 
       if (uv.y < 0.0)
-        uv.y = uv.y + N;
+        uv.y = uv.y + N + 0.5;
 
       i1 = uv.x;
       i2 = (i1 + 1) % N;
@@ -2514,12 +2514,12 @@ __global__ void vis_mod2(cufftComplex* Vm,
     uv.x = UVW[i].x / fabs(deltau);
     uv.y = UVW[i].y / fabs(deltav);
 
-    f_j = uv.x + N / 2;
+    f_j = uv.x + int(floorf(N / 2)) + 0.5;
     j1 = f_j;
     j2 = j1 + 1;
     f_j = f_j - j1;
 
-    f_k = uv.y + N / 2;
+    f_k = uv.y + +int(floorf(N / 2)) + 0.5;
     k1 = f_k;
     k2 = k1 + 1;
     f_k = f_k - k1;
