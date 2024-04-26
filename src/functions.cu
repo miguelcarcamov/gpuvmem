@@ -2382,7 +2382,7 @@ __global__ void phase_rotate(cufftComplex* data,
     v = vpix * (i - N);
   }
 
-  phase = 2.0f * (u + v);
+  phase = -2.0f * (u + v);
 #if (__CUDA_ARCH__ >= 300)
   sincospif(phase, &s, &c);
 #else
