@@ -13,7 +13,6 @@ on:
     - '**.hpp'
     - '**.cmake'
     - CMakeLists.txt
-    - Dockerfile.prod
 env:
   REGISTRY: ghcr.io
 
