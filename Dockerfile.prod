@@ -3,6 +3,7 @@ ENV BUILD_DIR "build"
 ENV CONFIG "Release"
 
 RUN echo "Installing GPUVMEM"
+RUN ls
 RUN cmake . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CONFIG && \
     cd $BUILD_DIR && \
     cmake --build . --target install --verbose -j `nproc` && \

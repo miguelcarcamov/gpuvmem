@@ -3,7 +3,7 @@ name: build-latest-container
 on:
   pull_request:
     branches: [master]
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize, closed]
     paths:
     - '**.cu'
     - '**.cuh'
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3.0.2
+      uses: actions/checkout@v4
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v1
       with:
