@@ -21,7 +21,6 @@ class Fi {
 
   virtual float calcFi(float* p) = 0;
   virtual void calcGi(float* p, float* xi) = 0;
-  virtual float simulateModel(float* p){};
   virtual void restartDGi() = 0;
   virtual void addToDphi(float* device_dphi) = 0;
   virtual void setPrior(float prior){};

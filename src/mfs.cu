@@ -195,25 +195,23 @@ void MFS::configure(int argc, char** argv) {
   cudaGetDeviceCount(&num_gpus);
   cudaDeviceProp dprop[num_gpus];
 
-  if (verbose_flag) {
-    printf("Number of host CPUs:\t%d\n", omp_get_num_procs());
-    printf("Number of CUDA devices:\t%d\n", num_gpus);
+  printf("Number of host CPUs:\t%d\n", omp_get_num_procs());
+  printf("Number of CUDA devices:\t%d\n", num_gpus);
 
-    for (int i = 0; i < num_gpus; i++) {
-      checkCudaErrors(cudaGetDeviceProperties(&dprop[i], i));
-      printf("> GPU%d = \"%15s\" %s capable of Peer-to-Peer (P2P)\n", i,
-             dprop[i].name, (IsGPUCapableP2P(&dprop[i]) ? "IS " : "NOT"));
-      printf("> Memory Clock Rate (KHz): %d\n", dprop[i].memoryClockRate);
-      printf("> Memory Bus Width (bits): %d\n", dprop[i].memoryBusWidth);
-      printf("> Peak Memory Bandwidth (GB/s): %f\n",
-             2.0 * dprop[i].memoryClockRate * (dprop[i].memoryBusWidth / 8) /
-                 1.0e6);
-      printf("> Total Global Memory (GB): %f\n",
-             dprop[i].totalGlobalMem / pow(2, 30));
-      printf("-----------------------------------------------------------\n");
-    }
-    printf("-----------------------------------------------------------\n\n");
+  for (int i = 0; i < num_gpus; i++) {
+    checkCudaErrors(cudaGetDeviceProperties(&dprop[i], i));
+    printf("> GPU%d = \"%15s\" %s capable of Peer-to-Peer (P2P)\n", i,
+           dprop[i].name, (IsGPUCapableP2P(&dprop[i]) ? "IS " : "NOT"));
+    printf("> Memory Clock Rate (KHz): %d\n", dprop[i].memoryClockRate);
+    printf("> Memory Bus Width (bits): %d\n", dprop[i].memoryBusWidth);
+    printf(
+        "> Peak Memory Bandwidth (GB/s): %f\n",
+        2.0 * dprop[i].memoryClockRate * (dprop[i].memoryBusWidth / 8) / 1.0e6);
+    printf("> Total Global Memory (GB): %f\n",
+           dprop[i].totalGlobalMem / pow(2, 30));
+    printf("-----------------------------------------------------------\n");
   }
+  printf("-----------------------------------------------------------\n\n");
 
   // Declaring block size and number of blocks for Image
   if (variables.blockSizeX == -1 && variables.blockSizeY == -1) {
@@ -662,8 +660,8 @@ void MFS::setDevice() {
                dcosines_m_pix_phs);
       }
 
-      datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_ref;
-      datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_ref;
+      datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
+      datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
 
       datasets[d].fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
       datasets[d].fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
@@ -1095,9 +1093,10 @@ void MFS::writeResiduals() {
                                   num_gpus, firstgpu, variables.blockSizeV);
     }
     Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
-    chi2->setCKernel(NULL);
-    float res = chi2->simulateModel(image->getImage());
-    printf("Non-gridded chi2 %f\n", res);
+    float res = chi2->calcFi(image->getImage());
+    printf(
+        "Non-gridded chi2 after de-gridding using bilinear interpolation %f\n",
+        res);
   }
 
   for (int d = 0; d < nMeasurementSets; d++)

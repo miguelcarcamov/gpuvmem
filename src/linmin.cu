@@ -82,7 +82,7 @@ __host__ void linmin(float* p,
 
   *fret = brent(ax, xx, bx, TOL, &xmin, f1dim);
   if (verbose_flag) {
-    printf("xmin = %f\n\n", xmin);
+    printf("Alpha for linear minimization = %f\n\n", xmin);
   }
 
   // GPU MUL AND ADD

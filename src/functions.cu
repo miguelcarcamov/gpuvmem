@@ -1364,10 +1364,10 @@ __host__ void do_gridding(std::vector<Field>& fields,
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].backup_visibilities[i][s].weight.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-#pragma omp parallel for schedule(static, 1) num_threads(gridding)      \
-    shared(g_weights, g_weights_aux, g_Vo) private(                     \
-        j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
-        kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
+#pragma omp parallel for schedule(static, 1) num_threads(gridding)          \
+    shared(g_weights, g_weights_aux, g_Vo) private(                         \
+            j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
+                kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
         for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
              z++) {
           uvw = fields[f].visibilities[i][s].uvw[z];
@@ -1509,6 +1509,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
             if (weight > 0.0f) {
               fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
               fields[f].visibilities[i][s].uvw[l].y = g_uvw[N * k + j].y;
+              fields[f].visibilities[i][s].uvw[l].z = 0.0;
               fields[f].visibilities[i][s].Vo[l] =
                   make_cuFloatComplex(g_Vo[N * k + j].x, g_Vo[N * k + j].y);
               fields[f].visibilities[i][s].weight[l] = g_weights[N * k + j];
@@ -1575,9 +1576,9 @@ __host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv) {
   double uu_minus_vv = s_uu - s_vv;
   double uu_plus_vv = s_uu + s_vv;
   double sqrt_in = sqrt((uu_minus_vv * uu_minus_vv) + 4.0 * uv_square);
-  beam_size.x = 2.0 * sqrt(log(2.0)) / PI_D /
+  beam_size.x = 1.0 / sqrt(2.0) / PI_D /
                 sqrt(uu_plus_vv - sqrt_in);  // Major axis in radians
-  beam_size.y = 2.0 * sqrt(log(2.0)) / PI_D /
+  beam_size.y = 1.0 / sqrt(2.0) / PI_D /
                 sqrt(uu_plus_vv + sqrt_in);             // Minor axis in radians
   beam_size.z = -0.5 * atan2(2.0 * s_uv, uu_minus_vv);  // Angle in radians
 
@@ -2417,8 +2418,8 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
       if (uv.y < 0.0)
         uv.y = uv.y + N;
 
-      j1 = round(uv.x);
-      i1 = round(uv.y);
+      j1 = uv.x;
+      i1 = uv.y;
 
       if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N)
         Vm[i] = V[N * i1 + j1];
@@ -3678,7 +3679,8 @@ __global__ void DChi2(float* noise,
   int y0 = phs_yobs;
   double x = (j - x0) * DELTAX * RPDEG_D;
   double y = (i - y0) * DELTAY * RPDEG_D;
-  // double z = sqrt(1-x*x-y*y)-1;
+  double z = sqrtf(1 - x * x - y * y);
+  double z_minus_one = z - 1.0;
 
   float Ukv, Vkv, Wkv, cosk, sink, atten;
 
@@ -3690,12 +3692,13 @@ __global__ void DChi2(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       Ukv = x * UVW[v].x;
       Vkv = y * UVW[v].y;
-// Wkv = z * UVW[v].z;
+      Wkv = z_minus_one * UVW[v].z;
+
 #if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
+      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
 #else
-      cosk = cospif(2.0 * (Ukv + Vkv));
-      sink = sinpif(2.0 * (Ukv + Vkv));
+      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
+      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
 #endif
       dchi2 += w[v] * ((Vr[v].x * cosk) - (Vr[v].y * sink));
     }
@@ -3733,7 +3736,8 @@ __global__ void DChi2(float* noise,
   int y0 = phs_yobs;
   double x = (j - x0) * DELTAX * RPDEG_D;
   double y = (i - y0) * DELTAY * RPDEG_D;
-  // double z = sqrt(1-x*x-y*y)-1;
+  double z = sqrtf(1 - x * x - y * y);
+  double z_minus_one = z - 1.0;
 
   float Ukv, Vkv, Wkv, cosk, sink, atten, gcf_i;
 
@@ -3745,12 +3749,12 @@ __global__ void DChi2(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       Ukv = x * UVW[v].x;
       Vkv = y * UVW[v].y;
-// Wkv = z * UVW[v].z;
+      Wkv = z_minus_one * UVW[v].z;
 #if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
+      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
 #else
-      cosk = cospif(2.0 * (Ukv + Vkv));
-      sink = sinpif(2.0 * (Ukv + Vkv));
+      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
+      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
 #endif
       dchi2 += w[v] * ((Vr[v].x * cosk) - (Vr[v].y * sink));
     }
@@ -4076,7 +4080,8 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
+#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
+    reduction(+ : resultchi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
         unsigned int j = omp_get_thread_num();
@@ -4122,36 +4127,22 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                          sizeof(float) * max_number_vis));
 
-              if (NULL != ip->getCKernel()) {
-                getGriddedVisFromPix<<<
-                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV>>>(
-                    datasets[d].fields[f].device_visibilities[i][s].Vm,
-                    vars_gpu[gpu_idx].device_V,
-                    datasets[d].fields[f].device_visibilities[i][s].uvw,
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    deltau, deltav,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    N);
-              } else {
-                // BILINEAR INTERPOLATION
-                vis_mod<<<
-                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV>>>(
-                    datasets[d].fields[f].device_visibilities[i][s].Vm,
-                    vars_gpu[gpu_idx].device_V,
-                    datasets[d].fields[f].device_visibilities[i][s].uvw,
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    deltau, deltav,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    N);
-              }
+              // TODO: Here we could just use vis_mod and see what happens
+              // Use always bilinear interpolation since we don't have
+              // degridding yet
+              vis_mod<<<
+                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV>>>(
+                  datasets[d].fields[f].device_visibilities[i][s].Vm,
+                  vars_gpu[gpu_idx].device_V,
+                  datasets[d].fields[f].device_visibilities[i][s].uvw,
+                  datasets[d].fields[f].device_visibilities[i][s].weight,
+                  deltau, deltav,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                  N);
               checkCudaErrors(cudaDeviceSynchronize());
 
               // RESIDUAL CALCULATION
@@ -4211,7 +4202,8 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static,1) num_threads(num_gpus) reduction(+: resultchi2)
+#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
+    reduction(+ : resultchi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
         unsigned int j = omp_get_thread_num();
@@ -4257,36 +4249,21 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                          sizeof(float) * max_number_vis));
 
-              if (NULL != ip->getCKernel()) {
-                getGriddedVisFromPix<<<
-                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV>>>(
-                    datasets[d].fields[f].device_visibilities[i][s].Vm,
-                    vars_gpu[gpu_idx].device_V,
-                    datasets[d].fields[f].device_visibilities[i][s].uvw,
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    deltau, deltav,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    N);
-              } else {
-                // BILINEAR INTERPOLATION
-                vis_mod<<<
-                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV>>>(
-                    datasets[d].fields[f].device_visibilities[i][s].Vm,
-                    vars_gpu[gpu_idx].device_V,
-                    datasets[d].fields[f].device_visibilities[i][s].uvw,
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    deltau, deltav,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    N);
-              }
+              // Use always bilinear interpolation since we don't have
+              // degridding yet
+              vis_mod<<<
+                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV>>>(
+                  datasets[d].fields[f].device_visibilities[i][s].Vm,
+                  vars_gpu[gpu_idx].device_V,
+                  datasets[d].fields[f].device_visibilities[i][s].uvw,
+                  datasets[d].fields[f].device_visibilities[i][s].weight,
+                  deltau, deltav,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                  N);
               checkCudaErrors(cudaDeviceSynchronize());
 
               // RESIDUAL CALCULATION
