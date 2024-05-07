@@ -1,6 +1,7 @@
-cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 project(gpuvmem LANGUAGES C CXX CUDA)
 
+find_package(CUDAToolkit REQUIRED)
 include(CMakePrintHelpers) # In case we need to print any variable
 
 # Set a default build type if not passed
@@ -33,8 +34,6 @@ option(USE_FAST_MATH
        "This option accelerate CUDA math functions decreasing precision")
 if(Boost_FOUND)
   add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
-  # Search the compute capability of the first GPU and add CUDA specific FLAGS
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cuda_check.cmake)
   file(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu)
   target_sources(gpuvmem PRIVATE ${SOURCE_FILES})
   target_compile_features(gpuvmem PUBLIC cxx_std_11)
@@ -62,7 +61,7 @@ if(Boost_FOUND)
            ${CMAKE_CURRENT_SOURCE_DIR}/include
            ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
            ${Boost_INCLUDE_DIRS}
-           ${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc)
+           ${CUDAToolkit_LIBRARY_ROOT}/samples/common/inc)
 
   get_target_property(TEMP gpuvmem COMPILE_FLAGS)
   if(TEMP STREQUAL "TEMP-NOTFOUND")
@@ -71,8 +70,9 @@ if(Boost_FOUND)
     set(TEMP "${TEMP} ") # A space to cleanly separate from existing content
   endif()
 
-  set_property(TARGET gpuvmem PROPERTY CUDA_ARCHITECTURES
-                                       ${CUDA_NVCC_ARCH_FLAGS})
+  message(STATUS "CUDA Architecture: ${CMAKE_CUDA_ARCHITECTURES}")
+  message(STATUS "CUDA Version: ${CUDAToolkit_VERSION}")
+  message(STATUS "CUDA Path: ${CUDAToolkit_LIBRARY_ROOT}")
 
   if(MEMORY_DEBUG)
     message(NOTICE "MEMORY DEBUG IS ON")
