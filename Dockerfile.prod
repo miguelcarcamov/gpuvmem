@@ -7,7 +7,7 @@ RUN --mount=type=secret,id=BRANCH_NAME \
     export BRANCH_NAME=$(cat /run/secrets/BRANCH_NAME) &&\
     echo $BRANCH_NAME
 
-RUN git clone -b ${BRANCH_NAME} https://github.com/miguelcarcamov/gpuvmem.git
+RUN git clone -b "${BRANCH_NAME}" https://github.com/miguelcarcamov/gpuvmem.git
 RUN cd gpuvmem
 RUN cmake . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CONFIG && \
     cd $BUILD_DIR && \
