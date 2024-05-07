@@ -13,28 +13,20 @@ on:
     - '**.hpp'
     - '**.cmake'
     - CMakeLists.txt
+    - Dockerfile.prod
 env:
   REGISTRY: ghcr.io
 
 jobs:
   build-latest-container:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/miguelcarcamov/gpuvmem:base
-      options: --user root
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
-    - name: Compile GPUVMEM
-      env:
-        BUILD_DIR: build
-        CONFIG: Release
-      run: |
-        cmake . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CONFIG
-        cd $BUILD_DIR
-        cmake --build . --target install --verbose -j `nproc`
-        cd ..
-        pip3 install -r requirements.txt
+    - name: Extract branch name
+      shell: bash
+      run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+      id: extract_branch
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v1
       with:
@@ -44,6 +36,8 @@ jobs:
     - name: Build and Push Docker Image
       uses: docker/build-push-action@v5
       with:
-        context: .
+        file: ./Dockerfile.prod
         push: true       # Will only build if this is not here
         tags: ${{ env.REGISTRY }}/${{ github.repository }}:latest
+        secrets: |
+          "BRANCH_NAME=${{steps.extract_branch.outputs.branch}}"
