@@ -1,26 +1,22 @@
-name: build-latest-container
+name: build-tagged-container
 
 on:
-  pull_request:
-    branches: [master]
-    types: [opened, reopened, synchronize, closed]
-    paths:
-    - '**.cu'
-    - '**.cuh'
-    - '**.c'
-    - '**.h'
-    - '**.cpp'
-    - '**.hpp'
-    - '**.cmake'
-    - CMakeLists.txt
-    - Dockerfile.prod
+  push:
+    tags:
+    - '*'
 env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-latest-container:
+  build-tagged-container:
     runs-on: ubuntu-latest
     steps:
+    - name: Get tag
+      id: tag
+      uses: dawidd6/action-get-tag@v1
+      with:
+            # Optionally strip `v` prefix
+        strip_v: true
     - name: Checkout Code
       uses: actions/checkout@v4
     - name: Login to GitHub Container Registry
@@ -33,7 +29,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         file: ./Dockerfile.prod
-        push: true       # Will only build if this is not here
-        tags: ${{ env.REGISTRY }}/${{ github.repository }}:latest
+        push: true             # Will only build if this is not here
+        tags: ${{ env.REGISTRY }}/${{ github.repository }}:${{steps.tag.outputs.tag}}
         secrets: |
           "BRANCH_NAME=${{ github.head_ref || github.ref_name }}"
