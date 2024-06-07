@@ -305,9 +305,6 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
     h_values.beam_noise = aux_noise;
   }
 
-  h_values.DELTAX = fabs(h_values.DELTAX);
-  h_values.DELTAY *= -1.0;
-
   if (close_fits)
     closeFITS(hdu_in);
 
@@ -369,9 +366,6 @@ __host__ headerValues readFITSHeader(const char* filename) {
   if (!status_noise) {
     h_values.beam_noise = aux_noise;
   }
-
-  h_values.DELTAX = fabs(h_values.DELTAX);
-  h_values.DELTAY *= -1.0;
 
   closeFITS(hdu_in);
   return h_values;

@@ -318,7 +318,7 @@ void MFS::configure(int argc, char** argv) {
   double deltau_theo = 2.0 * max_uvmax_wavelength / (M - 1);
   double deltax_theo = 1.0 / (M * deltau_theo) / RPARCSEC;
   printf("The pixel size has to be less or equal to %lf arcsec\n", deltax_theo);
-  printf("Actual pixel size is %lf arcsec\n", DELTAX * 3600.0);
+  printf("Actual pixel size is %lf arcsec\n", fabs(DELTAX) * 3600.0);
 
   if (verbose_flag) {
     for (int i = 0; i < nMeasurementSets; i++) {
@@ -660,11 +660,11 @@ void MFS::setDevice() {
                dcosines_m_pix_phs);
       }
 
-      datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
-      datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
+      datasets[d].fields[f].ref_xobs = dcosines_l_pix_phs + (crpix1 - 1.0f);
+      datasets[d].fields[f].ref_yobs = dcosines_m_pix_phs + (crpix2 - 1.0f);
 
-      datasets[d].fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
-      datasets[d].fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
+      datasets[d].fields[f].phs_xobs = dcosines_l_pix_phs + (crpix1 - 1.0f);
+      datasets[d].fields[f].phs_yobs = dcosines_m_pix_phs + (crpix2 - 1.0f);
 
       if (verbose_flag) {
         printf(
@@ -834,6 +834,7 @@ void MFS::setDevice() {
             true);
       }
     }
+    exit(-1);
   }
 
   cudaSetDevice(firstgpu);

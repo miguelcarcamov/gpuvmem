@@ -2070,8 +2070,8 @@ __global__ void do_griddingGPU(float3* uvw,
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int k, j;
   if (i < visibilities) {
-    j = uvw[i].x / deltau + int(floor(M / 2)) + 0.5;
-    k = uvw[i].y / deltav + int(floor(N / 2)) + 0.5;
+    j = uvw[i].x / deltau + int(floorf(M / 2)) + 0.5;
+    k = uvw[i].y / deltav + int(floorf(N / 2)) + 0.5;
 
     if (k < M && j < N) {
       atomicAdd(&Vo_g[N * k + j].x, w[i] * Vo[i].x);
@@ -2195,6 +2195,9 @@ __device__ float attenuation(float antenna_diameter,
   int y0 = yobs;
   float x = (j - x0) * DELTAX * RPDEG_D;
   float y = (i - y0) * DELTAY * RPDEG_D;
+
+  printf("x: %f\n", x);
+  printf("y: %f\n", y);
 
   float arc = distance(x, y, 0.0, 0.0);
   float lambda = freq_to_wavelength(freq);
@@ -3642,7 +3645,7 @@ __global__ void DChi2_SharedMemory(float* noise,
       sink = sinpif(2.0 * (Ukv + Vkv));
 #endif
       dchi2 +=
-          w_shared[v] * ((Vr_shared[v].x * cosk) - (Vr_shared[v].y * sink));
+          w_shared[v] * ((Vr_shared[v].x * cosk) + (Vr_shared[v].y * sink));
     }
 
     dchi2 *= fg_scale * atten;
@@ -3698,7 +3701,7 @@ __global__ void DChi2(float* noise,
       cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
       sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
 #endif
-      dchi2 += w[v] * ((Vr[v].x * cosk) - (Vr[v].y * sink));
+      dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
     }
 
     dchi2 *= fg_scale * atten;
@@ -3754,7 +3757,7 @@ __global__ void DChi2(float* noise,
       cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
       sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
 #endif
-      dchi2 += w[v] * ((Vr[v].x * cosk) - (Vr[v].y * sink));
+      dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
     }
 
     dchi2 *= fg_scale * atten * gcf_i;
