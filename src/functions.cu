@@ -1385,7 +1385,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
           uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
 
           // Apply hermitian symmetry (it will be applied afterwards)
-          if (uvw.x < 0.0) {
+          if (uvw.x > 0.0) {
             uvw.x *= -1.0;
             uvw.y *= -1.0;
             Vo = cuConjf(Vo);
@@ -1393,8 +1393,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
 
           grid_pos_x = uvw.x / deltau;
           grid_pos_y = uvw.y / deltav;
-          j = grid_pos_x + N / 2;
-          k = grid_pos_y + M / 2;
+          j = grid_pos_x + int(floor(N / 2)) + 0.5;
+          k = grid_pos_y + int(floor(M / 2)) + 0.5;
 
           for (int m = -ckernel->getSupportY(); m <= ckernel->getSupportY();
                m++) {
@@ -1447,10 +1447,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
     shared(g_weights, g_weights_aux, g_Vo, g_uvw)
         for (int k = 0; k < M; k++) {
           for (int j = 0; j < N; j++) {
-            double deltau_meters =
-                fabs(deltau) * freq_to_wavelength(fields[f].nu[i]);
-            double deltav_meters =
-                fabs(deltav) * freq_to_wavelength(fields[f].nu[i]);
+            double deltau_meters = deltau * freq_to_wavelength(fields[f].nu[i]);
+            double deltav_meters = deltav * freq_to_wavelength(fields[f].nu[i]);
 
             double u_meters = (j - (N / 2)) * deltau_meters;
             double v_meters = (k - (M / 2)) * deltav_meters;
@@ -1711,8 +1709,8 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
                             long N,
                             int numvis) {
   float lambda = freq_to_wavelength(freq);
-  double deltau_meters = fabs(deltau) * lambda;
-  double deltav_meters = fabs(deltav) * lambda;
+  double deltau_meters = deltau * lambda;
+  double deltav_meters = deltav * lambda;
 
   cufftComplex complex_zero = floatComplexZero();
 
@@ -1723,8 +1721,8 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
   for (int i = 0; i < numvis; i++) {
     grid_pos_x = uvw_gridded_sp[i].x / deltau_meters;
     grid_pos_y = uvw_gridded_sp[i].y / deltav_meters;
-    j = grid_pos_x + N / 2;
-    k = grid_pos_y + M / 2;
+    j = grid_pos_x + int(floor(N / 2)) + 0.5;
+    k = grid_pos_y + int(floor(M / 2)) + 0.5;
     Vm_gridded[N * k + j] = Vm_gridded_sp[i];
   }
 }
@@ -2072,8 +2070,8 @@ __global__ void do_griddingGPU(float3* uvw,
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int k, j;
   if (i < visibilities) {
-    j = round(uvw[i].x / fabs(deltau) + M / 2);
-    k = round(uvw[i].y / fabs(deltav) + N / 2);
+    j = uvw[i].x / deltau + int(floor(M / 2)) + 0.5;
+    k = uvw[i].y / deltav + int(floor(N / 2)) + 0.5;
 
     if (k < M && j < N) {
       atomicAdd(&Vo_g[N * k + j].x, w[i] * Vo[i].x);
@@ -2105,8 +2103,8 @@ __global__ void degriddingGPU(double3* uvw,
   float ckernel_result;
 
   if (i < visibilities) {
-    j = round(uvw[i].x / fabs(deltau) + N / 2);
-    k = round(uvw[i].y / fabs(deltav) + M / 2);
+    j = uvw[i].x / deltau + int(floorf(N / 2)) + 0.5;
+    k = uvw[i].y / deltav + int(floorf(M / 2)) + 0.5;
 
     for (int m = -supportY; m <= supportY; m++) {
       for (int n = -supportX; n <= supportX; n++) {
@@ -2141,7 +2139,7 @@ __global__ void hermitianSymmetry(double3* UVW,
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
-    if (UVW[i].x < 0.0) {
+    if (UVW[i].x > 0.0) {
       UVW[i].x *= -1.0;
       UVW[i].y *= -1.0;
       // UVW[i].z *= -1.0;
@@ -2382,7 +2380,7 @@ __global__ void phase_rotate(cufftComplex* data,
     v = vpix * (i - N);
   }
 
-  phase = 2.0f * (u + v);
+  phase = -2.0f * (u + v);
 #if (__CUDA_ARCH__ >= 300)
   sincospif(phase, &s, &c);
 #else
@@ -2413,10 +2411,10 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
 
     if (fabs(uv.x) < N / 2 && fabs(uv.y) < N / 2) {
       if (uv.x < 0.0)
-        uv.x = uv.x + N;
+        uv.x = uv.x + N + 0.5;
 
       if (uv.y < 0.0)
-        uv.y = uv.y + N;
+        uv.y = uv.y + N + 0.5;
 
       j1 = uv.x;
       i1 = uv.y;
@@ -2452,15 +2450,15 @@ __global__ void vis_mod(cufftComplex* Vm,
   float Zimag;
 
   if (i < numVisibilities) {
-    uv.x = UVW[i].x / fabs(deltau);
+    uv.x = UVW[i].x / deltau;
     uv.y = UVW[i].y / deltav;
 
     if (fabs(uv.x) < N / 2 && fabs(uv.y) < N / 2) {
       if (uv.x < 0.0)
-        uv.x = uv.x + N;
+        uv.x = uv.x + N + 0.5;
 
       if (uv.y < 0.0)
-        uv.y = uv.y + N;
+        uv.y = uv.y + N + 0.5;
 
       i1 = uv.x;
       i2 = (i1 + 1) % N;
@@ -2511,15 +2509,15 @@ __global__ void vis_mod2(cufftComplex* Vm,
   cufftComplex Z;
 
   if (i < numVisibilities) {
-    uv.x = UVW[i].x / fabs(deltau);
-    uv.y = UVW[i].y / fabs(deltav);
+    uv.x = UVW[i].x / deltau;
+    uv.y = UVW[i].y / deltav;
 
-    f_j = uv.x + N / 2;
+    f_j = uv.x + int(floorf(N / 2)) + 0.5;
     j1 = f_j;
     j2 = j1 + 1;
     f_j = f_j - j1;
 
-    f_k = uv.y + N / 2;
+    f_k = uv.y + +int(floorf(N / 2)) + 0.5;
     k1 = f_k;
     k2 = k1 + 1;
     f_k = f_k - k1;
@@ -4109,7 +4107,7 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
         }
         // FFT 2D
         FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
-              vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
+              vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, false);
 
         // PHASE_ROTATE
         phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
@@ -4231,7 +4229,7 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
         }
         // FFT 2D
         FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
-              vars_gpu[gpu_idx].plan, M, N, CUFFT_FORWARD, false);
+              vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, false);
 
         // PHASE_ROTATE
         phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
