@@ -2196,9 +2196,6 @@ __device__ float attenuation(float antenna_diameter,
   float x = (j - x0) * DELTAX * RPDEG_D;
   float y = (i - y0) * DELTAY * RPDEG_D;
 
-  printf("x: %f\n", x);
-  printf("y: %f\n", y);
-
   float arc = distance(x, y, 0.0, 0.0);
   float lambda = freq_to_wavelength(freq);
   atten = (*beam_maps[primary_beam])(arc, lambda, antenna_diameter, pb_factor);

@@ -70,13 +70,15 @@ if(Boost_FOUND)
     set(TEMP "${TEMP} ") # A space to cleanly separate from existing content
   endif()
 
+  # Find CUDA architecture
   include(FindCUDA/select_compute_arch)
   cuda_detect_installed_gpus(INSTALLED_GPU_CCS_1)
   string(STRIP "${INSTALLED_GPU_CCS_1}" INSTALLED_GPU_CCS_2)
   string(REPLACE " " ";" INSTALLED_GPU_CCS_3 "${INSTALLED_GPU_CCS_2}")
   string(REPLACE "." "" CUDA_ARCH_LIST "${INSTALLED_GPU_CCS_3}")
   set(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_LIST})
-  set_property(GLOBAL PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
+  set_target_properties(gpuvmem PROPERTIES CUDA_ARCHITECTURES
+                                           "${CUDA_ARCH_LIST}")
 
   message(STATUS "CUDA Architecture: ${CMAKE_CUDA_ARCHITECTURES}")
   message(STATUS "CUDA Version: ${CUDAToolkit_VERSION}")
