@@ -834,7 +834,6 @@ void MFS::setDevice() {
             true);
       }
     }
-    exit(-1);
   }
 
   cudaSetDevice(firstgpu);
