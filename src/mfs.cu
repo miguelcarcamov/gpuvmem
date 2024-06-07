@@ -647,11 +647,11 @@ void MFS::setDevice() {
       direccos(datasets[d].fields[f].phs_ra, datasets[d].fields[f].phs_dec,
                raimage, decimage, &lphs, &mphs);
 
-      dcosines_l_pix_ref = lobs / -deltax;       // Radians to pixels
-      dcosines_m_pix_ref = mobs / fabs(deltay);  // Radians to pixels
+      dcosines_l_pix_ref = lobs / deltax;  // Radians to pixels
+      dcosines_m_pix_ref = mobs / deltay;  // Radians to pixels
 
-      dcosines_l_pix_phs = lphs / -deltax;       // Radians to pixels
-      dcosines_m_pix_phs = mphs / fabs(deltay);  // Radians to pixels
+      dcosines_l_pix_phs = lphs / deltax;  // Radians to pixels
+      dcosines_m_pix_phs = mphs / deltay;  // Radians to pixels
 
       if (verbose_flag) {
         printf("Ref: l (pix): %e, m (pix): %e\n", dcosines_l_pix_ref,

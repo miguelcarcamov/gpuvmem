@@ -1391,8 +1391,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
             Vo = cuConjf(Vo);
           }
 
-          grid_pos_x = uvw.x / fabs(deltau);
-          grid_pos_y = uvw.y / fabs(deltav);
+          grid_pos_x = uvw.x / deltau;
+          grid_pos_y = uvw.y / deltav;
           j = grid_pos_x + N / 2;
           k = grid_pos_y + M / 2;
 
