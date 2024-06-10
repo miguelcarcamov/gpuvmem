@@ -21,7 +21,6 @@ dependencies:
   - casaviewer==2.1.4
   - casashell==6.6.4.34
   - casaplotserver==1.8.2
-  - almatasks==1.7.1
   - casatestutils==6.6.4.34
   - casatablebrowser==0.0.35
   - casalogger==1.0.19
