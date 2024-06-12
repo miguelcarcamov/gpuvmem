@@ -2453,12 +2453,12 @@ __global__ void vis_mod(cufftComplex* Vm,
     uv.x = UVW[i].x / deltau;
     uv.y = UVW[i].y / deltav;
 
-    if (fabs(uv.x) < N / 2 && fabs(uv.y) < N / 2) {
+    if (fabs(uv.x) < (N / 2) + 0.5 && fabs(uv.y) < (N / 2) + 0.5) {
       if (uv.x < 0.0)
-        uv.x = uv.x + N + 0.5;
+        uv.x = uv.x + N;
 
       if (uv.y < 0.0)
-        uv.y = uv.y + N + 0.5;
+        uv.y = uv.y + N;
 
       i1 = uv.x;
       i2 = (i1 + 1) % N;
