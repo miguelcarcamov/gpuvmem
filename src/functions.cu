@@ -4112,8 +4112,8 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
         // PHASE_ROTATE
         phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
             vars_gpu[gpu_idx].device_V, M, N,
-            datasets[d].fields[f].phs_xobs_cartesian,
-            datasets[d].fields[f].phs_yobs_cartesian);
+            datasets[d].fields[f].phs_xobs_pix,
+            datasets[d].fields[f].phs_yobs_pix);
         checkCudaErrors(cudaDeviceSynchronize());
 
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
@@ -4236,8 +4236,8 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
         // PHASE_ROTATE
         phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
             vars_gpu[gpu_idx].device_V, M, N,
-            datasets[d].fields[f].phs_xobs_cartesian,
-            datasets[d].fields[f].phs_yobs_cartesian);
+            datasets[d].fields[f].phs_xobs_pix,
+            datasets[d].fields[f].phs_yobs_pix);
         checkCudaErrors(cudaDeviceSynchronize());
 
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
