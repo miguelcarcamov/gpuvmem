@@ -659,46 +659,55 @@ void MFS::setDevice() {
         printf("Phase: l (pix): %e, m (pix): %e\n", dcosines_l_pix_phs,
                dcosines_m_pix_phs);
       }
+      datasets[d].fields[f].ref_xobs_cartesian = dcosines_l_pix_phs;
+      datasets[d].fields[f].ref_yobs_cartesian = dcosines_m_pix_phs;
 
-      datasets[d].fields[f].ref_xobs = dcosines_l_pix_phs + (crpix1 - 1.0f);
-      datasets[d].fields[f].ref_yobs = dcosines_m_pix_phs + (crpix2 - 1.0f);
+      datasets[d].fields[f].phs_xobs_cartesian = dcosines_l_pix_phs;
+      datasets[d].fields[f].phs_yobs_cartesian = dcosines_m_pix_phs;
 
-      datasets[d].fields[f].phs_xobs = dcosines_l_pix_phs + (crpix1 - 1.0f);
-      datasets[d].fields[f].phs_yobs = dcosines_m_pix_phs + (crpix2 - 1.0f);
+      datasets[d].fields[f].ref_xobs_pix = dcosines_l_pix_phs + (crpix1 - 1.0f);
+      datasets[d].fields[f].ref_yobs_pix = dcosines_m_pix_phs + (crpix2 - 1.0f);
+
+      datasets[d].fields[f].phs_xobs_pix = dcosines_l_pix_phs + (crpix1 - 1.0f);
+      datasets[d].fields[f].phs_yobs_pix = dcosines_m_pix_phs + (crpix2 - 1.0f);
 
       if (verbose_flag) {
         printf(
             "Ref: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), "
             "y0: %f (pix)\n",
             f, datasets[d].fields[f].ref_ra, datasets[d].fields[f].ref_dec,
-            datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs);
+            datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix);
         printf(
             "Phase: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f "
             "(pix), y0: %f (pix)\n",
             f, datasets[d].fields[f].phs_ra, datasets[d].fields[f].phs_dec,
-            datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
+            datasets[d].fields[f].phs_xobs_pix,
+            datasets[d].fields[f].phs_yobs_pix);
       }
 
-      if (datasets[d].fields[f].ref_xobs < 0 ||
-          datasets[d].fields[f].ref_xobs >= M ||
-          datasets[d].fields[f].ref_xobs < 0 ||
-          datasets[d].fields[f].ref_yobs >= N) {
+      if (datasets[d].fields[f].ref_xobs_pix < 0 ||
+          datasets[d].fields[f].ref_xobs_pix >= M ||
+          datasets[d].fields[f].ref_xobs_pix < 0 ||
+          datasets[d].fields[f].ref_yobs_pix >= N) {
         printf("Dataset: %s\n", datasets[d].name);
         printf(
             "Pointing reference center (%f,%f) is outside the range of the "
             "image\n",
-            datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs);
+            datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix);
         goToError();
       }
 
-      if (datasets[d].fields[f].phs_xobs < 0 ||
-          datasets[d].fields[f].phs_xobs >= M ||
-          datasets[d].fields[f].phs_xobs < 0 ||
-          datasets[d].fields[f].phs_yobs >= N) {
+      if (datasets[d].fields[f].phs_xobs_pix < 0 ||
+          datasets[d].fields[f].phs_xobs_pix >= M ||
+          datasets[d].fields[f].phs_xobs_pix < 0 ||
+          datasets[d].fields[f].phs_yobs_pix >= N) {
         printf("Dataset: %s\n", datasets[d].name);
         printf(
             "Pointing phase center (%f,%f) is outside the range of the image\n",
-            datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
+            datasets[d].fields[f].phs_xobs_pix,
+            datasets[d].fields[f].phs_yobs_pix);
         goToError();
       }
     }
@@ -823,8 +832,9 @@ void MFS::setDevice() {
           datasets[d].fields[f].atten_image,
           datasets[d].antennas[0].antenna_diameter,
           datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff,
-          nu_0, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs,
-          DELTAX, DELTAY, N, datasets[d].antennas[0].primary_beam);
+          nu_0, datasets[d].fields[f].ref_xobs_pix,
+          datasets[d].fields[f].ref_yobs_pix, DELTAX, DELTAY, N,
+          datasets[d].antennas[0].primary_beam);
       checkCudaErrors(cudaDeviceSynchronize());
 
       if (print_images) {
@@ -846,8 +856,8 @@ void MFS::setDevice() {
 
       if (radius_mask) {
         distance_image<<<numBlocksNN, threadsPerBlockNN>>>(
-            device_distance_image, datasets[d].fields[f].ref_xobs,
-            datasets[d].fields[f].ref_yobs, 4.5e-05, DELTAX, DELTAY, N);
+            device_distance_image, datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix, 4.5e-05, DELTAX, DELTAY, N);
         checkCudaErrors(cudaDeviceSynchronize());
       }
     }
