@@ -4121,19 +4121,35 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
               // TODO: Here we could just use vis_mod and see what happens
               // Use always bilinear interpolation since we don't have
               // degridding yet
-              vis_mod<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  vars_gpu[gpu_idx].device_V,
-                  datasets[d].fields[f].device_visibilities[i][s].uvw,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  deltau, deltav,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  N);
+              if (ip->getCKernel() == = NULL)
+                vis_mod<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    N);
+              else
+                getGriddedVisFromPix<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    N);
+
               checkCudaErrors(cudaDeviceSynchronize());
 
               // RESIDUAL CALCULATION
@@ -4244,19 +4260,34 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
 
               // Use always bilinear interpolation since we don't have
               // degridding yet
-              vis_mod<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  vars_gpu[gpu_idx].device_V,
-                  datasets[d].fields[f].device_visibilities[i][s].uvw,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  deltau, deltav,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  N);
+              if (ip->getCKernel() == = NULL)
+                vis_mod<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    N);
+              else
+                getGriddedVisFromPix<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    N);
               checkCudaErrors(cudaDeviceSynchronize());
 
               // RESIDUAL CALCULATION
