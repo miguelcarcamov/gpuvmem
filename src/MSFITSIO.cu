@@ -1111,7 +1111,7 @@ __host__ void modelToHost(std::vector<Field>& fields,
                        cudaMemcpyDeviceToHost));
         for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
              j++) {
-          if (fields[f].visibilities[i][s].uvw[j].x < 0) {
+          if (fields[f].visibilities[i][s].uvw[j].x > 0) {
             fields[f].visibilities[i][s].Vm[j] =
                 cuConjf(fields[f].visibilities[i][s].Vm[j]);
           }
