@@ -4121,7 +4121,7 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
               // TODO: Here we could just use vis_mod and see what happens
               // Use always bilinear interpolation since we don't have
               // degridding yet
-              if (ip->getCKernel() == = NULL)
+              if (NULL == ip->getCKernel())
                 vis_mod<<<
                     datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                     datasets[d]
@@ -4260,7 +4260,7 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
 
               // Use always bilinear interpolation since we don't have
               // degridding yet
-              if (ip->getCKernel() == = NULL)
+              if (NULL == ip->getCKernel())
                 vis_mod<<<
                     datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                     datasets[d]
