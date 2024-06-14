@@ -1450,8 +1450,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
             double u_lambdas = (j - int(floor((N / 2)))) * deltau;
             double v_lambdas = (k - int(floor((M / 2)))) * deltav;
 
-            double u_meters = u_lambdas * freq_to_wavelength(data->ref_freq);
-            double v_meters = v_lambdas * freq_to_wavelength(data->ref_freq);
+            double u_meters = u_lambdas * freq_to_wavelength(data->max_freq);
+            double v_meters = v_lambdas * freq_to_wavelength(data->max_freq);
 
             g_uvw[N * k + j].x = u_meters;
             g_uvw[N * k + j].y = v_meters;
