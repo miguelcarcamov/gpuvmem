@@ -1447,7 +1447,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
     shared(g_weights, g_weights_aux, g_Vo, g_uvw)
         for (int k = 0; k < M; k++) {
           for (int j = 0; j < N; j++) {
-            double u_lambdas = (j - int(floor((N / 2)))) * deltau;
+            double u_lambdas = (j - int(floor((N / 2)))) * fabs(deltau);
             double v_lambdas = (k - int(floor((M / 2)))) * deltav;
 
             double u_meters = u_lambdas * freq_to_wavelength(data->max_freq);
