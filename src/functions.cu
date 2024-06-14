@@ -2411,13 +2411,9 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
 
     if (uv.x < 0.0)
       uv.x += N;
-    else
-      uv.x += 0.5;
 
     if (uv.y < 0.0)
       uv.y += N;
-    else
-      uv.y += 0.5;
 
     j1 = uv.x;
     i1 = uv.y;
@@ -2454,13 +2450,9 @@ __global__ void vis_mod(cufftComplex* Vm,
 
     if (uv.x < 0.0)
       uv.x += N;
-    else
-      uv.x += 0.5;
 
     if (uv.y < 0.0)
       uv.y += N;
-    else
-      uv.y += 0.5;
 
     i1 = uv.x;
     i2 = (i1 + 1) % N;
