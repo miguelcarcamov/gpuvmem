@@ -1447,8 +1447,8 @@ __host__ void do_gridding(std::vector<Field>& fields,
     shared(g_weights, g_weights_aux, g_Vo, g_uvw)
         for (int k = 0; k < M; k++) {
           for (int j = 0; j < N; j++) {
-            double u_lambdas = (j - int(floor((N / 2)))) * deltau;
-            double v_lambdas = (k - int(floor((M / 2)))) * deltav;
+            double u_lambdas = (j - int(floor(N / 2))) * deltau;
+            double v_lambdas = (k - int(floor(M / 2))) * deltav;
 
             double u_meters = u_lambdas * freq_to_wavelength(data->max_freq);
             double v_meters = v_lambdas * freq_to_wavelength(data->max_freq);
@@ -1482,7 +1482,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
         int visCounter = 0;
 #pragma omp parallel for shared(g_weights) reduction(+ : visCounter)
         for (int k = 0; k < M; k++) {
-          for (int j = N / 2; j < N; j++) {
+          for (int j = int(floor(N / 2)); j < N; j++) {
             float weight = g_weights[N * k + j];
             if (weight > 0.0f) {
               visCounter++;
@@ -1502,7 +1502,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
         int l = 0;
         float weight;
         for (int k = 0; k < M; k++) {
-          for (int j = N / 2; j < N; j++) {
+          for (int j = int(floor(N / 2)); j < N; j++) {
             weight = g_weights[N * k + j];
             if (weight > 0.0f) {
               fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
@@ -1721,8 +1721,8 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
   for (int i = 0; i < numvis; i++) {
     grid_pos_x = uvw_gridded_sp[i].x / deltau_meters;
     grid_pos_y = uvw_gridded_sp[i].y / deltav_meters;
-    j = grid_pos_x + int(floor(N / 2)) + 0.5;
-    k = grid_pos_y + int(floor(M / 2)) + 0.5;
+    j = grid_pos_x + int(floor(N / 2));
+    k = grid_pos_y + int(floor(M / 2));
     Vm_gridded[N * k + j] = Vm_gridded_sp[i];
   }
 }
