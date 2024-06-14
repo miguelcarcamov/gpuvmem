@@ -1447,11 +1447,11 @@ __host__ void do_gridding(std::vector<Field>& fields,
     shared(g_weights, g_weights_aux, g_Vo, g_uvw)
         for (int k = 0; k < M; k++) {
           for (int j = 0; j < N; j++) {
-            double deltau_meters = deltau * freq_to_wavelength(fields[f].nu[i]);
-            double deltav_meters = deltav * freq_to_wavelength(fields[f].nu[i]);
+            double u_lambdas = (j - int(floor((N / 2)))) * deltau;
+            double v_lambdas = (k - int(floor((M / 2)))) * deltav;
 
-            double u_meters = (j - int(floor((N / 2)))) * deltau_meters;
-            double v_meters = (k - int(floor((M / 2)))) * deltav_meters;
+            double u_meters = u_lambdas * freq_to_wavelength(fields[f].nu[i]);
+            double v_meters = v_lambdas * freq_to_wavelength(fields[f].nu[i]);
 
             g_uvw[N * k + j].x = u_meters;
             g_uvw[N * k + j].y = v_meters;
