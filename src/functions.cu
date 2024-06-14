@@ -2406,7 +2406,7 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
   double2 uv;
 
   if (i < numVisibilities) {
-    uv.x = UVW[i].x / fabs(deltau);
+    uv.x = UVW[i].x / deltau;
     uv.y = UVW[i].y / deltav;
 
     if (uv.x < 0.0)
@@ -2503,12 +2503,12 @@ __global__ void vis_mod2(cufftComplex* Vm,
     uv.x = UVW[i].x / deltau;
     uv.y = UVW[i].y / deltav;
 
-    f_j = uv.x + int(floorf(N / 2)) + 0.5;
+    f_j = uv.x + int(floorf(N / 2));
     j1 = f_j;
     j2 = j1 + 1;
     f_j = f_j - j1;
 
-    f_k = uv.y + +int(floorf(N / 2)) + 0.5;
+    f_k = uv.y + int(floorf(N / 2));
     k1 = f_k;
     k2 = k1 + 1;
     f_k = f_k - k1;
