@@ -1385,11 +1385,6 @@ __host__ void do_gridding(std::vector<Field>& fields,
           uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
 
           // Apply hermitian symmetry (it will be applied afterwards)
-          if (uvw.x > 0.0) {
-            uvw.x *= -1.0;
-            uvw.y *= -1.0;
-            Vo = cuConjf(Vo);
-          }
 
           grid_pos_x = uvw.x / deltau;
           grid_pos_y = uvw.y / deltav;
@@ -1412,24 +1407,13 @@ __host__ void do_gridding(std::vector<Field>& fields,
                       shifted_j < N) {
                     ckernel_result =
                         ckernel->getKernelValue(kernel_i, kernel_j);
-                    if (shifted_j >= N / 2) {
-                      g_Vo[N * shifted_k + shifted_j].x +=
-                          w * Vo.x * ckernel_result;
-                      g_Vo[N * shifted_k + shifted_j].y +=
-                          w * Vo.y * ckernel_result;
-                      g_weights[N * shifted_k + shifted_j] +=
-                          w * ckernel_result;
-                      g_weights_aux[N * shifted_k + shifted_j] +=
-                          w * ckernel_result * ckernel_result;
-                    } else {
-                      herm_j = N - shifted_j;
-                      herm_k = M - shifted_k;
-                      g_Vo[N * herm_k + herm_j].x += w * Vo.x * ckernel_result;
-                      g_Vo[N * herm_k + herm_j].y -= w * Vo.y * ckernel_result;
-                      g_weights[N * herm_k + herm_j] += w * ckernel_result;
-                      g_weights_aux[N * herm_k + herm_j] +=
-                          w * ckernel_result * ckernel_result;
-                    }
+                    g_Vo[N * shifted_k + shifted_j].x +=
+                        w * Vo.x * ckernel_result;
+                    g_Vo[N * shifted_k + shifted_j].y +=
+                        w * Vo.y * ckernel_result;
+                    g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
+                    g_weights_aux[N * shifted_k + shifted_j] +=
+                        w * ckernel_result * ckernel_result;
                   }
                 }
               }
@@ -1482,7 +1466,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
         int visCounter = 0;
 #pragma omp parallel for shared(g_weights) reduction(+ : visCounter)
         for (int k = 0; k < M; k++) {
-          for (int j = int(floor(N / 2)); j < N; j++) {
+          for (int j = 0; j < N; j++) {
             float weight = g_weights[N * k + j];
             if (weight > 0.0f) {
               visCounter++;
@@ -1502,7 +1486,7 @@ __host__ void do_gridding(std::vector<Field>& fields,
         int l = 0;
         float weight;
         for (int k = 0; k < M; k++) {
-          for (int j = int(floor(N / 2)); j < N; j++) {
+          for (int j = 0; j < N; j++) {
             weight = g_weights[N * k + j];
             if (weight > 0.0f) {
               fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
