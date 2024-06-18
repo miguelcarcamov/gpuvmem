@@ -461,7 +461,8 @@ __host__ void readMS(const char* MS_name,
                           "/POLARIZATION where !FLAG_ROW AND ANY(ROWID()==[" +
                           pol_aux_query + "])";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
-  cout << "Polarization table has " << polarization_tab.nrow() << " columns";
+  std::cout << "Polarization table has " << polarization_tab.nrow()
+            << " columns";
 
   std::string antenna_tab_query =
       "select POSITION,DISH_DIAMETER,NAME,STATION FROM " + dir +
