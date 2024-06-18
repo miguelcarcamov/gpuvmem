@@ -444,8 +444,8 @@ __host__ void readMS(const char* MS_name,
                           " WHERE !FLAG_ROW AND ANY(WEIGHT > 0) AND ANY(!FLAG) "
                           "ORDER BY UNIQUE DATA_DESC_ID";
   std::string second_aux_query =
-      "select SPECTRAL_WINDOW_ID, ROWID() as ID FROM " + dir +
-      "/DATA_DESCRIPTION where !FLAG_ROW and ID==[" + aux_query + "]";
+      "select SPECTRAL_WINDOW_ID FROM " + dir +
+      "/DATA_DESCRIPTION where !FLAG_ROW AND ANY(ROWID()==[" + aux_query + "])";
   std::string spw_query =
       "select NUM_CHAN,CHAN_FREQ,ROWID() AS ID FROM " + dir +
       "/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==[" + second_aux_query +
