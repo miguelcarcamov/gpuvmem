@@ -449,6 +449,7 @@ __host__ void readMS(const char* MS_name,
       casacore::tableCommand(spw_query.c_str()));
   std::cout << "Spectral window table has " << spectral_window_tab.nrow()
             << " rows";
+  printf("Spectral window tab created");
 
   std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
                               "/DATA_DESCRIPTION where !FLAG_ROW";
@@ -457,6 +458,7 @@ __host__ void readMS(const char* MS_name,
                           pol_aux_query + "]";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
   std::cout << "Polarization table has " << polarization_tab.nrow() << " rows";
+  printf("Polarization tab created");
 
   std::string antenna_tab_query =
       "select POSITION,DISH_DIAMETER,NAME,STATION FROM " + dir +
