@@ -443,9 +443,10 @@ __host__ void readMS(const char* MS_name,
   std::string aux_query = "select DATA_DESC_ID FROM " + dir +
                           " WHERE !FLAG_ROW AND ANY(WEIGHT > 0) AND ANY(!FLAG) "
                           "ORDER BY UNIQUE DATA_DESC_ID";
-  std::string aux_spectral_query =
-      "select SPECTRAL_WINDOW_ID FROM " + dir +
-      "/DATA_DESCRIPTION where !FLAG_ROW AND ANY(ROWID()==[" + aux_query + "])";
+
+  std::string aux_spectral_query = "select SPECTRAL_WINDOW_ID FROM " + dir +
+                                   "/DATA_DESCRIPTION where ANY(ROWID()==[" +
+                                   aux_query + "])";
   std::string spw_query =
       "select NUM_CHAN,CHAN_FREQ FROM " + dir +
       "/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==[" +
@@ -453,13 +454,14 @@ __host__ void readMS(const char* MS_name,
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
 
-  std::string pol_aux_query =
-      "select POLARIZATION_ID FROM " + dir +
-      "/DATA_DESCRIPTION where !FLAG_ROW AND ANY(ROWID()==[" + aux_query + "])";
+  std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
+                              "/DATA_DESCRIPTION where ANY(ROWID()==[" +
+                              aux_query + "])";
   std::string pol_query = "select NUM_CORR,CORR_TYPE FROM " + dir +
-                          "/POLARIZATION where ANY(ROWID()==[" + pol_aux_query +
-                          "]) and !FLAG_ROW";
+                          "/POLARIZATION where !FLAG_ROW AND ANY(ROWID()==[" +
+                          pol_aux_query + "])";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
+  cout << "Polarization table has " << polarization_tab.nrow() << " columns";
 
   std::string antenna_tab_query =
       "select POSITION,DISH_DIAMETER,NAME,STATION FROM " + dir +
