@@ -449,7 +449,6 @@ __host__ void readMS(const char* MS_name,
       casacore::tableCommand(spw_query.c_str()));
   std::cout << "Spectral window table has " << spectral_window_tab.nrow()
             << " rows";
-  printf("Spectral window tab created");
 
   std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
                               "/DATA_DESCRIPTION where !FLAG_ROW";
@@ -458,7 +457,6 @@ __host__ void readMS(const char* MS_name,
                           pol_aux_query + "]";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
   std::cout << "Polarization table has " << polarization_tab.nrow() << " rows";
-  printf("Polarization tab created");
 
   std::string antenna_tab_query =
       "select POSITION,DISH_DIAMETER,NAME,STATION FROM " + dir +
@@ -566,11 +564,11 @@ __host__ void readMS(const char* MS_name,
     fields[f].phs_dec = pointing_phs[1];
   }
 
-  casacore::ROScalarColumn<casacore::Int64> ncorr_col(polarization_tab,
-                                                      "NUM_CORR");
+  casacore::ROScalarColumn<casacore::Int> ncorr_col(polarization_tab,
+                                                    "NUM_CORR");
   data->nstokes = ncorr_col(0);
-  casacore::ROArrayColumn<casacore::Int64> correlation_col(polarization_tab,
-                                                           "CORR_TYPE");
+  casacore::ROArrayColumn<casacore::Int> correlation_col(polarization_tab,
+                                                         "CORR_TYPE");
   casacore::Vector<casacore::Int64> polarizations = correlation_col(0);
 
   for (int i = 0; i < data->nstokes; i++) {
