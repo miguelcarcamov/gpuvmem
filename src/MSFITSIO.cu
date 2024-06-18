@@ -455,8 +455,8 @@ __host__ void readMS(const char* MS_name,
 
   std::string pol_query =
       "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM " + dir +
-      "/POLARIZATION where [select from " + dir +
-      "/DATA_DESCRIPTION where POLARIZATION_ID=ID] and !FLAG_ROW";
+      "/POLARIZATION where ANY(ID==[select POLARIZATION_ID from " + dir +
+      "/DATA_DESCRIPTION where !FLAG_ROW]) and !FLAG_ROW";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
 
   std::string antenna_tab_query =
