@@ -449,7 +449,7 @@ __host__ void readMS(const char* MS_name,
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
   std::cout << "Spectral window table has " << spectral_window_tab.nrow()
-            << " rows";
+            << " valid rows";
 
   std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
                               "/DATA_DESCRIPTION where !FLAG_ROW";
@@ -457,7 +457,8 @@ __host__ void readMS(const char* MS_name,
       "select NUM_CORR,CORR_TYPE,ROWID() as ID FROM " + dir +
       "/POLARIZATION where !FLAG_ROW AND ROWID() in [" + pol_aux_query + "]";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
-  std::cout << "Polarization table has " << polarization_tab.nrow() << " rows";
+  std::cout << "Polarization table has " << polarization_tab.nrow()
+            << " valid rows";
 
   std::string antenna_tab_query =
       "select POSITION,DISH_DIAMETER,NAME,STATION FROM " + dir +
@@ -792,18 +793,25 @@ __host__ void readMS(const char* MS_name,
       "/FIELD where !FLAG_ROW";
   casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
 
-  std::string aux_query = "select DATA_DESC_ID FROM " + dir +
-                          " WHERE !FLAG_ROW AND ANY(WEIGHT > 0) AND ANY(!FLAG) "
-                          "ORDER BY UNIQUE DATA_DESC_ID";
-  std::string spw_query =
-      "select NUM_CHAN,CHAN_FREQ,ROWID() AS ID FROM " + dir +
-      "/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==[" + aux_query + "])";
+  std::string aux_spectral_query = "select SPECTRAL_WINDOW_ID FROM " + dir +
+                                   "/DATA_DESCRIPTION where !FLAG_ROW";
+  std::string spw_query = "select NUM_CHAN,CHAN_FREQ,ROWID() as ID FROM " +
+                          dir +
+                          "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+                          aux_spectral_query + "]";
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
+  std::cout << "Spectral window table has " << spectral_window_tab.nrow()
+            << " valid rows";
 
-  std::string pol_query = "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM " +
-                          dir + "/POLARIZATION where !FLAG_ROW";
+  std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
+                              "/DATA_DESCRIPTION where !FLAG_ROW";
+  std::string pol_query =
+      "select NUM_CORR,CORR_TYPE,ROWID() as ID FROM " + dir +
+      "/POLARIZATION where !FLAG_ROW AND ROWID() in [" + pol_aux_query + "]";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
+  std::cout << "Polarization table has " << polarization_tab.nrow()
+            << " valid rows";
 
   std::string antenna_tab_query =
       "select POSITION,DISH_DIAMETER,NAME,STATION FROM " + dir +
@@ -911,12 +919,12 @@ __host__ void readMS(const char* MS_name,
     fields[f].phs_dec = pointing_phs[1];
   }
 
-  casacore::ROScalarColumn<casacore::Int64> ncorr_col(polarization_tab,
-                                                      "NUM_CORR");
+  casacore::ROScalarColumn<casacore::Int> ncorr_col(polarization_tab,
+                                                    "NUM_CORR");
   data->nstokes = ncorr_col(0);
-  casacore::ROArrayColumn<casacore::Int64> correlation_col(polarization_tab,
-                                                           "CORR_TYPE");
-  casacore::Vector<casacore::Int64> polarizations = correlation_col(0);
+  casacore::ROArrayColumn<casacore::Int> correlation_col(polarization_tab,
+                                                         "CORR_TYPE");
+  casacore::Vector<casacore::Int> polarizations = correlation_col(0);
 
   for (int i = 0; i < data->nstokes; i++) {
     data->corr_type.push_back(polarizations[i]);
@@ -927,10 +935,10 @@ __host__ void readMS(const char* MS_name,
   casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,
                                                           "CHAN_FREQ");
 
-  casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
-                                                        "NUM_CHAN");
+  casacore::ROScalarColumn<casacore::Int> n_chan_freq(spectral_window_tab,
+                                                      "NUM_CHAN");
 
-  casacore::ROScalarColumn<casacore::Int64> spectral_window_ids(
+  casacore::ROScalarColumn<casacore::Int> spectral_window_ids(
       spectral_window_tab, "ID");
 
   for (int i = 0; i < data->n_internal_frequencies; i++) {
