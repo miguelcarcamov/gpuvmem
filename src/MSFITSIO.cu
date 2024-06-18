@@ -447,15 +447,15 @@ __host__ void readMS(const char* MS_name,
       "select SPECTRAL_WINDOW_ID FROM " + dir +
       "/DATA_DESCRIPTION where !FLAG_ROW AND ANY(ROWID()==[" + aux_query + "])";
   std::string spw_query =
-      "select NUM_CHAN,CHAN_FREQ,ROWID() AS ID FROM " + dir +
+      "select NUM_CHAN,CHAN_FREQ FROM " + dir +
       "/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==[" + second_aux_query +
       "])";
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
 
   std::string pol_query =
-      "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM " + dir +
-      "/POLARIZATION where ANY(ID==[select POLARIZATION_ID from " + dir +
+      "select NUM_CORR,CORR_TYPE FROM " + dir +
+      "/POLARIZATION where ANY(ROWID()==[select POLARIZATION_ID from " + dir +
       "/DATA_DESCRIPTION where !FLAG_ROW]) and !FLAG_ROW";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
 
