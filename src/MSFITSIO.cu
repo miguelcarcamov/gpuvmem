@@ -453,10 +453,10 @@ __host__ void readMS(const char* MS_name,
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
 
-  std::string pol_query = "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM " +
-                          dir +
-                          "/POLARIZATION where [select from ::DATA_DESCRIPTION "
-                          "where POLARIZATION_ID=ID] and !FLAG_ROW";
+  std::string pol_query =
+      "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM " + dir +
+      "/POLARIZATION where [select from " + dir +
+      "/DATA_DESCRIPTION where POLARIZATION_ID=ID] and !FLAG_ROW";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
 
   std::string antenna_tab_query =
