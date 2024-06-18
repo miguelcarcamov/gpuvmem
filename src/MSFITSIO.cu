@@ -566,12 +566,12 @@ __host__ void readMS(const char* MS_name,
     fields[f].phs_dec = pointing_phs[1];
   }
 
-  casacore::ROScalarColumn<casacore::Int> ncorr_col(polarization_tab,
-                                                    "NUM_CORR");
+  casacore::ROScalarColumn<casacore::Int64> ncorr_col(polarization_tab,
+                                                      "NUM_CORR");
   data->nstokes = ncorr_col(0);
-  casacore::ROArrayColumn<casacore::Int> correlation_col(polarization_tab,
-                                                         "CORR_TYPE");
-  casacore::Vector<casacore::Int> polarizations = correlation_col(0);
+  casacore::ROArrayColumn<casacore::Int64> correlation_col(polarization_tab,
+                                                           "CORR_TYPE");
+  casacore::Vector<casacore::Int64> polarizations = correlation_col(0);
 
   for (int i = 0; i < data->nstokes; i++) {
     data->corr_type.push_back(polarizations[i]);
@@ -582,10 +582,10 @@ __host__ void readMS(const char* MS_name,
   casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,
                                                           "CHAN_FREQ");
 
-  casacore::ROScalarColumn<casacore::Int> n_chan_freq(spectral_window_tab,
-                                                      "NUM_CHAN");
+  casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
+                                                        "NUM_CHAN");
 
-  casacore::ROScalarColumn<casacore::Int> spectral_window_ids(
+  casacore::ROScalarColumn<casacore::Int64> spectral_window_ids(
       spectral_window_tab, "ID");
 
   for (int i = 0; i < data->n_internal_frequencies; i++) {
@@ -919,12 +919,12 @@ __host__ void readMS(const char* MS_name,
     fields[f].phs_dec = pointing_phs[1];
   }
 
-  casacore::ROScalarColumn<casacore::Int> ncorr_col(polarization_tab,
-                                                    "NUM_CORR");
+  casacore::ROScalarColumn<casacore::Int64> ncorr_col(polarization_tab,
+                                                      "NUM_CORR");
   data->nstokes = ncorr_col(0);
-  casacore::ROArrayColumn<casacore::Int> correlation_col(polarization_tab,
-                                                         "CORR_TYPE");
-  casacore::Vector<casacore::Int> polarizations = correlation_col(0);
+  casacore::ROArrayColumn<casacore::Int64> correlation_col(polarization_tab,
+                                                           "CORR_TYPE");
+  casacore::Vector<casacore::Int64> polarizations = correlation_col(0);
 
   for (int i = 0; i < data->nstokes; i++) {
     data->corr_type.push_back(polarizations[i]);
@@ -935,10 +935,10 @@ __host__ void readMS(const char* MS_name,
   casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,
                                                           "CHAN_FREQ");
 
-  casacore::ROScalarColumn<casacore::Int> n_chan_freq(spectral_window_tab,
-                                                      "NUM_CHAN");
+  casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
+                                                        "NUM_CHAN");
 
-  casacore::ROScalarColumn<casacore::Int> spectral_window_ids(
+  casacore::ROScalarColumn<casacore::Int64> spectral_window_ids(
       spectral_window_tab, "ID");
 
   for (int i = 0; i < data->n_internal_frequencies; i++) {
