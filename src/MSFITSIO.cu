@@ -440,21 +440,21 @@ __host__ void readMS(const char* MS_name,
                             "/FIELD where !FLAG_ROW";
   casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
 
-  std::string spw_query =
-      "select NUM_CHAN,CHAN_FREQ FROM " + dir + "/SPECTRAL_WINDOW t1 JOIN " +
-      dir +
-      "/DATA_DESCRIPTION t2 ON t1.rownumber()=t2.SPECTRAL_WINDOW_ID where "
-      "!FLAG_ROW";
+  std::string aux_spectral_query = "select SPECTRAL_WINDOW_ID FROM " + dir +
+                                   "/DATA_DESCRIPTION where !FLAG_ROW";
+  std::string spw_query = "select NUM_CHAN,CHAN_FREQ FROM " + dir +
+                          "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+                          aux_spectral_query + "]";
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
-
   std::cout << "Spectral window table has " << spectral_window_tab.nrow()
             << " rows";
 
+  std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
+                              "/DATA_DESCRIPTION where !FLAG_ROW";
   std::string pol_query = "select NUM_CORR,CORR_TYPE FROM " + dir +
-                          "/POLARIZATION t1 JOIN " + dir +
-                          "/DATA_DESCRIPTION t2 ON "
-                          "t1.rownumber()=t2.POLARIZATION_ID where !FLAG_ROW";
+                          "/POLARIZATION where !FLAG_ROW AND ROWID() in [" +
+                          pol_aux_query + "]";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
   std::cout << "Polarization table has " << polarization_tab.nrow() << " rows";
 
