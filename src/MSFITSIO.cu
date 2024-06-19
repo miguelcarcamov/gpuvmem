@@ -466,7 +466,8 @@ __host__ void readMS(const char* MS_name,
   std::string freq_query =
       "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, "
       "GMEDIAN(CHAN_FREQ) as REF_FREQ FROM " +
-      dir + "/SPECTRAL_WINDOW";
+      dir + "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+      aux_spectral_query + "]";
   std::string maxuv_metres_query =
       "select MAX(GMAX(UVW[0]),GMAX(UVW[1])) as MAXUV FROM " + dir;
 
@@ -815,7 +816,8 @@ __host__ void readMS(const char* MS_name,
   std::string freq_query =
       "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, "
       "GMEDIAN(CHAN_FREQ) as REF_FREQ FROM " +
-      dir + "/SPECTRAL_WINDOW";
+      dir + "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+      aux_spectral_query + "]";
   std::string maxuv_metres_query =
       "select MAX(GMAX(UVW[0]),GMAX(UVW[1])) as MAXUV FROM " + dir;
 
