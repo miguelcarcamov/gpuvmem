@@ -2521,7 +2521,7 @@ __global__ void residual(cufftComplex* Vr,
                          long numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
   if (i < numVisibilities) {
-    Vr[i] = cuCsubf(Vm[i], Vo[i]);
+    Vr[i] = cuCsubf(Vo[i], Vm[i]);
   }
 }
 
@@ -3621,7 +3621,7 @@ __global__ void DChi2_SharedMemory(float* noise,
     }
 
     dchi2 *= fg_scale * atten;
-    dChi2[N * i + j] = dchi2;
+    dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
 
@@ -3677,7 +3677,7 @@ __global__ void DChi2(float* noise,
     }
 
     dchi2 *= fg_scale * atten;
-    dChi2[N * i + j] = dchi2;
+    dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
 
@@ -3733,7 +3733,7 @@ __global__ void DChi2(float* noise,
     }
 
     dchi2 *= fg_scale * atten * gcf_i;
-    dChi2[N * i + j] = dchi2;
+    dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
 
