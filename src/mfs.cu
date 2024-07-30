@@ -6,7 +6,7 @@ long M, N, numVisibilities;
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S,
     *device_noise_image, *device_weight_image, *device_distance_image;
 float noise_cut, MINPIX, minpix, random_probability = 1.0;
-float noise_jypix, fg_scale, eta, robust_param;
+float noise_jypix, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
 
@@ -888,10 +888,8 @@ void MFS::setDevice() {
   float noise_min =
       *std::min_element(host_noise_image, host_noise_image + (M * N));
 
-  fg_scale = noise_min;
   noise_cut = noise_cut * noise_min;
   if (verbose_flag) {
-    printf("fg_scale = %e\n", fg_scale);
     printf("noise (Jy/pix) = %e\n", noise_jypix);
   }
 
@@ -1045,8 +1043,8 @@ void MFS::writeImages() {
   printf("Saving final image to disk\n");
   if (IoOrderEnd == NULL) {
     ioImageHandler->printNotPathImage(image->getImage(), "JY/PIXEL",
-                                      optimizer->getCurrentIteration(), 0,
-                                      fg_scale, true);
+                                      optimizer->getCurrentIteration(), 0, 1.0,
+                                      true);
     if (print_images)
       ioImageHandler->printNotNormalizedImage(
           image->getImage(), "alpha.fits", "", optimizer->getCurrentIteration(),

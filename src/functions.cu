@@ -44,8 +44,7 @@ extern float* device_I;
 
 extern float *device_dphi, *device_S, *device_dchi2_total, *device_dS,
     *device_noise_image;
-extern float noise_jypix, fg_scale, noise_cut, MINPIX, minpix,
-    random_probability, eta;
+extern float noise_jypix, noise_cut, MINPIX, minpix, random_probability, eta;
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 
@@ -2288,7 +2287,27 @@ __global__ void apply_beam2I(float antenna_diameter,
                              long N,
                              float xobs,
                              float yobs,
-                             float fg_scale,
+                             float freq,
+                             double DELTAX,
+                             double DELTAY,
+                             int primary_beam) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs,
+                            yobs, DELTAX, DELTAY, primary_beam);
+
+  image[N * i + j] = make_cuFloatComplex(image[N * i + j].x * atten, 0.0f);
+}
+
+__global__ void apply_beam2I(float antenna_diameter,
+                             float pb_factor,
+                             float pb_cutoff,
+                             float* gcf,
+                             cufftComplex* image,
+                             long N,
+                             float xobs,
+                             float yobs,
                              float freq,
                              double DELTAX,
                              double DELTAY,
@@ -2300,30 +2319,7 @@ __global__ void apply_beam2I(float antenna_diameter,
                             yobs, DELTAX, DELTAY, primary_beam);
 
   image[N * i + j] =
-      make_cuFloatComplex(image[N * i + j].x * atten * fg_scale, 0.0f);
-}
-
-__global__ void apply_beam2I(float antenna_diameter,
-                             float pb_factor,
-                             float pb_cutoff,
-                             float* gcf,
-                             cufftComplex* image,
-                             long N,
-                             float xobs,
-                             float yobs,
-                             float fg_scale,
-                             float freq,
-                             double DELTAX,
-                             double DELTAY,
-                             int primary_beam) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-  float atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, xobs,
-                            yobs, DELTAX, DELTAY, primary_beam);
-
-  image[N * i + j] = make_cuFloatComplex(
-      image[N * i + j].x * gcf[N * i + j] * atten * fg_scale, 0.0f);
+      make_cuFloatComplex(image[N * i + j].x * gcf[N * i + j] * atten, 0.0f);
 }
 
 __global__ void apply_GCF(cufftComplex* image, float* gcf, long N) {
@@ -3557,7 +3553,6 @@ __global__ void DChi2_SharedMemory(float* noise,
                                    float* w,
                                    long N,
                                    long numVisibilities,
-                                   float fg_scale,
                                    float noise_cut,
                                    float ref_xobs,
                                    float ref_yobs,
@@ -3620,7 +3615,7 @@ __global__ void DChi2_SharedMemory(float* noise,
           w_shared[v] * ((Vr_shared[v].x * cosk) + (Vr_shared[v].y * sink));
     }
 
-    dchi2 *= fg_scale * atten;
+    dchi2 *= atten / numVisibilities;
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
@@ -3632,7 +3627,6 @@ __global__ void DChi2(float* noise,
                       float* w,
                       long N,
                       long numVisibilities,
-                      float fg_scale,
                       float noise_cut,
                       float ref_xobs,
                       float ref_yobs,
@@ -3676,7 +3670,7 @@ __global__ void DChi2(float* noise,
       dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
     }
 
-    dchi2 *= fg_scale * atten;
+    dchi2 *= atten / numVisibilities;
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
@@ -3689,7 +3683,6 @@ __global__ void DChi2(float* noise,
                       float* w,
                       long N,
                       long numVisibilities,
-                      float fg_scale,
                       float noise_cut,
                       float ref_xobs,
                       float ref_yobs,
@@ -3732,7 +3725,7 @@ __global__ void DChi2(float* noise,
       dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
     }
 
-    dchi2 *= fg_scale * atten * gcf_i;
+    dchi2 *= atten * gcf_i / numVisibilities;
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
@@ -3822,7 +3815,6 @@ __global__ void DChi2_total_alpha(float* noise,
                                   float nu,
                                   float nu_0,
                                   float noise_cut,
-                                  float fg_scale,
                                   float threshold,
                                   long N,
                                   long M) {
@@ -3836,7 +3828,7 @@ __global__ void DChi2_total_alpha(float* noise,
   alpha = I[N * M + N * i + j];
 
   dI_nu_0 = powf(nudiv, alpha);
-  dalpha = I_nu_0 * dI_nu_0 * fg_scale * logf(nudiv);
+  dalpha = I_nu_0 * dI_nu_0 * logf(nudiv);
 
   if (noise[N * i + j] < noise_cut) {
     if (I_nu_0 > threshold) {
@@ -3854,7 +3846,6 @@ __global__ void DChi2_total_I_nu_0(float* noise,
                                    float nu,
                                    float nu_0,
                                    float noise_cut,
-                                   float fg_scale,
                                    float threshold,
                                    long N,
                                    long M) {
@@ -3880,7 +3871,6 @@ __global__ void chainRule2I(float* chain,
                             float nu,
                             float nu_0,
                             float noise_cut,
-                            float fg_scale,
                             long N,
                             long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -3893,7 +3883,7 @@ __global__ void chainRule2I(float* chain,
   alpha = I[N * M + N * i + j];
 
   dI_nu_0 = powf(nudiv, alpha);
-  dalpha = I_nu_0 * dI_nu_0 * fg_scale * logf(nudiv);
+  dalpha = I_nu_0 * dI_nu_0 * logf(nudiv);
 
   chain[N * i + j] = dI_nu_0;
   chain[N * M + N * i + j] = dalpha;
@@ -3977,7 +3967,6 @@ __global__ void alpha_Noise(float* noise_I,
                             float antenna_diameter,
                             float pb_factor,
                             float pb_cutoff,
-                            float fg_scale,
                             long numVisibilities,
                             long N,
                             long M,
@@ -4017,13 +4006,12 @@ __global__ void alpha_Noise(float* noise_I,
       sink = sinpif(2.0 * (Ukv + Vkv));
 #endif
       dchi2 = ((Vr[v].x * cosk) - (Vr[v].y * sink));
-      sum_noise += w[v] * (atten * I_nu * fg_scale + dchi2);
+      sum_noise += w[v] * (atten * I_nu + dchi2);
     }
     if (sum_noise <= 0.0f)
       noise_I[N * M + N * i + j] += 0.0f;
     else
-      noise_I[N * M + N * i + j] +=
-          log_nu * log_nu * atten * I_nu * fg_scale * sum_noise;
+      noise_I[N * M + N * i + j] += log_nu * log_nu * atten * I_nu * sum_noise;
   } else {
     noise_I[N * M + N * i + j] = 0.0f;
   }
@@ -4155,7 +4143,9 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
                       .threadsPerBlockUV);
               // REDUCTIONS
               // chi2
-              resultchi2 += result;
+              resultchi2 +=
+                  result /
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
             }
           }
         }
@@ -4278,7 +4268,9 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
                       .threadsPerBlockUV);
               // REDUCTIONS
               // chi2
-              resultchi2 += result;
+              resultchi2 +=
+                  result /
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
             }
           }
         }
@@ -4329,7 +4321,7 @@ __host__ void dchi2(float* I,
                     datasets[d].fields[f].device_visibilities[i][s].uvw,
                     datasets[d].fields[f].device_visibilities[i][s].weight, N,
                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    fg_scale, noise_cut, datasets[d].fields[f].ref_xobs_pix,
+                    noise_cut, datasets[d].fields[f].ref_xobs_pix,
                     datasets[d].fields[f].ref_yobs_pix,
                     datasets[d].fields[f].phs_xobs_pix,
                     datasets[d].fields[f].phs_yobs_pix, DELTAX, DELTAY,
@@ -4345,7 +4337,7 @@ __host__ void dchi2(float* I,
                     datasets[d].fields[f].device_visibilities[i][s].uvw,
                     datasets[d].fields[f].device_visibilities[i][s].weight, N,
                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    fg_scale, noise_cut, datasets[d].fields[f].ref_xobs_pix,
+                    noise_cut, datasets[d].fields[f].ref_xobs_pix,
                     datasets[d].fields[f].ref_yobs_pix,
                     datasets[d].fields[f].phs_xobs_pix,
                     datasets[d].fields[f].phs_yobs_pix, DELTAX, DELTAY,
@@ -4361,7 +4353,7 @@ __host__ void dchi2(float* I,
               // fields[f].device_visibilities[i][s].Vr,
               // fields[f].device_visibilities[i][s].uvw,
               // fields[f].device_visibilities[i][s].weight, N,
-              // fields[f].numVisibilitiesPerFreqPerStoke[i][s], fg_scale,
+              // fields[f].numVisibilitiesPerFreqPerStoke[i][s],
               // noise_cut, fields[f].ref_xobs, fields[f].ref_yobs,
               // fields[f].phs_xobs, fields[f].phs_yobs, DELTAX, DELTAY,
               // antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
@@ -4373,14 +4365,14 @@ __host__ void dchi2(float* I,
                   DChi2_total_I_nu_0<<<numBlocksNN, threadsPerBlockNN>>>(
                       device_noise_image, result_dchi2,
                       vars_gpu[gpu_idx].device_dchi2, I,
-                      datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale,
-                      threshold, N, M);
+                      datasets[d].fields[f].nu[i], nu_0, noise_cut, threshold,
+                      N, M);
                 else
                   DChi2_total_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
                       device_noise_image, result_dchi2,
                       vars_gpu[gpu_idx].device_dchi2, I,
-                      datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale,
-                      threshold, N, M);
+                      datasets[d].fields[f].nu[i], nu_0, noise_cut, threshold,
+                      N, M);
                 checkCudaErrors(cudaDeviceSynchronize());
               }
             }
@@ -4443,8 +4435,8 @@ __host__ void linkApplyBeam2I(cufftComplex* image,
                               float freq,
                               int primary_beam) {
   apply_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(
-      antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, fg_scale,
-      freq, DELTAX, DELTAY, primary_beam);
+      antenna_diameter, pb_factor, pb_cutoff, image, N, xobs, yobs, freq,
+      DELTAX, DELTAY, primary_beam);
   checkCudaErrors(cudaDeviceSynchronize());
 };
 
@@ -4455,8 +4447,8 @@ __host__ void linkCalculateInu2I(cufftComplex* image, float* I, float freq) {
 };
 
 __host__ void linkChain2I(float* chain, float freq, float* I) {
-  chainRule2I<<<numBlocksNN, threadsPerBlockNN>>>(
-      chain, device_noise_image, I, freq, nu_0, noise_cut, fg_scale, N, M);
+  chainRule2I<<<numBlocksNN, threadsPerBlockNN>>>(chain, device_noise_image, I,
+                                                  freq, nu_0, noise_cut, N, M);
   checkCudaErrors(cudaDeviceSynchronize());
 };
 
@@ -4857,7 +4849,7 @@ __host__ void calculateErrors(Image* image) {
                     datasets[d].fields[f].ref_yobs_pix,
                     datasets[d].antennas[0].antenna_diameter,
                     datasets[d].antennas[0].pb_factor,
-                    datasets[d].antennas[0].pb_cutoff, fg_scale,
+                    datasets[d].antennas[0].pb_cutoff,
                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
                     N, M, datasets[d].antennas[0].primary_beam);
                 checkCudaErrors(cudaDeviceSynchronize());
