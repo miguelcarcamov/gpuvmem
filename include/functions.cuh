@@ -145,13 +145,14 @@ __host__ T deviceReduce(T* in, long N, int input_threads);
 __host__ float deviceMaxReduce(float* in, long N, int input_threads);
 __host__ float deviceMinReduce(float* in, long N, int input_threads);
 __host__ float simulate(float* I, VirtualImageProcessor* ip);
-__host__ float chi2(float* I, VirtualImageProcessor* ip);
+__host__ float chi2(float* I, VirtualImageProcessor* ip, bool normalize);
 __host__ void linkRestartDGi(float* dgi);
 __host__ void linkAddToDPhi(float* dphi, float* dgi, int index);
 __host__ void dchi2(float* I,
                     float* dxi2,
                     float* result_dchi2,
-                    VirtualImageProcessor* ip);
+                    VirtualImageProcessor* ip,
+                    bool normalize);
 __host__ void defaultNewP(float* p, float* xi, float xmin, int image);
 __host__ void particularNewP(float* p, float* xi, float xmin, int image);
 __host__ void defaultEvaluateXt(float* xt,
@@ -485,7 +486,8 @@ __global__ void DChi2(float* noise,
                       float pb_factor,
                       float pb_cutoff,
                       float freq,
-                      int primary_beam);
+                      int primary_beam,
+                      bool normalize);
 __global__ void DChi2(float* noise,
                       float* gcf,
                       float* dChi2,
@@ -506,7 +508,8 @@ __global__ void DChi2(float* noise,
                       float pb_factor,
                       float pb_cutoff,
                       float freq,
-                      int primary_beam);
+                      int primary_beam,
+                      bool normalize);
 __global__ void projection(float* px, float* x, float MINPIX, long N);
 __global__ void substraction(float* x,
                              cufftComplex* xc,

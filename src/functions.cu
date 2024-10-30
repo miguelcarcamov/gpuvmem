@@ -1363,27 +1363,43 @@ __host__ void do_gridding(std::vector<Field>& fields,
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].backup_visibilities[i][s].weight.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+        fields[f].backup_visibilities[i][s].uvw.assign(
+            fields[f].visibilities[i][s].uvw.begin(),
+            fields[f].visibilities[i][s].uvw.end());
+        fields[f].backup_visibilities[i][s].weight.assign(
+            fields[f].visibilities[i][s].weight.begin(),
+            fields[f].visibilities[i][s].weight.end());
+        fields[f].backup_visibilities[i][s].Vo.assign(
+            fields[f].visibilities[i][s].Vo.begin(),
+            fields[f].visibilities[i][s].Vo.end());
 #pragma omp parallel for schedule(static, 1) num_threads(gridding)          \
     shared(g_weights, g_weights_aux, g_Vo) private(                         \
             j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
                 kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
-        for (int z = 0; z < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+        for (int z = 0; z < 2 * fields[f].numVisibilitiesPerFreqPerStoke[i][s];
              z++) {
-          uvw = fields[f].visibilities[i][s].uvw[z];
-          w = fields[f].visibilities[i][s].weight[z];
-          Vo = fields[f].visibilities[i][s].Vo[z];
+          // Loop here is done twice since dataset only has half of the data
+          int index = z;
+          if (z >= fields[f].numVisibilitiesPerFreqPerStoke[i][s])
+            index = z - fields[f].numVisibilitiesPerFreqPerStoke[i][s];
 
-          // Backing up original visibilities and (u,v) positions
-          fields[f].backup_visibilities[i][s].uvw[z] = uvw;
-          fields[f].backup_visibilities[i][s].weight[z] = w;
-          fields[f].backup_visibilities[i][s].Vo[z] = Vo;
+          uvw = fields[f].visibilities[i][s].uvw[index];
+          w = fields[f].visibilities[i][s].weight[index];
+          Vo = fields[f].visibilities[i][s].Vo[index];
+
+          // The second half of the data must be the Hermitian symmetric
+          // visibilities
+          if (z >= fields[f].numVisibilitiesPerFreqPerStoke[i][s]) {
+            uvw.x *= -1.0;
+            uvw.y *= -1.0;
+            uvw.z *= -1.0;
+            Vo.y *= -1.0f;
+          }
 
           // Visibilities from metres to klambda
           uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
           uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
           uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
-
-          // Apply hermitian symmetry (it will be applied afterwards)
 
           grid_pos_x = uvw.x / deltau;
           grid_pos_y = uvw.y / deltav;
@@ -3564,7 +3580,8 @@ __global__ void DChi2_SharedMemory(float* noise,
                                    float pb_factor,
                                    float pb_cutoff,
                                    float freq,
-                                   int primary_beam) {
+                                   int primary_beam,
+                                   bool normalize) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -3615,7 +3632,10 @@ __global__ void DChi2_SharedMemory(float* noise,
           w_shared[v] * ((Vr_shared[v].x * cosk) + (Vr_shared[v].y * sink));
     }
 
-    dchi2 *= atten / numVisibilities;
+    dchi2 *= atten;
+
+    if (normalize)
+      dchi2 /= numVisibilities;
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
@@ -3638,7 +3658,8 @@ __global__ void DChi2(float* noise,
                       float pb_factor,
                       float pb_cutoff,
                       float freq,
-                      int primary_beam) {
+                      int primary_beam,
+                      bool normalize) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -3670,7 +3691,10 @@ __global__ void DChi2(float* noise,
       dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
     }
 
-    dchi2 *= atten / numVisibilities;
+    dchi2 *= atten;
+    if (normalize)
+      dchi2 /= numVisibilities;
+
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
@@ -3694,7 +3718,8 @@ __global__ void DChi2(float* noise,
                       float pb_factor,
                       float pb_cutoff,
                       float freq,
-                      int primary_beam) {
+                      int primary_beam,
+                      bool normalize) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -3725,7 +3750,10 @@ __global__ void DChi2(float* noise,
       dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
     }
 
-    dchi2 *= atten * gcf_i / numVisibilities;
+    dchi2 *= atten * gcf_i;
+
+    if (normalize)
+      dchi2 /= numVisibilities;
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
@@ -4158,17 +4186,17 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip) {
   return 0.5f * resultchi2;
 };
 
-__host__ float chi2(float* I, VirtualImageProcessor* ip) {
+__host__ float chi2(float* I, VirtualImageProcessor* ip, bool normalize) {
   cudaSetDevice(firstgpu);
 
-  float resultchi2 = 0.0f;
+  float reduced_chi2 = 0.0f;
 
   ip->clipWNoise(I);
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
 #pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
-    reduction(+ : resultchi2)
+    reduction(+ : reduced_chi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
         unsigned int j = omp_get_thread_num();
@@ -4268,9 +4296,11 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
                       .threadsPerBlockUV);
               // REDUCTIONS
               // chi2
-              resultchi2 +=
-                  result /
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+              if (normalize)
+                result /=
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+
+              reduced_chi2 += result;
             }
           }
         }
@@ -4280,13 +4310,14 @@ __host__ float chi2(float* I, VirtualImageProcessor* ip) {
 
   cudaSetDevice(firstgpu);
 
-  return 0.5f * resultchi2;
+  return 0.5f * reduced_chi2;
 };
 
 __host__ void dchi2(float* I,
                     float* dxi2,
                     float* result_dchi2,
-                    VirtualImageProcessor* ip) {
+                    VirtualImageProcessor* ip,
+                    bool normalize) {
   cudaSetDevice(firstgpu);
 
   for (int d = 0; d < nMeasurementSets; d++) {
@@ -4329,7 +4360,7 @@ __host__ void dchi2(float* I,
                     datasets[d].antennas[0].pb_factor,
                     datasets[d].antennas[0].pb_cutoff,
                     datasets[d].fields[f].nu[i],
-                    datasets[d].antennas[0].primary_beam);
+                    datasets[d].antennas[0].primary_beam, normalize);
               } else {
                 DChi2<<<numBlocksNN, threadsPerBlockNN>>>(
                     device_noise_image, vars_gpu[gpu_idx].device_dchi2,
@@ -4345,7 +4376,7 @@ __host__ void dchi2(float* I,
                     datasets[d].antennas[0].pb_factor,
                     datasets[d].antennas[0].pb_cutoff,
                     datasets[d].fields[f].nu[i],
-                    datasets[d].antennas[0].primary_beam);
+                    datasets[d].antennas[0].primary_beam, normalize);
               }
               // DChi2<<<numBlocksNN, threadsPerBlockNN,
               // shared_memory>>>(device_noise_image,

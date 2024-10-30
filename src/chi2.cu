@@ -15,11 +15,15 @@ Chi2::Chi2() {
   this->name = "Chi2";
 };
 
-void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd) {
+void Chi2::configure(int penalizatorIndex,
+                     int imageIndex,
+                     int imageToAdd,
+                     bool normalize) {
   this->imageIndex = imageIndex;
   this->order = order;
   this->mod = mod;
   this->ip->configure(image_count);
+  this->normalize = normalize;
 
   if (penalizatorIndex != -1) {
     if (penalizatorIndex > (nPenalizators - 1) || penalizatorIndex < 0) {
@@ -38,13 +42,13 @@ void Chi2::configure(int penalizatorIndex, int imageIndex, int imageToAdd) {
 
 float Chi2::calcFi(float* p) {
   float result = 0.0f;
-  this->set_fivalue(chi2(p, ip));
+  this->set_fivalue(chi2(p, ip, this->normalize));
   result = (penalization_factor) * (this->get_fivalue());
   return result;
 };
 
 void Chi2::calcGi(float* p, float* xi) {
-  dchi2(p, xi, result_dchi2, ip);
+  dchi2(p, xi, result_dchi2, ip, this->normalize);
 };
 
 void Chi2::restartDGi() {

@@ -168,12 +168,14 @@ __host__ int main(int argc, char** argv) {
   Fi* tsqv = createObject<Fi, std::string>("TotalSquaredVariation");
   Fi* lap = createObject<Fi, std::string>("Laplacian");
 
-  chi2->configure(-1, 0, 0);  // (penalizatorIndex, ImageIndex, imageToaddDphi)
-  e->configure(0, 0, 0);
+  chi2->configure(
+      -1, 0, 0,
+      false);  // (penalizatorIndex, ImageIndex, imageToaddDphi, normalize)
+  e->configure(0, 0, 0, false);
   e->setPrior(0.001f);
-  l1->configure(1, 0, 0);
-  tsqv->configure(2, 0, 0);
-  lap->configure(3, 0, 0);
+  l1->configure(1, 0, 0, false);
+  tsqv->configure(2, 0, 0, false);
+  lap->configure(3, 0, 0, false);
   // e->setPenalizationFactor(0.01); // If not used -Z (Fi.configure(-1,x,x))
   of->addFi(chi2);
   of->addFi(e);
