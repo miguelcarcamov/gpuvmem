@@ -18,9 +18,12 @@ class Chi2 : public Fi {
   void setPenalizationFactorFromInputIndex(int index) {};
   float calculateSecondDerivate() {};
   void setCKernel(CKernel* ckernel) override;
+  void setFgScale(float fg_scale) override;
+  float getFgScale() override;
 
  private:
   VirtualImageProcessor* ip;
+  float fg_scale;
   int imageToAdd;
   float* result_dchi2;
 };

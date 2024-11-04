@@ -70,6 +70,10 @@ class Synthesizer {
 
   __host__ void setVisNoise(float noise) { this->vis_noise = noise; };
 
+  __host__ float getFgScale() { return this->fg_scale; };
+
+  __host__ void setFgScale(float fg_scale) { this->fg_scale = fg_scale; };
+
  protected:
   cufftComplex* device_I;
   Image* image;
@@ -81,6 +85,7 @@ class Synthesizer {
   Error* error = NULL;
   int griddingThreads = 0;
   bool gridding = false;
+  float fg_scale = 0.0;
   float vis_noise = 0.0;
   void (*Order)(Optimizer* o, Image* I) = NULL;
   int imagesChanged = 0;

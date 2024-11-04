@@ -29,6 +29,8 @@ class Fi {
   virtual float getEta() {};
   virtual void setEta(float eta) {};
   virtual void setCKernel(CKernel* ckernel) {};
+  virtual void setFgScale(float fg_scale) {};
+  virtual float getFgScale() {};
 
   std::string getName() { return this->name; };
 

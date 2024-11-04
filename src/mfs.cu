@@ -888,10 +888,16 @@ void MFS::setDevice() {
   float noise_min =
       *std::min_element(host_noise_image, host_noise_image + (M * N));
 
+  this->fg_scale = noise_min;
   noise_cut = noise_cut * noise_min;
   if (verbose_flag) {
+    printf("fg_scale = %e\n", this->fg_scale);
     printf("noise (Jy/pix) = %e\n", noise_jypix);
   }
+
+  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+  if (NULL != chi2)
+    chi2->setFgScale(this->fg_scale);
 
   std::vector<float> u_mask;
   if (variables.user_mask != "NULL") {
@@ -954,7 +960,8 @@ void MFS::run() {
 
   if (this->gridding) {
     Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
-    chi2->setCKernel(this->ckernel);
+    if (NULL != chi2)
+      chi2->setCKernel(this->ckernel);
   }
 
   printf("\n\nStarting optimizer\n");

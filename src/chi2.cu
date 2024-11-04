@@ -72,6 +72,14 @@ void Chi2::setCKernel(CKernel* ckernel) {
   this->ip->setCKernel(ckernel);
 };
 
+void Chi2::setFgScale(float fg_scale) {
+  this->fg_scale = fg_scale;
+};
+
+float Chi2::getFgScale() {
+  return this->fg_scale;
+};
+
 namespace {
 Fi* CreateChi2() {
   return new Chi2;
