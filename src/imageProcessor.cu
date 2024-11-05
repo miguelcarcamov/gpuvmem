@@ -17,15 +17,16 @@ void ImageProcessor::apply_beam(cufftComplex* image,
                                 float xobs,
                                 float yobs,
                                 float freq,
-                                int primary_beam) {
+                                int primary_beam,
+                                float fg_scale) {
   if (image_count == 2)
     linkApplyBeam2I(image, antenna_diameter, pb_factor, pb_cutoff, xobs, yobs,
-                    freq, primary_beam);
+                    freq, primary_beam, fg_scale);
 };
 
-void ImageProcessor::chainRule(float* I, float freq) {
+void ImageProcessor::chainRule(float* I, float freq, float fg_scale) {
   if (image_count == 2)
-    linkChain2I(chain, freq, I);
+    linkChain2I(chain, freq, I, fg_scale);
 };
 
 void ImageProcessor::clipWNoise(float* I) {

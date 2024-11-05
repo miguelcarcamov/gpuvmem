@@ -13,6 +13,7 @@ extern int nPenalizators;
 Chi2::Chi2() {
   this->ip = new ImageProcessor();
   this->name = "Chi2";
+  this->normalize = false;
 };
 
 void Chi2::configure(int penalizatorIndex,
@@ -42,13 +43,13 @@ void Chi2::configure(int penalizatorIndex,
 
 float Chi2::calcFi(float* p) {
   float result = 0.0f;
-  this->set_fivalue(chi2(p, ip, this->normalize));
+  this->set_fivalue(chi2(p, ip, this->normalize, this->fg_scale));
   result = (penalization_factor) * (this->get_fivalue());
   return result;
 };
 
 void Chi2::calcGi(float* p, float* xi) {
-  dchi2(p, xi, result_dchi2, ip, this->normalize);
+  dchi2(p, xi, result_dchi2, ip, this->normalize, this->fg_scale);
 };
 
 void Chi2::restartDGi() {

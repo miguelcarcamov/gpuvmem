@@ -37,7 +37,7 @@ class Fi {
   std::string setName(std::string name) { this->name = name; };
 
   float get_fivalue() { return this->fi_value; };
-  bool get_normalize() { return this->normalize; };
+  bool getNormalize() { return this->normalize; };
   float getPenalizationFactor() { return this->penalization_factor; };
   void set_fivalue(float fi) { this->fi_value = fi; };
   void setPenalizationFactor(float p) { this->penalization_factor = p; };

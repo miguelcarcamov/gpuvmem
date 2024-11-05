@@ -85,7 +85,7 @@ class Synthesizer {
   Error* error = NULL;
   int griddingThreads = 0;
   bool gridding = false;
-  float fg_scale = 0.0;
+  float fg_scale = 1.0;
   float vis_noise = 0.0;
   void (*Order)(Optimizer* o, Image* I) = NULL;
   int imagesChanged = 0;

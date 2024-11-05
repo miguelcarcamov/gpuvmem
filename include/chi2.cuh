@@ -23,7 +23,7 @@ class Chi2 : public Fi {
 
  private:
   VirtualImageProcessor* ip;
-  float fg_scale;
+  float fg_scale = 1.0;
   int imageToAdd;
   float* result_dchi2;
 };

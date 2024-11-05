@@ -895,10 +895,6 @@ void MFS::setDevice() {
     printf("noise (Jy/pix) = %e\n", noise_jypix);
   }
 
-  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
-  if (NULL != chi2)
-    chi2->setFgScale(this->fg_scale);
-
   std::vector<float> u_mask;
   if (variables.user_mask != "NULL") {
     u_mask = ioImageHandler->read_data_float_FITS(variables.user_mask);
@@ -958,8 +954,15 @@ void MFS::clearRun() {
 void MFS::run() {
   optimizer->getObjectiveFunction()->setIo(ioImageHandler);
 
+  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+
+  if (NULL != chi2)
+    chi2->setFgScale(this->fg_scale);
+
+  if (NULL != chi2 && chi2->getNormalize())
+    chi2->setFgScale(1.0f);
+
   if (this->gridding) {
-    Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
     if (NULL != chi2)
       chi2->setCKernel(this->ckernel);
   }
@@ -987,7 +990,7 @@ void MFS::run() {
   float chi2_final = 0.0f;
   float final_S = 0.0f;
   float lambda_S = 0.0f;
-  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+
   if (NULL != chi2) {
     chi2_final = chi2->get_fivalue();
   }
@@ -1050,8 +1053,8 @@ void MFS::writeImages() {
   printf("Saving final image to disk\n");
   if (IoOrderEnd == NULL) {
     ioImageHandler->printNotPathImage(image->getImage(), "JY/PIXEL",
-                                      optimizer->getCurrentIteration(), 0, 1.0,
-                                      true);
+                                      optimizer->getCurrentIteration(), 0,
+                                      this->fg_scale, true);
     if (print_images)
       ioImageHandler->printNotNormalizedImage(
           image->getImage(), "alpha.fits", "", optimizer->getCurrentIteration(),

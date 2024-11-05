@@ -145,14 +145,18 @@ __host__ T deviceReduce(T* in, long N, int input_threads);
 __host__ float deviceMaxReduce(float* in, long N, int input_threads);
 __host__ float deviceMinReduce(float* in, long N, int input_threads);
 __host__ float simulate(float* I, VirtualImageProcessor* ip);
-__host__ float chi2(float* I, VirtualImageProcessor* ip, bool normalize);
+__host__ float chi2(float* I,
+                    VirtualImageProcessor* ip,
+                    bool normalize,
+                    float fg_scale);
 __host__ void linkRestartDGi(float* dgi);
 __host__ void linkAddToDPhi(float* dphi, float* dgi, int index);
 __host__ void dchi2(float* I,
                     float* dxi2,
                     float* result_dchi2,
                     VirtualImageProcessor* ip,
-                    bool normalize);
+                    bool normalize,
+                    float fg_scale);
 __host__ void defaultNewP(float* p, float* xi, float xmin, int image);
 __host__ void particularNewP(float* p, float* xi, float xmin, int image);
 __host__ void defaultEvaluateXt(float* xt,
@@ -172,10 +176,11 @@ __host__ void linkApplyBeam2I(cufftComplex* image,
                               float xobs,
                               float yobs,
                               float freq,
-                              int primary_beam);
+                              int primary_beam,
+                              float fg_scale);
 __host__ void linkClipWNoise2I(float* I);
 __host__ void linkCalculateInu2I(cufftComplex* image, float* I, float freq);
-__host__ void linkChain2I(float* chain, float freq, float* I);
+__host__ void linkChain2I(float* chain, float freq, float* I, float fg_scale);
 __host__ void normalizeImage(float* image, float normalization_factor);
 __host__ void linkClip(float* I);
 __host__ void DEntropy(float* I,
