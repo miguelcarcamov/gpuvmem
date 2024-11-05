@@ -43,7 +43,7 @@ RUN git clone --single-branch --branch v3.5.0 https://github.com/casacore/casaco
 
 # Install CUDA samples
 RUN cd /usr/local/cuda && \
-    git clone --single-branch --branch v11.6 https://github.com/NVIDIA/cuda-samples.git samples && \
+    git clone --single-branch --branch v12.4 https://github.com/NVIDIA/cuda-samples.git samples && \
     cd samples && \
     mv Common common && \
     mv Samples samples && \

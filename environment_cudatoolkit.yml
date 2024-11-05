@@ -15,15 +15,14 @@ dependencies:
 - numpy=1.24
 - pip
 - pip:
-  - casadata==2023.9.18
-  - casafeather==0.0.20
-  - casalogger==1.0.17
-  - casampi==0.5.4
-  - casaplotms==2.2.4
-  - casaplotserver==1.7.1
-  - casashell==6.6.0.20
-  - casatablebrowser==0.0.33
-  - casatasks==6.6.0.20
-  - casatestutils==6.6.0.20
-  - casatools==6.6.0.20
-  - casaviewer==1.9.1
+  - casatools==6.6.4.34
+  - casatasks==6.6.4.34
+  - casaplotms==2.4.3
+  - casaviewer==2.1.4
+  - casashell==6.6.4.34
+  - casaplotserver==1.8.2
+  - casatestutils==6.6.4.34
+  - casatablebrowser==0.0.35
+  - casalogger==1.0.19
+  - casafeather==0.0.22
+  - casampi==0.5.5

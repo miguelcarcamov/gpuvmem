@@ -11,13 +11,19 @@ class Chi2 : public Fi {
   void calcGi(float* p, float* xi);
   void restartDGi();
   void addToDphi(float* device_dphi);
-  void configure(int penalizatorIndex, int imageIndex, int imageToAdd) override;
-  void setPenalizationFactorFromInputIndex(int index){};
-  float calculateSecondDerivate(){};
+  void configure(int penalizatorIndex,
+                 int imageIndex,
+                 int imageToAdd,
+                 bool normalize) override;
+  void setPenalizationFactorFromInputIndex(int index) {};
+  float calculateSecondDerivate() {};
   void setCKernel(CKernel* ckernel) override;
+  void setFgScale(float fg_scale) override;
+  float getFgScale() override;
 
  private:
   VirtualImageProcessor* ip;
+  float fg_scale = 1.0;
   int imageToAdd;
   float* result_dchi2;
 };

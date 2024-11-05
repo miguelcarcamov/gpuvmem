@@ -16,6 +16,9 @@ env:
 jobs:
   build-base-container:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
@@ -24,11 +27,11 @@ jobs:
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.repository_owner }}
-        password: ${{ secrets.REGISTRY_TOKEN }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     - name: Setup Docker Buildx
       uses: docker/setup-buildx-action@v3
     - name: Build and Push Docker Image
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         push: true     # Will only build if this is not here
         tags: ${{ env.REGISTRY }}/${{ github.repository }}:base

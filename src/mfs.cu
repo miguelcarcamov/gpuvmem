@@ -6,7 +6,7 @@ long M, N, numVisibilities;
 float *device_Image, *device_dphi, *device_dchi2_total, *device_dS, *device_S,
     *device_noise_image, *device_weight_image, *device_distance_image;
 float noise_cut, MINPIX, minpix, random_probability = 1.0;
-float noise_jypix, fg_scale, eta, robust_param;
+float noise_jypix, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
 
@@ -318,7 +318,7 @@ void MFS::configure(int argc, char** argv) {
   double deltau_theo = 2.0 * max_uvmax_wavelength / (M - 1);
   double deltax_theo = 1.0 / (M * deltau_theo) / RPARCSEC;
   printf("The pixel size has to be less or equal to %lf arcsec\n", deltax_theo);
-  printf("Actual pixel size is %lf arcsec\n", DELTAX * 3600.0);
+  printf("Actual pixel size is %lf arcsec\n", fabs(DELTAX) * 3600.0);
 
   if (verbose_flag) {
     for (int i = 0; i < nMeasurementSets; i++) {
@@ -647,11 +647,11 @@ void MFS::setDevice() {
       direccos(datasets[d].fields[f].phs_ra, datasets[d].fields[f].phs_dec,
                raimage, decimage, &lphs, &mphs);
 
-      dcosines_l_pix_ref = lobs / -deltax;       // Radians to pixels
-      dcosines_m_pix_ref = mobs / fabs(deltay);  // Radians to pixels
+      dcosines_l_pix_ref = lobs / deltax;  // Radians to pixels
+      dcosines_m_pix_ref = mobs / deltay;  // Radians to pixels
 
-      dcosines_l_pix_phs = lphs / -deltax;       // Radians to pixels
-      dcosines_m_pix_phs = mphs / fabs(deltay);  // Radians to pixels
+      dcosines_l_pix_phs = lphs / deltax;  // Radians to pixels
+      dcosines_m_pix_phs = mphs / deltay;  // Radians to pixels
 
       if (verbose_flag) {
         printf("Ref: l (pix): %e, m (pix): %e\n", dcosines_l_pix_ref,
@@ -659,46 +659,55 @@ void MFS::setDevice() {
         printf("Phase: l (pix): %e, m (pix): %e\n", dcosines_l_pix_phs,
                dcosines_m_pix_phs);
       }
+      datasets[d].fields[f].ref_xobs_cartesian = dcosines_l_pix_phs;
+      datasets[d].fields[f].ref_yobs_cartesian = dcosines_m_pix_phs;
 
-      datasets[d].fields[f].ref_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
-      datasets[d].fields[f].ref_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
+      datasets[d].fields[f].phs_xobs_cartesian = dcosines_l_pix_phs;
+      datasets[d].fields[f].phs_yobs_cartesian = dcosines_m_pix_phs;
 
-      datasets[d].fields[f].phs_xobs = (crpix1 - 1.0f) + dcosines_l_pix_phs;
-      datasets[d].fields[f].phs_yobs = (crpix2 - 1.0f) + dcosines_m_pix_phs;
+      datasets[d].fields[f].ref_xobs_pix = dcosines_l_pix_phs + (crpix1 - 1.0f);
+      datasets[d].fields[f].ref_yobs_pix = dcosines_m_pix_phs + (crpix2 - 1.0f);
+
+      datasets[d].fields[f].phs_xobs_pix = dcosines_l_pix_phs + (crpix1 - 1.0f);
+      datasets[d].fields[f].phs_yobs_pix = dcosines_m_pix_phs + (crpix2 - 1.0f);
 
       if (verbose_flag) {
         printf(
             "Ref: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), "
             "y0: %f (pix)\n",
             f, datasets[d].fields[f].ref_ra, datasets[d].fields[f].ref_dec,
-            datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs);
+            datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix);
         printf(
             "Phase: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f "
             "(pix), y0: %f (pix)\n",
             f, datasets[d].fields[f].phs_ra, datasets[d].fields[f].phs_dec,
-            datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
+            datasets[d].fields[f].phs_xobs_pix,
+            datasets[d].fields[f].phs_yobs_pix);
       }
 
-      if (datasets[d].fields[f].ref_xobs < 0 ||
-          datasets[d].fields[f].ref_xobs >= M ||
-          datasets[d].fields[f].ref_xobs < 0 ||
-          datasets[d].fields[f].ref_yobs >= N) {
+      if (datasets[d].fields[f].ref_xobs_pix < 0 ||
+          datasets[d].fields[f].ref_xobs_pix >= M ||
+          datasets[d].fields[f].ref_xobs_pix < 0 ||
+          datasets[d].fields[f].ref_yobs_pix >= N) {
         printf("Dataset: %s\n", datasets[d].name);
         printf(
             "Pointing reference center (%f,%f) is outside the range of the "
             "image\n",
-            datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs);
+            datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix);
         goToError();
       }
 
-      if (datasets[d].fields[f].phs_xobs < 0 ||
-          datasets[d].fields[f].phs_xobs >= M ||
-          datasets[d].fields[f].phs_xobs < 0 ||
-          datasets[d].fields[f].phs_yobs >= N) {
+      if (datasets[d].fields[f].phs_xobs_pix < 0 ||
+          datasets[d].fields[f].phs_xobs_pix >= M ||
+          datasets[d].fields[f].phs_xobs_pix < 0 ||
+          datasets[d].fields[f].phs_yobs_pix >= N) {
         printf("Dataset: %s\n", datasets[d].name);
         printf(
             "Pointing phase center (%f,%f) is outside the range of the image\n",
-            datasets[d].fields[f].phs_xobs, datasets[d].fields[f].phs_yobs);
+            datasets[d].fields[f].phs_xobs_pix,
+            datasets[d].fields[f].phs_yobs_pix);
         goToError();
       }
     }
@@ -823,8 +832,9 @@ void MFS::setDevice() {
           datasets[d].fields[f].atten_image,
           datasets[d].antennas[0].antenna_diameter,
           datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff,
-          nu_0, datasets[d].fields[f].ref_xobs, datasets[d].fields[f].ref_yobs,
-          DELTAX, DELTAY, N, datasets[d].antennas[0].primary_beam);
+          nu_0, datasets[d].fields[f].ref_xobs_pix,
+          datasets[d].fields[f].ref_yobs_pix, DELTAX, DELTAY, N,
+          datasets[d].antennas[0].primary_beam);
       checkCudaErrors(cudaDeviceSynchronize());
 
       if (print_images) {
@@ -846,8 +856,8 @@ void MFS::setDevice() {
 
       if (radius_mask) {
         distance_image<<<numBlocksNN, threadsPerBlockNN>>>(
-            device_distance_image, datasets[d].fields[f].ref_xobs,
-            datasets[d].fields[f].ref_yobs, 4.5e-05, DELTAX, DELTAY, N);
+            device_distance_image, datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix, 4.5e-05, DELTAX, DELTAY, N);
         checkCudaErrors(cudaDeviceSynchronize());
       }
     }
@@ -878,10 +888,10 @@ void MFS::setDevice() {
   float noise_min =
       *std::min_element(host_noise_image, host_noise_image + (M * N));
 
-  fg_scale = noise_min;
+  this->fg_scale = noise_min;
   noise_cut = noise_cut * noise_min;
   if (verbose_flag) {
-    printf("fg_scale = %e\n", fg_scale);
+    printf("fg_scale = %e\n", this->fg_scale);
     printf("noise (Jy/pix) = %e\n", noise_jypix);
   }
 
@@ -944,9 +954,17 @@ void MFS::clearRun() {
 void MFS::run() {
   optimizer->getObjectiveFunction()->setIo(ioImageHandler);
 
+  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+
+  if (NULL != chi2)
+    chi2->setFgScale(this->fg_scale);
+
+  if (NULL != chi2 && chi2->getNormalize())
+    chi2->setFgScale(1.0f);
+
   if (this->gridding) {
-    Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
-    chi2->setCKernel(this->ckernel);
+    if (NULL != chi2)
+      chi2->setCKernel(this->ckernel);
   }
 
   printf("\n\nStarting optimizer\n");
@@ -972,7 +990,7 @@ void MFS::run() {
   float chi2_final = 0.0f;
   float final_S = 0.0f;
   float lambda_S = 0.0f;
-  Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+
   if (NULL != chi2) {
     chi2_final = chi2->get_fivalue();
   }
@@ -1036,7 +1054,7 @@ void MFS::writeImages() {
   if (IoOrderEnd == NULL) {
     ioImageHandler->printNotPathImage(image->getImage(), "JY/PIXEL",
                                       optimizer->getCurrentIteration(), 0,
-                                      fg_scale, true);
+                                      this->fg_scale, true);
     if (print_images)
       ioImageHandler->printNotNormalizedImage(
           image->getImage(), "alpha.fits", "", optimizer->getCurrentIteration(),

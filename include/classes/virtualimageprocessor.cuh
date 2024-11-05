@@ -15,9 +15,10 @@ class VirtualImageProcessor {
                           float xobs,
                           float yobs,
                           float freq,
-                          int primary_beam) = 0;
+                          int primary_beam,
+                          float fg_scale) = 0;
   virtual void calculateInu(cufftComplex* image, float* I, float freq) = 0;
-  virtual void chainRule(float* I, float freq) = 0;
+  virtual void chainRule(float* I, float freq, float fg_scale) = 0;
   virtual void configure(int i) = 0;
   virtual CKernel* getCKernel() { return this->ckernel; };
   virtual void setCKernel(CKernel* ckernel) { this->ckernel = ckernel; };

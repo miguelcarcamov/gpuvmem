@@ -84,8 +84,8 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d) {
 
             grid_pos_x = uvw.x / fabs(deltau);
             grid_pos_y = uvw.y / fabs(deltav);
-            x = round(grid_pos_x) + N / 2;
-            y = round(grid_pos_y) + M / 2;
+            x = grid_pos_x + int(floor(N / 2)) + 0.5;
+            y = grid_pos_y + int(floor(M / 2)) + 0.5;
 
             // And we grid the weights
             if (x >= 0 && y >= 0 && x < N && y < M) {
@@ -134,8 +134,8 @@ void BriggsWeightingScheme::apply(std::vector<MSDataset>& d) {
 
             grid_pos_x = uvw.x / fabs(deltau);
             grid_pos_y = uvw.y / fabs(deltav);
-            x = round(grid_pos_x) + N / 2;
-            y = round(grid_pos_y) + M / 2;
+            x = grid_pos_x + int(floor(N / 2)) + 0.5;
+            y = grid_pos_y + int(floor(M / 2)) + 0.5;
 
             if (x >= 0 && y >= 0 && x < N && y < M) {
               xy_pos[z].x = x;

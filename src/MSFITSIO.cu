@@ -305,9 +305,6 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
     h_values.beam_noise = aux_noise;
   }
 
-  h_values.DELTAX = fabs(h_values.DELTAX);
-  h_values.DELTAY *= -1.0;
-
   if (close_fits)
     closeFITS(hdu_in);
 
@@ -369,9 +366,6 @@ __host__ headerValues readFITSHeader(const char* filename) {
   if (!status_noise) {
     h_values.beam_noise = aux_noise;
   }
-
-  h_values.DELTAX = fabs(h_values.DELTAX);
-  h_values.DELTAY *= -1.0;
 
   closeFITS(hdu_in);
   return h_values;
@@ -446,17 +440,20 @@ __host__ void readMS(const char* MS_name,
                             "/FIELD where !FLAG_ROW";
   casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
 
-  std::string aux_query = "select DATA_DESC_ID FROM " + dir +
-                          " WHERE !FLAG_ROW AND ANY(WEIGHT > 0) AND ANY(!FLAG) "
-                          "ORDER BY UNIQUE DATA_DESC_ID";
-  std::string spw_query =
-      "select NUM_CHAN,CHAN_FREQ,ROWID() AS ID FROM " + dir +
-      "/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==[" + aux_query + "])";
+  std::string aux_spectral_query = "select SPECTRAL_WINDOW_ID FROM " + dir +
+                                   "/DATA_DESCRIPTION where !FLAG_ROW";
+  std::string spw_query = "select NUM_CHAN,CHAN_FREQ,ROWID() as ID FROM " +
+                          dir +
+                          "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+                          aux_spectral_query + "]";
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
 
-  std::string pol_query = "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM " +
-                          dir + "/POLARIZATION where !FLAG_ROW";
+  std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
+                              "/DATA_DESCRIPTION where !FLAG_ROW";
+  std::string pol_query =
+      "select NUM_CORR,CORR_TYPE,ROWID() as ID FROM " + dir +
+      "/POLARIZATION where !FLAG_ROW AND ROWID() in [" + pol_aux_query + "]";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
 
   std::string antenna_tab_query =
@@ -469,7 +466,8 @@ __host__ void readMS(const char* MS_name,
   std::string freq_query =
       "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, "
       "GMEDIAN(CHAN_FREQ) as REF_FREQ FROM " +
-      dir + "/SPECTRAL_WINDOW";
+      dir + "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+      aux_spectral_query + "]";
   std::string maxuv_metres_query =
       "select MAX(GMAX(UVW[0]),GMAX(UVW[1])) as MAXUV FROM " + dir;
 
@@ -792,17 +790,20 @@ __host__ void readMS(const char* MS_name,
       "/FIELD where !FLAG_ROW";
   casacore::Table field_tab(casacore::tableCommand(field_query.c_str()));
 
-  std::string aux_query = "select DATA_DESC_ID FROM " + dir +
-                          " WHERE !FLAG_ROW AND ANY(WEIGHT > 0) AND ANY(!FLAG) "
-                          "ORDER BY UNIQUE DATA_DESC_ID";
-  std::string spw_query =
-      "select NUM_CHAN,CHAN_FREQ,ROWID() AS ID FROM " + dir +
-      "/SPECTRAL_WINDOW where !FLAG_ROW AND ANY(ROWID()==[" + aux_query + "])";
+  std::string aux_spectral_query = "select SPECTRAL_WINDOW_ID FROM " + dir +
+                                   "/DATA_DESCRIPTION where !FLAG_ROW";
+  std::string spw_query = "select NUM_CHAN,CHAN_FREQ,ROWID() as ID FROM " +
+                          dir +
+                          "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+                          aux_spectral_query + "]";
   casacore::Table spectral_window_tab(
       casacore::tableCommand(spw_query.c_str()));
 
-  std::string pol_query = "select NUM_CORR,CORR_TYPE,ROWID() AS ID FROM " +
-                          dir + "/POLARIZATION where !FLAG_ROW";
+  std::string pol_aux_query = "select POLARIZATION_ID FROM " + dir +
+                              "/DATA_DESCRIPTION where !FLAG_ROW";
+  std::string pol_query =
+      "select NUM_CORR,CORR_TYPE,ROWID() as ID FROM " + dir +
+      "/POLARIZATION where !FLAG_ROW AND ROWID() in [" + pol_aux_query + "]";
   casacore::Table polarization_tab(casacore::tableCommand(pol_query.c_str()));
 
   std::string antenna_tab_query =
@@ -815,7 +816,8 @@ __host__ void readMS(const char* MS_name,
   std::string freq_query =
       "select GMIN(CHAN_FREQ) as MIN_FREQ, GMAX(CHAN_FREQ) as MAX_FREQ, "
       "GMEDIAN(CHAN_FREQ) as REF_FREQ FROM " +
-      dir + "/SPECTRAL_WINDOW";
+      dir + "/SPECTRAL_WINDOW where !FLAG_ROW AND ROWID() in [" +
+      aux_spectral_query + "]";
   std::string maxuv_metres_query =
       "select MAX(GMAX(UVW[0]),GMAX(UVW[1])) as MAXUV FROM " + dir;
 
@@ -1117,7 +1119,7 @@ __host__ void modelToHost(std::vector<Field>& fields,
                        cudaMemcpyDeviceToHost));
         for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
              j++) {
-          if (fields[f].visibilities[i][s].uvw[j].x < 0) {
+          if (fields[f].visibilities[i][s].uvw[j].x > 0) {
             fields[f].visibilities[i][s].Vm[j] =
                 cuConjf(fields[f].visibilities[i][s].Vm[j]);
           }

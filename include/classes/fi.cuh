@@ -17,23 +17,27 @@ class Fi {
     this->penalization_factor = 1.0f;
     this->Inu = NULL;
     this->iteration = 0;
+    this->normalize = false;
   }
 
   virtual float calcFi(float* p) = 0;
   virtual void calcGi(float* p, float* xi) = 0;
   virtual void restartDGi() = 0;
   virtual void addToDphi(float* device_dphi) = 0;
-  virtual void setPrior(float prior){};
-  virtual void setPrior(float* prior){};
-  virtual float getEta(){};
-  virtual void setEta(float eta){};
-  virtual void setCKernel(CKernel* ckernel){};
+  virtual void setPrior(float prior) {};
+  virtual void setPrior(float* prior) {};
+  virtual float getEta() {};
+  virtual void setEta(float eta) {};
+  virtual void setCKernel(CKernel* ckernel) {};
+  virtual void setFgScale(float fg_scale) {};
+  virtual float getFgScale() {};
 
   std::string getName() { return this->name; };
 
   std::string setName(std::string name) { this->name = name; };
 
   float get_fivalue() { return this->fi_value; };
+  bool getNormalize() { return this->normalize; };
   float getPenalizationFactor() { return this->penalization_factor; };
   void set_fivalue(float fi) { this->fi_value = fi; };
   void setPenalizationFactor(float p) { this->penalization_factor = p; };
@@ -48,13 +52,18 @@ class Fi {
     this->device_DS = DS;
   };
   void setIteration(int iteration) { this->iteration = iteration; };
+  void setNormalize(bool normalize) { this->normalize = normalize; };
 
   virtual float calculateSecondDerivate() = 0;
-  virtual void configure(int penalizatorIndex, int imageIndex, int imageToAdd) {
+  virtual void configure(int penalizatorIndex,
+                         int imageIndex,
+                         int imageToAdd,
+                         bool normalize) {
     this->imageIndex = imageIndex;
     this->order = order;
     this->mod = mod;
     this->imageToAdd = imageToAdd;
+    this->normalize = normalize;
 
     if (imageIndex > image_count - 1 || imageToAdd > image_count - 1) {
       printf("There is no image for the provided index %s\n", this->name);
@@ -89,9 +98,9 @@ class Fi {
   int mod;
   int order;
   std::string name;
-  ;
   cufftComplex* Inu;
   int imageToAdd;
+  bool normalize;
 };
 
 #endif

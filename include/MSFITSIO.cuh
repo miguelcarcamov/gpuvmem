@@ -104,8 +104,10 @@ typedef struct field {
   int valid_frequencies;
   double ref_ra, ref_dec;
   double phs_ra, phs_dec;
-  float ref_xobs, ref_yobs;
-  float phs_xobs, phs_yobs;
+  float ref_xobs_cartesian, ref_yobs_cartesian;
+  float phs_xobs_cartesian, phs_yobs_cartesian;
+  float ref_xobs_pix, ref_yobs_pix;
+  float phs_xobs_pix, phs_yobs_pix;
   float* atten_image;
   std::vector<float> nu;
   std::vector<std::vector<long>> numVisibilitiesPerFreqPerStoke;
