@@ -10,6 +10,9 @@ env:
 jobs:
   build-tagged-container:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - name: Get tag
       id: tag
