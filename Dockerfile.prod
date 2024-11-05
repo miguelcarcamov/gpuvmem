@@ -15,6 +15,6 @@ RUN cd gpuvmem && \
     cmake --build . --target install --verbose -j `nproc` && \
     cd .. && \
     pip3 install -r requirements.txt && \
-    mkdir $HOME/.casa/data
+    mkdir -p $HOME/.casa/data
 RUN echo "Hello there! from GPUVMEM production image"
 LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem"
