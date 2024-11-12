@@ -1104,16 +1104,16 @@ void MFS::writeResiduals() {
         "Measurement Set File\n");
     // In the de-gridding procedure weights are also restored to the original
     for (int d = 0; d < nMeasurementSets; d++) {
-      degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus,
-                 firstgpu, variables.blockSizeV, M, N, this->ckernel);
-      /*getOriginalVisibilitiesBack(datasets[d].fields, datasets[d].data,
-                                  num_gpus, firstgpu, variables.blockSizeV);*/
+      /*degridding(datasets[d].fields, datasets[d].data, deltau, deltav,
+         num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel);*/
+      getOriginalVisibilitiesBack(datasets[d].fields, datasets[d].data,
+                                  num_gpus, firstgpu, variables.blockSizeV);
     }
-    /*Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+    Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
     float res = chi2->calcFi(image->getImage());
     printf(
         "Non-gridded chi2 after de-gridding using bilinear interpolation %f\n",
-        res);*/
+        res);
   }
 
   for (int d = 0; d < nMeasurementSets; d++)
