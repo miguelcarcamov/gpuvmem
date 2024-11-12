@@ -956,11 +956,11 @@ void MFS::run() {
 
   Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
 
+  if (NULL != chi2 && chi2->getNormalize())
+    this->fg_scale = 1.0f;
+
   if (NULL != chi2)
     chi2->setFgScale(this->fg_scale);
-
-  if (NULL != chi2 && chi2->getNormalize())
-    chi2->setFgScale(1.0f);
 
   if (this->gridding) {
     if (NULL != chi2)
