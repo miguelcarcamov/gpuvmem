@@ -1993,13 +1993,13 @@ __host__ void degridding(std::vector<Field>& fields,
               blockSizeV);
         }
 
-        hermitianSymmetry<<<
+        /*hermitianSymmetry<<<
             fields[f].device_visibilities[i][s].numBlocksUV,
             fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
             fields[f].device_visibilities[i][s].uvw,
             fields[f].device_visibilities[i][s].Vo, fields[f].nu[i],
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        checkCudaErrors(cudaDeviceSynchronize());
+        checkCudaErrors(cudaDeviceSynchronize());*/
 
         // Interpolation / Degridding
         vis_mod2<<<fields[f].device_visibilities[i][s].numBlocksUV,
