@@ -3610,7 +3610,7 @@ __global__ void DChi2_SharedMemory(float* noise,
       u_shared[v] = UVW[v].x;
       v_shared[v] = UVW[v].y;
       w_shared[v] = UVW[v].z;
-      weight_shared[v] = weight[v];
+      weight_shared[v] = w[v];
       Vr_shared[v] = Vr[v];
       printf("u: %f, v:%f, weight: %f, real: %f, imag: %f\n", u_shared[v],
              v_shared[v], w_shared[v], Vr_shared[v].x, Vr_shared[v].y);
