@@ -43,12 +43,18 @@ void Chi2::configure(int penalizatorIndex,
 
 float Chi2::calcFi(float* p) {
   float result = 0.0f;
+  std::cout << "chi squared" << std::endl;
+  std::cout << "Normalize: " << this->normalize << std::endl;
+  std::cout << "Fg scale: " << this->fg_scale << std::endl;
   this->set_fivalue(chi2(p, ip, this->normalize, this->fg_scale));
   result = (penalization_factor) * (this->get_fivalue());
   return result;
 };
 
 void Chi2::calcGi(float* p, float* xi) {
+  std::cout << "Gradient chi squared" << std::endl;
+  std::cout << "Normalize: " << this->normalize << std::endl;
+  std::cout << "Fg scale: " << this->fg_scale << std::endl;
   dchi2(p, xi, result_dchi2, ip, this->normalize, this->fg_scale);
 };
 

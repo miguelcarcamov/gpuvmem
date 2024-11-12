@@ -3596,8 +3596,9 @@ __global__ void DChi2_SharedMemory(float* noise,
   int y0 = phs_yobs;
   double x = (j - x0) * DELTAX * RPDEG_D;
   double y = (i - y0) * DELTAY * RPDEG_D;
+  double z = sqrtf(1.0 - x * x - y * y);
 
-  float Ukv, Vkv, cosk, sink, atten;
+  float Ukv, Vkv, Wkv, cosk, sink, atten;
 
   double* u_shared = s_array;
   double* v_shared = (double*)&u_shared[numVisibilities];
@@ -3608,7 +3609,8 @@ __global__ void DChi2_SharedMemory(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       u_shared[v] = UVW[v].x;
       v_shared[v] = UVW[v].y;
-      w_shared[v] = w[v];
+      w_shared[v] = UVW[v].z;
+      weight_shared[v] = weight[v];
       Vr_shared[v] = Vr[v];
       printf("u: %f, v:%f, weight: %f, real: %f, imag: %f\n", u_shared[v],
              v_shared[v], w_shared[v], Vr_shared[v].x, Vr_shared[v].y);
@@ -3624,20 +3626,22 @@ __global__ void DChi2_SharedMemory(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       Ukv = x * u_shared[v];
       Vkv = y * v_shared[v];
+      Wkv = (z - 1.0) * w_shared[v];
 #if (__CUDA_ARCH__ >= 300)
       sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
 #else
-      cosk = cospif(2.0 * (Ukv + Vkv));
-      sink = sinpif(2.0 * (Ukv + Vkv));
+      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
+      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
 #endif
-      dchi2 +=
-          w_shared[v] * ((Vr_shared[v].x * cosk) + (Vr_shared[v].y * sink));
+      dchi2 += weight_shared[v] *
+               ((Vr_shared[v].x * cosk) + (Vr_shared[v].y * sink));
     }
 
     dchi2 *= atten;
 
     if (normalize)
       dchi2 /= numVisibilities;
+
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
@@ -3671,7 +3675,6 @@ __global__ void DChi2(float* noise,
   double x = (j - x0) * DELTAX * RPDEG_D;
   double y = (i - y0) * DELTAY * RPDEG_D;
   double z = sqrtf(1 - x * x - y * y);
-  double z_minus_one = z - 1.0;
 
   float Ukv, Vkv, Wkv, cosk, sink, atten;
 
@@ -3683,7 +3686,7 @@ __global__ void DChi2(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       Ukv = x * UVW[v].x;
       Vkv = y * UVW[v].y;
-      Wkv = z_minus_one * UVW[v].z;
+      Wkv = (z - 1.0) * UVW[v].z;
 
 #if (__CUDA_ARCH__ >= 300)
       sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
@@ -3695,6 +3698,7 @@ __global__ void DChi2(float* noise,
     }
 
     dchi2 *= fg_scale * atten;
+
     if (normalize)
       dchi2 /= numVisibilities;
 
@@ -3732,7 +3736,6 @@ __global__ void DChi2(float* noise,
   double x = (j - x0) * DELTAX * RPDEG_D;
   double y = (i - y0) * DELTAY * RPDEG_D;
   double z = sqrtf(1 - x * x - y * y);
-  double z_minus_one = z - 1.0;
 
   float Ukv, Vkv, Wkv, cosk, sink, atten, gcf_i;
 
@@ -3744,7 +3747,7 @@ __global__ void DChi2(float* noise,
     for (int v = 0; v < numVisibilities; v++) {
       Ukv = x * UVW[v].x;
       Vkv = y * UVW[v].y;
-      Wkv = z_minus_one * UVW[v].z;
+      Wkv = (z - 1.0) * UVW[v].z;
 #if (__CUDA_ARCH__ >= 300)
       sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
 #else
@@ -3758,6 +3761,7 @@ __global__ void DChi2(float* noise,
 
     if (normalize)
       dchi2 /= numVisibilities;
+
     dChi2[N * i + j] = -1.0f * dchi2;
   }
 }
