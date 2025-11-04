@@ -5,6 +5,7 @@ IoFITS::IoFITS() : Io() {
   this->N = 0;
   this->normalization_factor = 1.0f;
   this->print_images = false;
+  this->equinox = 2000.0f;
 };
 
 IoFITS::IoFITS(std::string input, std::string output, std::string path)
@@ -13,6 +14,7 @@ IoFITS::IoFITS(std::string input, std::string output, std::string path)
   this->N = 0;
   this->normalization_factor = 1.0f;
   this->print_images = false;
+  this->equinox = 2000.0f;
 };
 
 IoFITS::IoFITS(std::string input,

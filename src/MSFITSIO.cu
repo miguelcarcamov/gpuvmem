@@ -305,6 +305,10 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
     h_values.beam_noise = aux_noise;
   }
 
+  if (status_equinox) {
+    h_values.equinox = 2000;
+  }
+
   if (close_fits)
     closeFITS(hdu_in);
 
@@ -365,6 +369,10 @@ __host__ headerValues readFITSHeader(const char* filename) {
 
   if (!status_noise) {
     h_values.beam_noise = aux_noise;
+  }
+
+  if (status_equinox) {
+    h_values.equinox = 2000.0;
   }
 
   closeFITS(hdu_in);
