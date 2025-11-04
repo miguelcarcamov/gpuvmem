@@ -584,7 +584,7 @@ __host__ void readMS(const char* MS_name,
 
   data->n_internal_frequencies = spectral_window_tab.nrow();
 
-  casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,
+  casacore::ROArrayColumn<casacore::Float> chan_freq_col(spectral_window_tab,
                                                           "CHAN_FREQ");
 
   casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
@@ -609,7 +609,7 @@ __host__ void readMS(const char* MS_name,
 
   for (int f = 0; f < data->nfields; f++) {
     for (int i = 0; i < data->n_internal_frequencies; i++) {
-      casacore::Vector<double> chan_freq_vector;
+      casacore::Vector<float> chan_freq_vector;
       chan_freq_vector = chan_freq_col(i);
       for (int j = 0; j < data->channels[i]; j++) {
         fields[f].nu.push_back(chan_freq_vector[j]);
@@ -934,7 +934,7 @@ __host__ void readMS(const char* MS_name,
 
   data->n_internal_frequencies = spectral_window_tab.nrow();
 
-  casacore::ROArrayColumn<casacore::Double> chan_freq_col(spectral_window_tab,
+  casacore::ROArrayColumn<casacore::Float> chan_freq_col(spectral_window_tab,
                                                           "CHAN_FREQ");
 
   casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
@@ -959,7 +959,7 @@ __host__ void readMS(const char* MS_name,
 
   for (int f = 0; f < data->nfields; f++) {
     for (int i = 0; i < data->n_internal_frequencies; i++) {
-      casacore::Vector<double> chan_freq_vector;
+      casacore::Vector<float> chan_freq_vector;
       chan_freq_vector = chan_freq_col(i);
       for (int j = 0; j < data->channels[i]; j++) {
         fields[f].nu.push_back(chan_freq_vector[j]);
