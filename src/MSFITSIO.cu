@@ -539,7 +539,7 @@ __host__ void readMS(const char* MS_name,
         break;
     }
 
-    antennas[a].pb_cutoff = 10.0f * antennas[a].pb_factor *
+    antennas[a].pb_cutoff = antennas[a].pb_factor *
                             (max_wavelength / antennas[a].antenna_diameter);
   }
 
