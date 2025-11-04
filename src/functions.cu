@@ -2156,8 +2156,11 @@ __device__ float AiryDiskBeam(float distance,
                               float pb_factor) {
   float atten = 1.0f;
   if (distance != 0.0) {
-    float r = pb_factor * lambda / antenna_diameter;
-    float bessel_arg = PI * distance / (r / RZ);
+    // Airy disk formula: [2*J1(π*D*θ/λ) / (π*D*θ/λ)]²
+    // where D is diameter, θ is angle, λ is wavelength
+    // pb_factor scales where the first null occurs (standard is RZ ≈ 1.22)
+    // Scale the argument so first null occurs at pb_factor * λ / D
+    float bessel_arg = PI * distance * antenna_diameter / lambda * (RZ / pb_factor);
     float bessel_func = j1f(bessel_arg);
     atten = 4.0f * (bessel_func / bessel_arg) * (bessel_func / bessel_arg);
   }

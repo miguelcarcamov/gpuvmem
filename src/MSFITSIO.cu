@@ -306,7 +306,7 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
   }
 
   if (status_equinox) {
-    h_values.equinox = 2000;
+    h_values.equinox = 2000.0;
   }
 
   if (close_fits)
