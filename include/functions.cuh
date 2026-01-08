@@ -389,13 +389,10 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long N,
                              double xphs,
                              double yphs);
-// Texture memory management functions
-__host__ void setupTextureV(varsPerGPU* vars_gpu, int gpu_idx, long M, long N);
-__host__ void updateTextureV(varsPerGPU* vars_gpu, int gpu_idx, long M, long N);
-__host__ void cleanupTextureV(varsPerGPU* vars_gpu, int gpu_idx);
-// Optimized bilinear interpolation kernels using texture memory
+// Optimized bilinear interpolation kernels using regular global memory with
+// __ldg()
 __global__ void vis_mod(cufftComplex* __restrict__ Vm,
-                        cufftComplex* V,
+                        const cufftComplex* __restrict__ V,
                         const double3* __restrict__ UVW,
                         float* __restrict__ weight,
                         const double deltau,
@@ -403,7 +400,7 @@ __global__ void vis_mod(cufftComplex* __restrict__ Vm,
                         const long numVisibilities,
                         const long N);
 __global__ void vis_mod2(cufftComplex* __restrict__ Vm,
-                         cufftComplex* V,
+                         const cufftComplex* __restrict__ V,
                          const double3* __restrict__ UVW,
                          float* __restrict__ weight,
                          const double deltau,
