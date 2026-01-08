@@ -186,17 +186,29 @@ else()
     execute_process(
       COMMAND ${NVIDIA_SMI} --query-gpu=compute_cap --format=csv,noheader
       OUTPUT_VARIABLE GPU_COMPUTE_CAP
-      OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+      ERROR_VARIABLE NVIDIA_SMI_ERROR
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE NVIDIA_SMI_RESULT)
 
-    if(GPU_COMPUTE_CAP)
+    if(NOT NVIDIA_SMI_RESULT EQUAL 0)
+      message(WARNING "nvidia-smi failed (exit code ${NVIDIA_SMI_RESULT}): ${NVIDIA_SMI_ERROR}")
+    elseif(NOT GPU_COMPUTE_CAP)
+      message(WARNING "nvidia-smi returned empty output. GPU may not be available or driver not loaded.")
+    else()
       # Parse "X.Y" format to "XY" (e.g., "6.1" -> "61")
+      # First, split by newlines (handles both single-GPU and multi-GPU systems)
+      # Single GPU: "8.0\n" -> "8.0;" -> processes "80" and "" (empty skipped)
+      # Multi-GPU: "8.0\n8.0\n8.0" -> "8.0;8.0;8.0;" -> processes all "80" values
+      string(REPLACE "\n" ";" GPU_COMPUTE_CAP "${GPU_COMPUTE_CAP}")
+      # Then replace dots and commas
       string(REPLACE "." "" GPU_COMPUTE_CAP "${GPU_COMPUTE_CAP}")
       string(REPLACE "," ";" GPU_COMPUTE_CAP "${GPU_COMPUTE_CAP}")
 
       foreach(CAP ${GPU_COMPUTE_CAP})
         string(STRIP "${CAP}" CAP)
-        # Filter out invalid architectures (e.g., 5.3 for Tegra)
-        if(CAP MATCHES "^[0-9]+$" AND NOT CAP STREQUAL "53")
+        # Skip empty entries (from trailing newlines or blank lines)
+        if(CAP AND CAP MATCHES "^[0-9]+$" AND NOT CAP STREQUAL "53")
           list(APPEND CUDA_ARCH_LIST "${CAP}")
         endif()
       endforeach()
@@ -204,18 +216,40 @@ else()
       # Remove duplicates (for multi-GPU systems)
       if(CUDA_ARCH_LIST)
         list(REMOVE_DUPLICATES CUDA_ARCH_LIST)
+      else()
+        message(WARNING "nvidia-smi output parsed but no valid architectures found. Raw output: ${GPU_COMPUTE_CAP}")
       endif()
     endif()
+  else()
+    message(WARNING "nvidia-smi not found in PATH. Cannot auto-detect CUDA architecture.")
   endif()
 
   # Fallback if auto-detection failed
   if(NOT CUDA_ARCH_LIST)
-    message(
-      FATAL_ERROR
-        "Could not detect CUDA architecture.\n"
-        "Please specify manually: cmake -DCUDA_ARCH=<number> ..\n"
-        "Common values: 60 (Pascal), 75 (Turing), 80 (Ampere), 89 (Ada)\n"
-        "Find your GPU: nvidia-smi --query-gpu=compute_cap --format=csv")
+    set(ERROR_MSG "Could not detect CUDA architecture.\n")
+    
+    if(NOT NVIDIA_SMI)
+      string(APPEND ERROR_MSG "  - nvidia-smi not found in PATH\n")
+    else()
+      string(APPEND ERROR_MSG "  - nvidia-smi found but detection failed\n")
+      if(DEFINED NVIDIA_SMI_ERROR)
+        string(APPEND ERROR_MSG "  - Error: ${NVIDIA_SMI_ERROR}\n")
+      endif()
+      if(DEFINED GPU_COMPUTE_CAP)
+        string(APPEND ERROR_MSG "  - Output: '${GPU_COMPUTE_CAP}'\n")
+      endif()
+    endif()
+    
+    string(APPEND ERROR_MSG "\n")
+    string(APPEND ERROR_MSG "Solutions:\n")
+    string(APPEND ERROR_MSG "  1. Specify manually: cmake -DCUDA_ARCH=<number> ..\n")
+    string(APPEND ERROR_MSG "  2. Check GPU availability: nvidia-smi\n")
+    string(APPEND ERROR_MSG "  3. Check compute capability: nvidia-smi --query-gpu=compute_cap --format=csv\n")
+    string(APPEND ERROR_MSG "\n")
+    string(APPEND ERROR_MSG "Common architecture values:\n")
+    string(APPEND ERROR_MSG "  - 60 (Pascal), 75 (Turing), 80 (Ampere), 89 (Ada), 90 (Hopper)")
+    
+    message(FATAL_ERROR "${ERROR_MSG}")
   endif()
 endif()
 
