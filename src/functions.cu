@@ -2358,10 +2358,8 @@ __global__ void apply_GCF(cufftComplex* __restrict__ image,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  const int idx = N * i + j;
-  const float img_real = image[idx].x;
-  const float gcf_val = __ldg(&gcf[idx]);
-  image[idx] = make_cuFloatComplex(img_real * gcf_val, 0.0f);
+  image[N * i + j] =
+      make_cuFloatComplex(image[N * i + j].x * gcf[N * i + j], 0.0f);
 }
 
 /*--------------------------------------------------------------------
@@ -2611,10 +2609,7 @@ __global__ void residual(cufftComplex* __restrict__ Vr,
                          long numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
   if (i < numVisibilities) {
-    // Use __ldg for read-only data
-    const cufftComplex vm = __ldg(&Vm[i]);
-    const cufftComplex vo = __ldg(&Vo[i]);
-    Vr[i] = cuCsubf(vo, vm);
+    Vr[i] = cuCsubf(Vo[i], Vm[i]);
   }
 }
 
@@ -2819,11 +2814,7 @@ __global__ void chi2Vector(float* __restrict__ chi2,
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
-    // Use __ldg for read-only data
-    const float weight = __ldg(&w[i]);
-    const float vr_real = __ldg(&Vr[i].x);
-    const float vr_imag = __ldg(&Vr[i].y);
-    chi2[i] = weight * (vr_real * vr_real + vr_imag * vr_imag);
+    chi2[i] = w[i] * ((Vr[i].x * Vr[i].x) + (Vr[i].y * Vr[i].y));
   }
 }
 
@@ -3042,9 +3033,8 @@ __global__ void SVector(float* __restrict__ S,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  const int idx = N * i + j;
-  const float noise_val = __ldg(&noise[idx]);
-  S[idx] = calculateS(I, prior_value, eta, noise_val, noise_cut, index, M, N);
+  S[N * i + j] =
+      calculateS(I, prior_value, eta, noise[N * i + j], noise_cut, index, M, N);
 }
 
 __global__ void DS(float* __restrict__ dS,
@@ -3060,10 +3050,8 @@ __global__ void DS(float* __restrict__ dS,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  const int idx = N * i + j;
-  const float noise_val = __ldg(&noise[idx]);
-  dS[idx] = calculateDS(I, prior_value, eta, lambda, noise_val, noise_cut,
-                        index, M, N);
+  dS[N * i + j] = calculateDS(I, prior_value, eta, lambda, noise[N * i + j],
+                              noise_cut, index, M, N);
 }
 
 __global__ void SGVector(float* S,
