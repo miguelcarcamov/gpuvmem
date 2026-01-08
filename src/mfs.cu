@@ -826,9 +826,7 @@ void MFS::setDevice() {
   start = omp_get_wtime();
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-// Use guided scheduling for better load balancing when work per frequency
-// varies
-#pragma omp parallel for schedule(guided) num_threads(num_gpus)
+#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         unsigned int j = omp_get_thread_num();
         unsigned int num_cpu_threads = omp_get_num_threads();
