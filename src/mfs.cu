@@ -855,10 +855,7 @@ void MFS::setDevice() {
 
     cudaSetDevice(firstgpu);
 
-    // Parallelize field processing - each field is independent
-#pragma omp parallel for schedule(static, 1)
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-      cudaSetDevice(firstgpu);  // Ensure correct device context per thread
       total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(
           datasets[d].fields[f].atten_image,
           datasets[d].antennas[0].antenna_diameter,
@@ -868,8 +865,6 @@ void MFS::setDevice() {
           datasets[d].antennas[0].primary_beam);
       checkCudaErrors(cudaDeviceSynchronize());
 
-      // I/O operations need to be serialized
-#pragma omp critical
       if (print_images) {
         std::string atten_name = "dataset_" + std::to_string(d) + "_atten";
         ioImageHandler->printNotNormalizedImageIteration(
