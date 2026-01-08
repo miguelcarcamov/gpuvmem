@@ -3032,7 +3032,7 @@ __device__ float calculateDS(float* I,
 
 __global__ void SVector(float* __restrict__ S,
                         const float* __restrict__ noise,
-                        const float* __restrict__ I,
+                        float* __restrict__ I,
                         long N,
                         long M,
                         float noise_cut,
@@ -3048,7 +3048,7 @@ __global__ void SVector(float* __restrict__ S,
 }
 
 __global__ void DS(float* __restrict__ dS,
-                   const float* __restrict__ I,
+                   float* __restrict__ I,
                    const float* __restrict__ noise,
                    float noise_cut,
                    float lambda,
