@@ -384,7 +384,7 @@ __global__ void noise_image(float* noise_image,
                             float max_weight,
                             float noise_jypix,
                             long N);
-__global__ void phase_rotate(cufftComplex* data,
+__global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
@@ -411,9 +411,9 @@ __global__ void vis_mod2(cufftComplex* __restrict__ Vm,
                          const long numVisibilities,
                          const long N,
                          const float N_half);
-__global__ void residual(cufftComplex* Vr,
-                         cufftComplex* Vm,
-                         cufftComplex* Vo,
+__global__ void residual(cufftComplex* __restrict__ Vr,
+                         const cufftComplex* __restrict__ Vm,
+                         const cufftComplex* __restrict__ Vo,
                          long numVisibilities);
 __global__ void makePositive(cufftComplex* I, long N);
 __global__ void evaluateXt(float* xt,
@@ -428,10 +428,10 @@ __global__ void evaluateXtNoPositivity(cufftComplex* xt,
                                        float* xicom,
                                        float x,
                                        long N);
-__global__ void chi2Vector(float* chi2,
-                           cufftComplex* Vr,
-                           float* w,
-                           int numVisibilities);
+__global__ void chi2Vector(float* __restrict__ chi2,
+                           const cufftComplex* __restrict__ Vr,
+                           const float* __restrict__ w,
+                           long numVisibilities);
 __global__ void SVector(float* S,
                         float* noise,
                         cufftComplex* I,
