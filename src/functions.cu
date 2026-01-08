@@ -2499,8 +2499,8 @@ __global__ void vis_mod(
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
-    // Load UVW once using cached read
-    const double3 uvw = __ldg(&UVW[i]);
+    // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
+    const double3 uvw = UVW[i];
     double uv_x = uvw.x / deltau;
     double uv_y = uvw.y / deltav;
 
@@ -2559,8 +2559,8 @@ __global__ void vis_mod2(
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
-    // Load UVW once using cached read
-    const double3 uvw = __ldg(&UVW[i]);
+    // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
+    const double3 uvw = UVW[i];
     double f_j = uvw.x / deltau + N_half;
     double f_k = uvw.y / deltav + N_half;
 
