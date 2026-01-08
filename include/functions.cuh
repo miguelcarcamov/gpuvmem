@@ -389,22 +389,28 @@ __global__ void phase_rotate(cufftComplex* data,
                              long N,
                              double xphs,
                              double yphs);
-__global__ void vis_mod(cufftComplex* Vm,
+// Texture memory management functions
+__host__ void setupTextureV(varsPerGPU* vars_gpu, int gpu_idx, long M, long N);
+__host__ void updateTextureV(varsPerGPU* vars_gpu, int gpu_idx, long M, long N);
+__host__ void cleanupTextureV(varsPerGPU* vars_gpu, int gpu_idx);
+// Optimized bilinear interpolation kernels using texture memory
+__global__ void vis_mod(cufftComplex* __restrict__ Vm,
                         cufftComplex* V,
-                        double3* UVW,
-                        float* weight,
-                        double deltau,
-                        double deltav,
-                        long numVisibilities,
-                        long N);
-__global__ void vis_mod2(cufftComplex* Vm,
+                        const double3* __restrict__ UVW,
+                        float* __restrict__ weight,
+                        const double deltau,
+                        const double deltav,
+                        const long numVisibilities,
+                        const long N);
+__global__ void vis_mod2(cufftComplex* __restrict__ Vm,
                          cufftComplex* V,
-                         double3* UVW,
-                         float* weight,
-                         double deltau,
-                         double deltav,
-                         long numVisibilities,
-                         long N);
+                         const double3* __restrict__ UVW,
+                         float* __restrict__ weight,
+                         const double deltau,
+                         const double deltav,
+                         const long numVisibilities,
+                         const long N,
+                         const float N_half);
 __global__ void residual(cufftComplex* Vr,
                          cufftComplex* Vm,
                          cufftComplex* Vo,

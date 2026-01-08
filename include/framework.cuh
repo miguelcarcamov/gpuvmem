@@ -52,6 +52,7 @@ typedef struct varsPerGPU {
   cufftHandle plan;
   cufftComplex* device_I_nu;
   cufftComplex* device_V;
+  cudaArray* device_V_array;  // Texture array for device_V
 } varsPerGPU;
 
 typedef struct variables {

@@ -34,6 +34,9 @@
 
 namespace cg = cooperative_groups;
 
+// Texture declaration for device_V (Fourier space image)
+texture<float2, cudaTextureType2D, cudaReadModeElementType> tex_V;
+
 extern long M, N;
 extern int iterations, iter, image_count, status_mod_in, flag_opt, num_gpus,
     multigpu, firstgpu, reg_term;
@@ -1948,6 +1951,8 @@ __host__ void degridding(std::vector<Field>& fields,
         checkCudaErrors(cudaMemcpy(
             vars_gpu[gpu_idx].device_V, gridded_visibilities[gpu_idx].data(),
             sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
+        // Update texture memory after modifying device_V
+        updateTextureV(vars_gpu, gpu_idx, M, N);
 
         // Copy original (u,v) positions and weights to host and device
 
@@ -2007,7 +2012,8 @@ __host__ void degridding(std::vector<Field>& fields,
             fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V,
             fields[f].device_visibilities[i][s].uvw,
             fields[f].device_visibilities[i][s].weight, deltau, deltav,
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+            fields[f].numVisibilitiesPerFreqPerStoke[i][s], N,
+            (float)(N / 2.0));
         // degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
         //             fields[f].device_visibilities[i][s].threadsPerBlockUV
         //             >>>(fields[f].device_visibilities[i][s].uvw,
@@ -2424,54 +2430,110 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
 }
 
 /*
- * Interpolate in the visibility array to find the visibility at (u,v);
+ * Setup texture memory for device_V
  */
-__global__ void vis_mod(cufftComplex* Vm,
-                        cufftComplex* V,
-                        double3* UVW,
-                        float* weight,
-                        double deltau,
-                        double deltav,
-                        long numVisibilities,
-                        long N) {
+__host__ void setupTextureV(varsPerGPU* vars_gpu, int gpu_idx, long M, long N) {
+  cudaSetDevice((gpu_idx % num_gpus) + firstgpu);
+
+  // Create channel descriptor for float2 (cufftComplex)
+  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float2>();
+
+  // Allocate array
+  checkCudaErrors(
+      cudaMallocArray(&vars_gpu[gpu_idx].device_V_array, &channelDesc, N, M));
+
+  // Configure texture
+  tex_V.addressMode[0] = cudaAddressModeClamp;
+  tex_V.addressMode[1] = cudaAddressModeClamp;
+  tex_V.filterMode =
+      cudaFilterModePoint;  // We do bilinear interpolation manually
+  tex_V.normalized = false;
+
+  // Bind texture to array
+  checkCudaErrors(cudaBindTextureToArray(
+      tex_V, vars_gpu[gpu_idx].device_V_array, channelDesc));
+}
+
+/*
+ * Update texture memory when device_V is modified
+ */
+__host__ void updateTextureV(varsPerGPU* vars_gpu,
+                             int gpu_idx,
+                             long M,
+                             long N) {
+  cudaSetDevice((gpu_idx % num_gpus) + firstgpu);
+
+  // Copy from device_V to texture array
+  checkCudaErrors(cudaMemcpy2DToArray(
+      vars_gpu[gpu_idx].device_V_array, 0, 0, vars_gpu[gpu_idx].device_V,
+      N * sizeof(cufftComplex), N * sizeof(cufftComplex), M,
+      cudaMemcpyDeviceToDevice));
+}
+
+/*
+ * Cleanup texture memory
+ */
+__host__ void cleanupTextureV(varsPerGPU* vars_gpu, int gpu_idx) {
+  cudaSetDevice((gpu_idx % num_gpus) + firstgpu);
+
+  if (vars_gpu[gpu_idx].device_V_array != nullptr) {
+    checkCudaErrors(cudaUnbindTexture(tex_V));
+    checkCudaErrors(cudaFreeArray(vars_gpu[gpu_idx].device_V_array));
+    vars_gpu[gpu_idx].device_V_array = nullptr;
+  }
+}
+
+/*
+ * Interpolate in the visibility array to find the visibility at (u,v);
+ * Optimized version using texture memory
+ */
+__global__ void vis_mod(
+    cufftComplex* __restrict__ Vm,
+    cufftComplex* V,  // Kept for compatibility, but texture is used
+    const double3* __restrict__ UVW,
+    float* __restrict__ weight,
+    const double deltau,
+    const double deltav,
+    const long numVisibilities,
+    const long N) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
-  int i1, i2, j1, j2;
-  double du, dv;
-  double2 uv;
-  cufftComplex v11, v12, v21, v22;
-  float Zreal;
-  float Zimag;
 
   if (i < numVisibilities) {
-    uv.x = UVW[i].x / deltau;
-    uv.y = UVW[i].y / deltav;
+    // Load UVW once using cached read
+    const double3 uvw = __ldg(&UVW[i]);
+    double uv_x = uvw.x / deltau;
+    double uv_y = uvw.y / deltav;
 
-    if (uv.x < 0.0)
-      uv.x += N;
+    // Handle negative coordinates
+    if (uv_x < 0.0)
+      uv_x += N;
+    if (uv_y < 0.0)
+      uv_y += N;
 
-    if (uv.y < 0.0)
-      uv.y += N;
+    const int i1 = __double2int_rd(uv_x);
+    const int i2 = (i1 + 1) % N;
+    const double du = uv_x - i1;
 
-    i1 = uv.x;
-    i2 = (i1 + 1) % N;
-    du = uv.x - i1;
+    const int j1 = __double2int_rd(uv_y);
+    const int j2 = (j1 + 1) % N;
+    const double dv = uv_y - j1;
 
-    j1 = uv.y;
-    j2 = (j1 + 1) % N;
-    dv = uv.y - j1;
+    // Optimized boundary check (i2 and j2 are always valid due to modulo)
+    if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N) {
+      // Use texture memory for reads (add 0.5 for center of pixel)
+      const float2 v11 = tex2D(tex_V, i1 + 0.5f, j1 + 0.5f);
+      const float2 v12 = tex2D(tex_V, i1 + 0.5f, j2 + 0.5f);
+      const float2 v21 = tex2D(tex_V, i2 + 0.5f, j1 + 0.5f);
+      const float2 v22 = tex2D(tex_V, i2 + 0.5f, j2 + 0.5f);
 
-    if (i1 >= 0 && i1 < N && i2 >= 0 && i2 < N && j1 >= 0 && j1 < N &&
-        j2 >= 0 && j2 < N) {
-      /* Bilinear interpolation */
-      v11 = V[N * j1 + i1]; /* [i1, j1] */
-      v12 = V[N * j2 + i1]; /* [i1, j2] */
-      v21 = V[N * j1 + i2]; /* [i2, j1] */
-      v22 = V[N * j2 + i2]; /* [i2, j2] */
+      // Optimized bilinear interpolation (factor out common terms)
+      const float w11 = (1.0f - du) * (1.0f - dv);
+      const float w12 = (1.0f - du) * dv;
+      const float w21 = du * (1.0f - dv);
+      const float w22 = du * dv;
 
-      Zreal = (1 - du) * (1 - dv) * v11.x + (1 - du) * dv * v12.x +
-              du * (1 - dv) * v21.x + du * dv * v22.x;
-      Zimag = (1 - du) * (1 - dv) * v11.y + (1 - du) * dv * v12.y +
-              du * (1 - dv) * v21.y + du * dv * v22.y;
+      const float Zreal = w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
+      const float Zimag = w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
 
       Vm[i] = make_cuFloatComplex(Zreal, Zimag);
     } else {
@@ -2482,47 +2544,51 @@ __global__ void vis_mod(cufftComplex* Vm,
 
 /*
  * Interpolate in the visibility array to find the visibility at (u,v);
+ * Optimized version using texture memory
  */
-__global__ void vis_mod2(cufftComplex* Vm,
-                         cufftComplex* V,
-                         double3* UVW,
-                         float* weight,
-                         double deltau,
-                         double deltav,
-                         long numVisibilities,
-                         long N) {
+__global__ void vis_mod2(
+    cufftComplex* __restrict__ Vm,
+    cufftComplex* V,  // Kept for compatibility, but texture is used
+    const double3* __restrict__ UVW,
+    float* __restrict__ weight,
+    const double deltau,
+    const double deltav,
+    const long numVisibilities,
+    const long N,
+    const float N_half) {  // Precomputed N/2
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
-  double f_j, f_k;
-  int j1, j2, k1, k2;
-  double2 uv;
-  cufftComplex Z;
 
   if (i < numVisibilities) {
-    uv.x = UVW[i].x / deltau;
-    uv.y = UVW[i].y / deltav;
+    // Load UVW once using cached read
+    const double3 uvw = __ldg(&UVW[i]);
+    double f_j = uvw.x / deltau + N_half;
+    double f_k = uvw.y / deltav + N_half;
 
-    f_j = uv.x + int(floorf(N / 2));
-    j1 = f_j;
-    j2 = j1 + 1;
+    const int j1 = __double2int_rd(f_j);
+    const int j2 = j1 + 1;
     f_j = f_j - j1;
 
-    f_k = uv.y + int(floorf(N / 2));
-    k1 = f_k;
-    k2 = k1 + 1;
+    const int k1 = __double2int_rd(f_k);
+    const int k2 = k1 + 1;
     f_k = f_k - k1;
 
-    if (j1 < N && k1 < N && j2 < N && k2 < N) {
-      /* Bilinear interpolation */
-      // Real part
-      Z.x = (1 - f_j) * (1 - f_k) * V[N * k1 + j1].x +
-            f_j * (1 - f_k) * V[N * k1 + j2].x +
-            (1 - f_j) * f_k * V[N * k2 + j1].x + f_j * f_k * V[N * k2 + j2].x;
-      // Imaginary part
-      Z.y = (1 - f_j) * (1 - f_k) * V[N * k1 + j1].y +
-            f_j * (1 - f_k) * V[N * k1 + j2].y +
-            (1 - f_j) * f_k * V[N * k2 + j1].y + f_j * f_k * V[N * k2 + j2].y;
+    if (j1 >= 0 && j1 < N && k1 >= 0 && k1 < N && j2 >= 0 && j2 < N &&
+        k2 >= 0 && k2 < N) {
+      // Use texture memory for reads (add 0.5 for center of pixel)
+      const float2 v11 = tex2D(tex_V, j1 + 0.5f, k1 + 0.5f);
+      const float2 v12 = tex2D(tex_V, j2 + 0.5f, k1 + 0.5f);
+      const float2 v21 = tex2D(tex_V, j1 + 0.5f, k2 + 0.5f);
+      const float2 v22 = tex2D(tex_V, j2 + 0.5f, k2 + 0.5f);
 
-      Vm[i] = Z;
+      // Optimized bilinear interpolation weights
+      const float w11 = (1.0f - f_j) * (1.0f - f_k);
+      const float w12 = f_j * (1.0f - f_k);
+      const float w21 = (1.0f - f_j) * f_k;
+      const float w22 = f_j * f_k;
+
+      Vm[i] = make_cuFloatComplex(
+          w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
+          w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
     } else {
       weight[i] = 0.0f;
     }
@@ -4108,6 +4174,9 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
             datasets[d].fields[f].phs_yobs_pix);
         checkCudaErrors(cudaDeviceSynchronize());
 
+        // Update texture memory after modifying device_V (FFT + phase_rotate)
+        updateTextureV(vars_gpu, gpu_idx, M, N);
+
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].data.corr_type[s] == LL ||
               datasets[d].data.corr_type[s] == RR ||
@@ -4236,6 +4305,9 @@ __host__ float chi2(float* I,
             datasets[d].fields[f].phs_xobs_pix,
             datasets[d].fields[f].phs_yobs_pix);
         checkCudaErrors(cudaDeviceSynchronize());
+
+        // Update texture memory after modifying device_V (FFT + phase_rotate)
+        updateTextureV(vars_gpu, gpu_idx, M, N);
 
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].data.corr_type[s] == LL ||

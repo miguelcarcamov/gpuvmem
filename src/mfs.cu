@@ -765,6 +765,15 @@ void MFS::setDevice() {
         cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float) * max_number_vis));
     checkCudaErrors(
         cudaMemset(vars_gpu[g].device_dchi2, 0, sizeof(float) * M * N));
+
+    // Initialize texture array pointer
+    vars_gpu[g].device_V_array = nullptr;
+
+    // Setup texture memory for device_V
+    setupTextureV(vars_gpu, g, M, N);
+
+    // Initial update of texture from device_V
+    updateTextureV(vars_gpu, g, M, N);
   }
 
   cudaSetDevice(firstgpu);
@@ -962,6 +971,8 @@ void MFS::clearRun() {
         cudaMemset(vars_gpu[g].device_V, 0, sizeof(cufftComplex) * M * N));
     checkCudaErrors(
         cudaMemset(vars_gpu[g].device_I_nu, 0, sizeof(cufftComplex) * M * N));
+    // Update texture memory after clearing device_V
+    updateTextureV(vars_gpu, g, M, N);
   }
 
   cudaSetDevice(firstgpu);
@@ -1202,6 +1213,8 @@ void MFS::unSetDevice() {
 
   for (int g = 0; g < num_gpus; g++) {
     cudaSetDevice((g % num_gpus) + firstgpu);
+    // Cleanup texture memory before freeing device_V
+    cleanupTextureV(vars_gpu, g);
     cudaFree(vars_gpu[g].device_V);
     cudaFree(vars_gpu[g].device_I_nu);
   }
