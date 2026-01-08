@@ -3564,88 +3564,6 @@ __global__ void restartDPhi(float* dphi, float* dChi2, float* dH, long N) {
   dH[N * i + j] = 0.0f;
 }
 
-__global__ void DChi2_SharedMemory(float* noise,
-                                   float* dChi2,
-                                   cufftComplex* Vr,
-                                   double3* UVW,
-                                   float* w,
-                                   long N,
-                                   long numVisibilities,
-                                   float noise_cut,
-                                   float ref_xobs,
-                                   float ref_yobs,
-                                   float phs_xobs,
-                                   float phs_yobs,
-                                   double DELTAX,
-                                   double DELTAY,
-                                   float antenna_diameter,
-                                   float pb_factor,
-                                   float pb_cutoff,
-                                   float freq,
-                                   int primary_beam,
-                                   bool normalize) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-  cg::thread_block cta = cg::this_thread_block();
-
-  extern __shared__ double s_array[];
-
-  int x0 = phs_xobs;
-
-  int y0 = phs_yobs;
-  double x = (j - x0) * DELTAX * RPDEG_D;
-  double y = (i - y0) * DELTAY * RPDEG_D;
-  double z = sqrtf(1.0 - x * x - y * y);
-
-  float Ukv, Vkv, Wkv, cosk, sink, atten;
-
-  double* u_shared = s_array;
-  double* v_shared = (double*)&u_shared[numVisibilities];
-  double* w_shared = (double*)&v_shared[numVisibilities];
-  float* weight_shared = (float*)&w_shared[numVisibilities];
-  cufftComplex* Vr_shared = (cufftComplex*)&weight_shared[numVisibilities];
-  if (threadIdx.x == 0 && threadIdx.y == 0) {
-    for (int v = 0; v < numVisibilities; v++) {
-      u_shared[v] = UVW[v].x;
-      v_shared[v] = UVW[v].y;
-      w_shared[v] = UVW[v].z;
-      weight_shared[v] = w[v];
-      Vr_shared[v] = Vr[v];
-      printf("u: %f, v:%f, weight: %f, real: %f, imag: %f\n", u_shared[v],
-             v_shared[v], w_shared[v], Vr_shared[v].x, Vr_shared[v].y);
-    }
-  }
-  cg::sync(cta);
-
-  atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                      ref_yobs, DELTAX, DELTAY, primary_beam);
-
-  float dchi2 = 0.0f;
-  if (noise[N * i + j] < noise_cut) {
-    for (int v = 0; v < numVisibilities; v++) {
-      Ukv = x * u_shared[v];
-      Vkv = y * v_shared[v];
-      Wkv = (z - 1.0) * w_shared[v];
-#if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
-#else
-      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
-      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
-#endif
-      dchi2 += weight_shared[v] *
-               ((Vr_shared[v].x * cosk) + (Vr_shared[v].y * sink));
-    }
-
-    dchi2 *= atten;
-
-    if (normalize)
-      dchi2 /= numVisibilities;
-
-    dChi2[N * i + j] = -1.0f * dchi2;
-  }
-}
-
 __global__ void DChi2(float* noise,
                       float* dChi2,
                       cufftComplex* Vr,
@@ -3670,40 +3588,75 @@ __global__ void DChi2(float* noise,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  int x0 = phs_xobs;
-  int y0 = phs_yobs;
-  double x = (j - x0) * DELTAX * RPDEG_D;
-  double y = (i - y0) * DELTAY * RPDEG_D;
-  double z = sqrtf(1 - x * x - y * y);
-
-  float Ukv, Vkv, Wkv, cosk, sink, atten;
-
-  atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                      ref_yobs, DELTAX, DELTAY, primary_beam);
-
-  float dchi2 = 0.0f;
-  if (noise[N * i + j] < noise_cut) {
-    for (int v = 0; v < numVisibilities; v++) {
-      Ukv = x * UVW[v].x;
-      Vkv = y * UVW[v].y;
-      Wkv = (z - 1.0) * UVW[v].z;
-
-#if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
-#else
-      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
-      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
-#endif
-      dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
-    }
-
-    dchi2 *= fg_scale * atten;
-
-    if (normalize)
-      dchi2 /= numVisibilities;
-
-    dChi2[N * i + j] = -1.0f * dchi2;
+  // Early exit: check noise threshold first to avoid unnecessary computation
+  const float noise_val = noise[N * i + j];
+  if (noise_val >= noise_cut) {
+    return;
   }
+
+  // Compute pixel coordinates and direction cosines
+  const int x0 = phs_xobs;
+  const int y0 = phs_yobs;
+  const double x = (j - x0) * DELTAX * RPDEG_D;
+  const double y = (i - y0) * DELTAY * RPDEG_D;
+  const double z = sqrt(1.0 - x * x - y * y);
+
+  // Compute attenuation only if we pass the noise check
+  const float atten =
+      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
+                  ref_yobs, DELTAX, DELTAY, primary_beam);
+  const float scale_factor = fg_scale * atten;
+
+  // Accumulate chi-squared derivative
+  float dchi2 = 0.0f;
+
+  // Precompute constants for the loop
+  const double z_minus_one = z - 1.0;
+  const double two = 2.0;
+
+// Unroll loop for better performance (compiler hint)
+#pragma unroll 4
+  for (int v = 0; v < numVisibilities; v++) {
+    // Load UVW values - compiler will optimize memory access
+    // For structs, regular access is fine as arrays are contiguous
+    const double uvw_x = UVW[v].x;
+    const double uvw_y = UVW[v].y;
+    const double uvw_z = UVW[v].z;
+
+    // Compute phase components (FMA-friendly operations)
+    const double Ukv = x * uvw_x;
+    const double Vkv = y * uvw_y;
+    const double Wkv = z_minus_one * uvw_z;
+    const double phase = two * (Ukv + Vkv + Wkv);
+
+    // Compute sin and cos of phase
+    float cosk, sink;
+#if (__CUDA_ARCH__ >= 300)
+    sincospif(phase, &sink, &cosk);
+#else
+    cosk = cospif(phase);
+    sink = sinpif(phase);
+#endif
+
+    // Load visibility and weight - use __ldg for read-only scalar values
+    const float weight = __ldg(&w[v]);
+    const float vr_real = __ldg(&Vr[v].x);
+    const float vr_imag = __ldg(&Vr[v].y);
+
+    // Accumulate weighted contribution using FMA for better precision and
+    // performance
+    dchi2 = fmaf(weight, vr_real * cosk + vr_imag * sink, dchi2);
+  }
+
+  // Apply scaling factors
+  dchi2 *= scale_factor;
+
+  if (normalize) {
+    dchi2 /= numVisibilities;
+  }
+
+  // Write result
+  dChi2[N * i + j] = -dchi2;
 }
 
 __global__ void DChi2(float* noise,
@@ -3731,39 +3684,76 @@ __global__ void DChi2(float* noise,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  int x0 = phs_xobs;
-  int y0 = phs_yobs;
-  double x = (j - x0) * DELTAX * RPDEG_D;
-  double y = (i - y0) * DELTAY * RPDEG_D;
-  double z = sqrtf(1 - x * x - y * y);
-
-  float Ukv, Vkv, Wkv, cosk, sink, atten, gcf_i;
-
-  atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                      ref_yobs, DELTAX, DELTAY, primary_beam);
-  gcf_i = gcf[N * i + j];
-  float dchi2 = 0.0f;
-  if (noise[N * i + j] < noise_cut) {
-    for (int v = 0; v < numVisibilities; v++) {
-      Ukv = x * UVW[v].x;
-      Vkv = y * UVW[v].y;
-      Wkv = (z - 1.0) * UVW[v].z;
-#if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
-#else
-      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
-      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
-#endif
-      dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
-    }
-
-    dchi2 *= fg_scale * atten * gcf_i;
-
-    if (normalize)
-      dchi2 /= numVisibilities;
-
-    dChi2[N * i + j] = -1.0f * dchi2;
+  // Early exit: check noise threshold first to avoid unnecessary computation
+  const float noise_val = noise[N * i + j];
+  if (noise_val >= noise_cut) {
+    return;
   }
+
+  // Compute pixel coordinates and direction cosines
+  const int x0 = phs_xobs;
+  const int y0 = phs_yobs;
+  const double x = (j - x0) * DELTAX * RPDEG_D;
+  const double y = (i - y0) * DELTAY * RPDEG_D;
+  const double z = sqrt(1.0 - x * x - y * y);
+
+  // Compute attenuation and GCF only if we pass the noise check
+  const float atten =
+      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
+                  ref_yobs, DELTAX, DELTAY, primary_beam);
+  const float gcf_i = gcf[N * i + j];
+  const float scale_factor = fg_scale * atten * gcf_i;
+
+  // Accumulate chi-squared derivative
+  float dchi2 = 0.0f;
+
+  // Precompute constants for the loop
+  const double z_minus_one = z - 1.0;
+  const double two = 2.0;
+
+// Unroll loop for better performance (compiler hint)
+#pragma unroll 4
+  for (int v = 0; v < numVisibilities; v++) {
+    // Load UVW values - compiler will optimize memory access
+    // For structs, regular access is fine as arrays are contiguous
+    const double uvw_x = UVW[v].x;
+    const double uvw_y = UVW[v].y;
+    const double uvw_z = UVW[v].z;
+
+    // Compute phase components (FMA-friendly operations)
+    const double Ukv = x * uvw_x;
+    const double Vkv = y * uvw_y;
+    const double Wkv = z_minus_one * uvw_z;
+    const double phase = two * (Ukv + Vkv + Wkv);
+
+    // Compute sin and cos of phase
+    float cosk, sink;
+#if (__CUDA_ARCH__ >= 300)
+    sincospif(phase, &sink, &cosk);
+#else
+    cosk = cospif(phase);
+    sink = sinpif(phase);
+#endif
+
+    // Load visibility and weight - use __ldg for read-only scalar values
+    const float weight = __ldg(&w[v]);
+    const float vr_real = __ldg(&Vr[v].x);
+    const float vr_imag = __ldg(&Vr[v].y);
+
+    // Accumulate weighted contribution using FMA for better precision and
+    // performance
+    dchi2 = fmaf(weight, vr_real * cosk + vr_imag * sink, dchi2);
+  }
+
+  // Apply scaling factors
+  dchi2 *= scale_factor;
+
+  if (normalize) {
+    dchi2 /= numVisibilities;
+  }
+
+  // Write result
+  dChi2[N * i + j] = -dchi2;
 }
 
 __global__ void AddToDPhi(float* dphi, float* dgi, long N, long M, int index) {

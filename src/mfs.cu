@@ -52,6 +52,22 @@ inline bool IsGPUCapableP2P(cudaDeviceProp* pProp) {
 #endif
 }
 
+// Helper function to get memory clock rate compatible with all CUDA versions
+// CUDA_VERSION format: (MAJOR * 1000 + MINOR * 10), e.g., CUDA 13.0 = 13000
+inline int GetMemoryClockRateKHz(int deviceId, cudaDeviceProp* pProp) {
+#if defined(CUDA_VERSION) && CUDA_VERSION >= 13000
+  // CUDA 13.0+: clockRate and memoryClockRate removed from struct, use
+  // attribute API
+  int memoryClockRateKHz = 0;
+  checkCudaErrors(cudaDeviceGetAttribute(&memoryClockRateKHz,
+                                         cudaDevAttrMemoryClockRate, deviceId));
+  return memoryClockRateKHz;
+#else
+  // CUDA < 13.0: Use struct member (more efficient, direct access)
+  return pProp->memoryClockRate;
+#endif
+}
+
 std::vector<std::string> MFS::countAndSeparateStrings(std::string long_str,
                                                       std::string sep) {
   std::vector<std::string> ret;
@@ -181,6 +197,7 @@ void MFS::configure(int argc, char** argv) {
   radesys = header_vars.radesys;
   ioImageHandler->setFrame(radesys);
   equinox = header_vars.equinox;
+  printf("Equinox %f\n", equinox);
   ioImageHandler->setEquinox(equinox);
   crpix1 = header_vars.crpix1;
   crpix2 = header_vars.crpix2;
@@ -202,11 +219,13 @@ void MFS::configure(int argc, char** argv) {
     checkCudaErrors(cudaGetDeviceProperties(&dprop[i], i));
     printf("> GPU%d = \"%15s\" %s capable of Peer-to-Peer (P2P)\n", i,
            dprop[i].name, (IsGPUCapableP2P(&dprop[i]) ? "IS " : "NOT"));
-    printf("> Memory Clock Rate (KHz): %d\n", dprop[i].memoryClockRate);
+
+    // Get memory clock rate - compatible with all CUDA versions
+    int memoryClockRateKHz = GetMemoryClockRateKHz(i, &dprop[i]);
+    printf("> Memory Clock Rate (KHz): %d\n", memoryClockRateKHz);
     printf("> Memory Bus Width (bits): %d\n", dprop[i].memoryBusWidth);
-    printf(
-        "> Peak Memory Bandwidth (GB/s): %f\n",
-        2.0 * dprop[i].memoryClockRate * (dprop[i].memoryBusWidth / 8) / 1.0e6);
+    printf("> Peak Memory Bandwidth (GB/s): %f\n",
+           2.0 * memoryClockRateKHz * (dprop[i].memoryBusWidth / 8) / 1.0e6);
     printf("> Total Global Memory (GB): %f\n",
            dprop[i].totalGlobalMem / pow(2, 30));
     printf("-----------------------------------------------------------\n");
