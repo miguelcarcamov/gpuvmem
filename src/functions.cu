@@ -2054,11 +2054,17 @@ __host__ void FFT2D(cufftComplex* output_data,
 
   checkCudaErrors(cufftExecC2C(plan, (cufftComplex*)input_data,
                                (cufftComplex*)output_data, direction));
+  // Note: cufftExecC2C is asynchronous, but we rely on implicit synchronization
+  // when the next kernel launches. However, if shift=false, we need explicit
+  // sync before the next operation uses output_data. This is handled by syncs
+  // after FFT2D calls in the calling code.
 
   if (shift) {
     fftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(output_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
   }
+  // When shift=false, the sync is deferred to the caller (which is correct
+  // since phase_rotate needs device_V to be ready)
 }
 
 __global__ void do_griddingGPU(float3* uvw,
@@ -2346,12 +2352,16 @@ __global__ void apply_beam2I(float antenna_diameter,
       make_cuFloatComplex(image[N * i + j].x * gcf[N * i + j] * atten, 0.0f);
 }
 
-__global__ void apply_GCF(cufftComplex* image, float* gcf, long N) {
+__global__ void apply_GCF(cufftComplex* __restrict__ image,
+                          const float* __restrict__ gcf,
+                          long N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  image[N * i + j] =
-      make_cuFloatComplex(image[N * i + j].x * gcf[N * i + j], 0.0f);
+  const int idx = N * i + j;
+  const float img_real = image[idx].x;
+  const float gcf_val = __ldg(&gcf[idx]);
+  image[idx] = make_cuFloatComplex(img_real * gcf_val, 0.0f);
 }
 
 /*--------------------------------------------------------------------
@@ -2359,7 +2369,7 @@ __global__ void apply_GCF(cufftComplex* image, float* gcf, long N) {
  * (x,y) instead of (0,0).
  * Multiply pixel V(i,j) by exp(2 pi i (x/ni + y/nj))
  *--------------------------------------------------------------------*/
-__global__ void phase_rotate(cufftComplex* data,
+__global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
@@ -2595,13 +2605,16 @@ __global__ void vis_mod2(
   }
 }
 
-__global__ void residual(cufftComplex* Vr,
-                         cufftComplex* Vm,
-                         cufftComplex* Vo,
+__global__ void residual(cufftComplex* __restrict__ Vr,
+                         const cufftComplex* __restrict__ Vm,
+                         const cufftComplex* __restrict__ Vo,
                          long numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
   if (i < numVisibilities) {
-    Vr[i] = cuCsubf(Vo[i], Vm[i]);
+    // Use __ldg for read-only data
+    const cufftComplex vm = __ldg(&Vm[i]);
+    const cufftComplex vo = __ldg(&Vo[i]);
+    Vr[i] = cuCsubf(vo, vm);
   }
 }
 
@@ -2799,14 +2812,18 @@ __global__ void evaluateXtNoPositivity(float* xt,
       pcom[N * M * image + N * i + j] + x * xicom[N * M * image + N * i + j];
 }
 
-__global__ void chi2Vector(float* chi2,
-                           cufftComplex* Vr,
-                           float* w,
+__global__ void chi2Vector(float* __restrict__ chi2,
+                           const cufftComplex* __restrict__ Vr,
+                           const float* __restrict__ w,
                            long numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
-    chi2[i] = w[i] * ((Vr[i].x * Vr[i].x) + (Vr[i].y * Vr[i].y));
+    // Use __ldg for read-only data
+    const float weight = __ldg(&w[i]);
+    const float vr_real = __ldg(&Vr[i].x);
+    const float vr_imag = __ldg(&Vr[i].y);
+    chi2[i] = weight * (vr_real * vr_real + vr_imag * vr_imag);
   }
 }
 
@@ -3013,9 +3030,9 @@ __device__ float calculateDS(float* I,
   return dS;
 }
 
-__global__ void SVector(float* S,
-                        float* noise,
-                        float* I,
+__global__ void SVector(float* __restrict__ S,
+                        const float* __restrict__ noise,
+                        const float* __restrict__ I,
                         long N,
                         long M,
                         float noise_cut,
@@ -3025,13 +3042,14 @@ __global__ void SVector(float* S,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  S[N * i + j] =
-      calculateS(I, prior_value, eta, noise[N * i + j], noise_cut, index, M, N);
+  const int idx = N * i + j;
+  const float noise_val = __ldg(&noise[idx]);
+  S[idx] = calculateS(I, prior_value, eta, noise_val, noise_cut, index, M, N);
 }
 
-__global__ void DS(float* dS,
-                   float* I,
-                   float* noise,
+__global__ void DS(float* __restrict__ dS,
+                   const float* __restrict__ I,
+                   const float* __restrict__ noise,
                    float noise_cut,
                    float lambda,
                    float prior_value,
@@ -3042,8 +3060,10 @@ __global__ void DS(float* dS,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  dS[N * i + j] = calculateDS(I, prior_value, eta, lambda, noise[N * i + j],
-                              noise_cut, index, M, N);
+  const int idx = N * i + j;
+  const float noise_val = __ldg(&noise[idx]);
+  dS[idx] = calculateDS(I, prior_value, eta, lambda, noise_val, noise_cut,
+                        index, M, N);
 }
 
 __global__ void SGVector(float* S,
@@ -4135,7 +4155,9 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
+// Use guided scheduling for better load balancing when work per frequency
+// varies
+#pragma omp parallel for schedule(guided) num_threads(num_gpus) \
     reduction(+ : resultchi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
@@ -4267,7 +4289,9 @@ __host__ float chi2(float* I,
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
+// Use guided scheduling for better load balancing when work per frequency
+// varies
+#pragma omp parallel for schedule(guided) num_threads(num_gpus) \
     reduction(+ : reduced_chi2)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         float result = 0.0;
@@ -4398,7 +4422,9 @@ __host__ void dchi2(float* I,
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
+// Use guided scheduling for better load balancing when work per frequency
+// varies
+#pragma omp parallel for schedule(guided) num_threads(num_gpus)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         unsigned int j = omp_get_thread_num();
         unsigned int num_cpu_threads = omp_get_num_threads();

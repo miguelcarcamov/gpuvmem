@@ -826,7 +826,9 @@ void MFS::setDevice() {
   start = omp_get_wtime();
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
+// Use guided scheduling for better load balancing when work per frequency
+// varies
+#pragma omp parallel for schedule(guided) num_threads(num_gpus)
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         unsigned int j = omp_get_thread_num();
         unsigned int num_cpu_threads = omp_get_num_threads();
@@ -855,7 +857,10 @@ void MFS::setDevice() {
 
     cudaSetDevice(firstgpu);
 
+    // Parallelize field processing - each field is independent
+#pragma omp parallel for schedule(static, 1)
     for (int f = 0; f < datasets[d].data.nfields; f++) {
+      cudaSetDevice(firstgpu);  // Ensure correct device context per thread
       total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(
           datasets[d].fields[f].atten_image,
           datasets[d].antennas[0].antenna_diameter,
@@ -865,6 +870,8 @@ void MFS::setDevice() {
           datasets[d].antennas[0].primary_beam);
       checkCudaErrors(cudaDeviceSynchronize());
 
+      // I/O operations need to be serialized
+#pragma omp critical
       if (print_images) {
         std::string atten_name = "dataset_" + std::to_string(d) + "_atten";
         ioImageHandler->printNotNormalizedImageIteration(
@@ -876,7 +883,12 @@ void MFS::setDevice() {
 
   cudaSetDevice(firstgpu);
 
+  // Note: Cannot fully parallelize this loop because device_weight_image is
+  // shared But we can parallelize the outer dataset loop if datasets are
+  // independent
   for (int d = 0; d < nMeasurementSets; d++) {
+    // Fields within a dataset must be sequential due to shared
+    // device_weight_image
     for (int f = 0; f < datasets[d].data.nfields; f++) {
       weight_image<<<numBlocksNN, threadsPerBlockNN>>>(
           device_weight_image, datasets[d].fields[f].atten_image, N);
