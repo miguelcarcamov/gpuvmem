@@ -2007,7 +2007,8 @@ __host__ void degridding(std::vector<Field>& fields,
             fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V,
             fields[f].device_visibilities[i][s].uvw,
             fields[f].device_visibilities[i][s].weight, deltau, deltav,
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s], N);
+            fields[f].numVisibilitiesPerFreqPerStoke[i][s], N,
+            (float)(N / 2.0));
         // degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
         //             fields[f].device_visibilities[i][s].threadsPerBlockUV
         //             >>>(fields[f].device_visibilities[i][s].uvw,
@@ -2048,11 +2049,17 @@ __host__ void FFT2D(cufftComplex* output_data,
 
   checkCudaErrors(cufftExecC2C(plan, (cufftComplex*)input_data,
                                (cufftComplex*)output_data, direction));
+  // Note: cufftExecC2C is asynchronous, but we rely on implicit synchronization
+  // when the next kernel launches. However, if shift=false, we need explicit
+  // sync before the next operation uses output_data. This is handled by syncs
+  // after FFT2D calls in the calling code.
 
   if (shift) {
     fftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(output_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
   }
+  // When shift=false, the sync is deferred to the caller (which is correct
+  // since phase_rotate needs device_V to be ready)
 }
 
 __global__ void do_griddingGPU(float3* uvw,
@@ -2343,7 +2350,9 @@ __global__ void apply_beam2I(float antenna_diameter,
       make_cuFloatComplex(image[N * i + j].x * gcf[N * i + j] * atten, 0.0f);
 }
 
-__global__ void apply_GCF(cufftComplex* image, float* gcf, long N) {
+__global__ void apply_GCF(cufftComplex* __restrict__ image,
+                          const float* __restrict__ gcf,
+                          long N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -2356,7 +2365,7 @@ __global__ void apply_GCF(cufftComplex* image, float* gcf, long N) {
  * (x,y) instead of (0,0).
  * Multiply pixel V(i,j) by exp(2 pi i (x/ni + y/nj))
  *--------------------------------------------------------------------*/
-__global__ void phase_rotate(cufftComplex* data,
+__global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
@@ -2428,53 +2437,54 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
 
 /*
  * Interpolate in the visibility array to find the visibility at (u,v);
+ * Optimized version using regular global memory with __ldg()
  */
-__global__ void vis_mod(cufftComplex* Vm,
-                        cufftComplex* V,
-                        double3* UVW,
-                        float* weight,
-                        double deltau,
-                        double deltav,
-                        long numVisibilities,
-                        long N) {
+__global__ void vis_mod(cufftComplex* __restrict__ Vm,
+                        const cufftComplex* __restrict__ V,
+                        const double3* __restrict__ UVW,
+                        float* __restrict__ weight,
+                        const double deltau,
+                        const double deltav,
+                        const long numVisibilities,
+                        const long N) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
-  int i1, i2, j1, j2;
-  double du, dv;
-  double2 uv;
-  cufftComplex v11, v12, v21, v22;
-  float Zreal;
-  float Zimag;
 
   if (i < numVisibilities) {
-    uv.x = UVW[i].x / deltau;
-    uv.y = UVW[i].y / deltav;
+    // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
+    const double3 uvw = UVW[i];
+    double uv_x = uvw.x / deltau;
+    double uv_y = uvw.y / deltav;
 
-    if (uv.x < 0.0)
-      uv.x += N;
+    // Handle negative coordinates
+    if (uv_x < 0.0)
+      uv_x += N;
+    if (uv_y < 0.0)
+      uv_y += N;
 
-    if (uv.y < 0.0)
-      uv.y += N;
+    const int i1 = __double2int_rd(uv_x);
+    const int i2 = (i1 + 1) % N;
+    const double du = uv_x - i1;
 
-    i1 = uv.x;
-    i2 = (i1 + 1) % N;
-    du = uv.x - i1;
+    const int j1 = __double2int_rd(uv_y);
+    const int j2 = (j1 + 1) % N;
+    const double dv = uv_y - j1;
 
-    j1 = uv.y;
-    j2 = (j1 + 1) % N;
-    dv = uv.y - j1;
+    // Optimized boundary check (i2 and j2 are always valid due to modulo)
+    if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N) {
+      // Use regular global memory with __ldg for read-only cached access
+      const cufftComplex v11 = __ldg(&V[N * j1 + i1]);
+      const cufftComplex v12 = __ldg(&V[N * j2 + i1]);
+      const cufftComplex v21 = __ldg(&V[N * j1 + i2]);
+      const cufftComplex v22 = __ldg(&V[N * j2 + i2]);
 
-    if (i1 >= 0 && i1 < N && i2 >= 0 && i2 < N && j1 >= 0 && j1 < N &&
-        j2 >= 0 && j2 < N) {
-      /* Bilinear interpolation */
-      v11 = V[N * j1 + i1]; /* [i1, j1] */
-      v12 = V[N * j2 + i1]; /* [i1, j2] */
-      v21 = V[N * j1 + i2]; /* [i2, j1] */
-      v22 = V[N * j2 + i2]; /* [i2, j2] */
+      // Optimized bilinear interpolation (factor out common terms)
+      const float w11 = (1.0f - du) * (1.0f - dv);
+      const float w12 = (1.0f - du) * dv;
+      const float w21 = du * (1.0f - dv);
+      const float w22 = du * dv;
 
-      Zreal = (1 - du) * (1 - dv) * v11.x + (1 - du) * dv * v12.x +
-              du * (1 - dv) * v21.x + du * dv * v22.x;
-      Zimag = (1 - du) * (1 - dv) * v11.y + (1 - du) * dv * v12.y +
-              du * (1 - dv) * v21.y + du * dv * v22.y;
+      const float Zreal = w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
+      const float Zimag = w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
 
       Vm[i] = make_cuFloatComplex(Zreal, Zimag);
     } else {
@@ -2485,56 +2495,59 @@ __global__ void vis_mod(cufftComplex* Vm,
 
 /*
  * Interpolate in the visibility array to find the visibility at (u,v);
+ * Optimized version using regular global memory with __ldg()
  */
-__global__ void vis_mod2(cufftComplex* Vm,
-                         cufftComplex* V,
-                         double3* UVW,
-                         float* weight,
-                         double deltau,
-                         double deltav,
-                         long numVisibilities,
-                         long N) {
+__global__ void vis_mod2(cufftComplex* __restrict__ Vm,
+                         const cufftComplex* __restrict__ V,
+                         const double3* __restrict__ UVW,
+                         float* __restrict__ weight,
+                         const double deltau,
+                         const double deltav,
+                         const long numVisibilities,
+                         const long N,
+                         const float N_half) {  // Precomputed N/2
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
-  double f_j, f_k;
-  int j1, j2, k1, k2;
-  double2 uv;
-  cufftComplex Z;
 
   if (i < numVisibilities) {
-    uv.x = UVW[i].x / deltau;
-    uv.y = UVW[i].y / deltav;
+    // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
+    const double3 uvw = UVW[i];
+    double f_j = uvw.x / deltau + N_half;
+    double f_k = uvw.y / deltav + N_half;
 
-    f_j = uv.x + int(floorf(N / 2));
-    j1 = f_j;
-    j2 = j1 + 1;
+    const int j1 = __double2int_rd(f_j);
+    const int j2 = j1 + 1;
     f_j = f_j - j1;
 
-    f_k = uv.y + int(floorf(N / 2));
-    k1 = f_k;
-    k2 = k1 + 1;
+    const int k1 = __double2int_rd(f_k);
+    const int k2 = k1 + 1;
     f_k = f_k - k1;
 
-    if (j1 < N && k1 < N && j2 < N && k2 < N) {
-      /* Bilinear interpolation */
-      // Real part
-      Z.x = (1 - f_j) * (1 - f_k) * V[N * k1 + j1].x +
-            f_j * (1 - f_k) * V[N * k1 + j2].x +
-            (1 - f_j) * f_k * V[N * k2 + j1].x + f_j * f_k * V[N * k2 + j2].x;
-      // Imaginary part
-      Z.y = (1 - f_j) * (1 - f_k) * V[N * k1 + j1].y +
-            f_j * (1 - f_k) * V[N * k1 + j2].y +
-            (1 - f_j) * f_k * V[N * k2 + j1].y + f_j * f_k * V[N * k2 + j2].y;
+    if (j1 >= 0 && j1 < N && k1 >= 0 && k1 < N && j2 >= 0 && j2 < N &&
+        k2 >= 0 && k2 < N) {
+      // Use regular global memory with __ldg for read-only cached access
+      const cufftComplex v11 = __ldg(&V[N * k1 + j1]);
+      const cufftComplex v12 = __ldg(&V[N * k1 + j2]);
+      const cufftComplex v21 = __ldg(&V[N * k2 + j1]);
+      const cufftComplex v22 = __ldg(&V[N * k2 + j2]);
 
-      Vm[i] = Z;
+      // Optimized bilinear interpolation weights
+      const float w11 = (1.0f - f_j) * (1.0f - f_k);
+      const float w12 = f_j * (1.0f - f_k);
+      const float w21 = (1.0f - f_j) * f_k;
+      const float w22 = f_j * f_k;
+
+      Vm[i] = make_cuFloatComplex(
+          w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
+          w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
     } else {
       weight[i] = 0.0f;
     }
   }
 }
 
-__global__ void residual(cufftComplex* Vr,
-                         cufftComplex* Vm,
-                         cufftComplex* Vo,
+__global__ void residual(cufftComplex* __restrict__ Vr,
+                         const cufftComplex* __restrict__ Vm,
+                         const cufftComplex* __restrict__ Vo,
                          long numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
   if (i < numVisibilities) {
@@ -2736,9 +2749,9 @@ __global__ void evaluateXtNoPositivity(float* xt,
       pcom[N * M * image + N * i + j] + x * xicom[N * M * image + N * i + j];
 }
 
-__global__ void chi2Vector(float* chi2,
-                           cufftComplex* Vr,
-                           float* w,
+__global__ void chi2Vector(float* __restrict__ chi2,
+                           const cufftComplex* __restrict__ Vr,
+                           const float* __restrict__ w,
                            long numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
@@ -2950,9 +2963,9 @@ __device__ float calculateDS(float* I,
   return dS;
 }
 
-__global__ void SVector(float* S,
-                        float* noise,
-                        float* I,
+__global__ void SVector(float* __restrict__ S,
+                        const float* __restrict__ noise,
+                        float* __restrict__ I,
                         long N,
                         long M,
                         float noise_cut,
@@ -2966,9 +2979,9 @@ __global__ void SVector(float* S,
       calculateS(I, prior_value, eta, noise[N * i + j], noise_cut, index, M, N);
 }
 
-__global__ void DS(float* dS,
-                   float* I,
-                   float* noise,
+__global__ void DS(float* __restrict__ dS,
+                   float* __restrict__ I,
+                   const float* __restrict__ noise,
                    float noise_cut,
                    float lambda,
                    float prior_value,
@@ -3567,88 +3580,6 @@ __global__ void restartDPhi(float* dphi, float* dChi2, float* dH, long N) {
   dH[N * i + j] = 0.0f;
 }
 
-__global__ void DChi2_SharedMemory(float* noise,
-                                   float* dChi2,
-                                   cufftComplex* Vr,
-                                   double3* UVW,
-                                   float* w,
-                                   long N,
-                                   long numVisibilities,
-                                   float noise_cut,
-                                   float ref_xobs,
-                                   float ref_yobs,
-                                   float phs_xobs,
-                                   float phs_yobs,
-                                   double DELTAX,
-                                   double DELTAY,
-                                   float antenna_diameter,
-                                   float pb_factor,
-                                   float pb_cutoff,
-                                   float freq,
-                                   int primary_beam,
-                                   bool normalize) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-  cg::thread_block cta = cg::this_thread_block();
-
-  extern __shared__ double s_array[];
-
-  int x0 = phs_xobs;
-
-  int y0 = phs_yobs;
-  double x = (j - x0) * DELTAX * RPDEG_D;
-  double y = (i - y0) * DELTAY * RPDEG_D;
-  double z = sqrtf(1.0 - x * x - y * y);
-
-  float Ukv, Vkv, Wkv, cosk, sink, atten;
-
-  double* u_shared = s_array;
-  double* v_shared = (double*)&u_shared[numVisibilities];
-  double* w_shared = (double*)&v_shared[numVisibilities];
-  float* weight_shared = (float*)&w_shared[numVisibilities];
-  cufftComplex* Vr_shared = (cufftComplex*)&weight_shared[numVisibilities];
-  if (threadIdx.x == 0 && threadIdx.y == 0) {
-    for (int v = 0; v < numVisibilities; v++) {
-      u_shared[v] = UVW[v].x;
-      v_shared[v] = UVW[v].y;
-      w_shared[v] = UVW[v].z;
-      weight_shared[v] = w[v];
-      Vr_shared[v] = Vr[v];
-      printf("u: %f, v:%f, weight: %f, real: %f, imag: %f\n", u_shared[v],
-             v_shared[v], w_shared[v], Vr_shared[v].x, Vr_shared[v].y);
-    }
-  }
-  cg::sync(cta);
-
-  atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                      ref_yobs, DELTAX, DELTAY, primary_beam);
-
-  float dchi2 = 0.0f;
-  if (noise[N * i + j] < noise_cut) {
-    for (int v = 0; v < numVisibilities; v++) {
-      Ukv = x * u_shared[v];
-      Vkv = y * v_shared[v];
-      Wkv = (z - 1.0) * w_shared[v];
-#if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
-#else
-      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
-      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
-#endif
-      dchi2 += weight_shared[v] *
-               ((Vr_shared[v].x * cosk) + (Vr_shared[v].y * sink));
-    }
-
-    dchi2 *= atten;
-
-    if (normalize)
-      dchi2 /= numVisibilities;
-
-    dChi2[N * i + j] = -1.0f * dchi2;
-  }
-}
-
 __global__ void DChi2(float* noise,
                       float* dChi2,
                       cufftComplex* Vr,
@@ -3673,40 +3604,75 @@ __global__ void DChi2(float* noise,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  int x0 = phs_xobs;
-  int y0 = phs_yobs;
-  double x = (j - x0) * DELTAX * RPDEG_D;
-  double y = (i - y0) * DELTAY * RPDEG_D;
-  double z = sqrtf(1 - x * x - y * y);
-
-  float Ukv, Vkv, Wkv, cosk, sink, atten;
-
-  atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                      ref_yobs, DELTAX, DELTAY, primary_beam);
-
-  float dchi2 = 0.0f;
-  if (noise[N * i + j] < noise_cut) {
-    for (int v = 0; v < numVisibilities; v++) {
-      Ukv = x * UVW[v].x;
-      Vkv = y * UVW[v].y;
-      Wkv = (z - 1.0) * UVW[v].z;
-
-#if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
-#else
-      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
-      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
-#endif
-      dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
-    }
-
-    dchi2 *= fg_scale * atten;
-
-    if (normalize)
-      dchi2 /= numVisibilities;
-
-    dChi2[N * i + j] = -1.0f * dchi2;
+  // Early exit: check noise threshold first to avoid unnecessary computation
+  const float noise_val = noise[N * i + j];
+  if (noise_val >= noise_cut) {
+    return;
   }
+
+  // Compute pixel coordinates and direction cosines
+  const int x0 = phs_xobs;
+  const int y0 = phs_yobs;
+  const double x = (j - x0) * DELTAX * RPDEG_D;
+  const double y = (i - y0) * DELTAY * RPDEG_D;
+  const double z = sqrt(1.0 - x * x - y * y);
+
+  // Compute attenuation only if we pass the noise check
+  const float atten =
+      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
+                  ref_yobs, DELTAX, DELTAY, primary_beam);
+  const float scale_factor = fg_scale * atten;
+
+  // Accumulate chi-squared derivative
+  float dchi2 = 0.0f;
+
+  // Precompute constants for the loop
+  const double z_minus_one = z - 1.0;
+  const double two = 2.0;
+
+// Unroll loop for better performance (compiler hint)
+#pragma unroll 4
+  for (int v = 0; v < numVisibilities; v++) {
+    // Load UVW values - compiler will optimize memory access
+    // For structs, regular access is fine as arrays are contiguous
+    const double uvw_x = UVW[v].x;
+    const double uvw_y = UVW[v].y;
+    const double uvw_z = UVW[v].z;
+
+    // Compute phase components (FMA-friendly operations)
+    const double Ukv = x * uvw_x;
+    const double Vkv = y * uvw_y;
+    const double Wkv = z_minus_one * uvw_z;
+    const double phase = two * (Ukv + Vkv + Wkv);
+
+    // Compute sin and cos of phase
+    float cosk, sink;
+#if (__CUDA_ARCH__ >= 300)
+    sincospif(phase, &sink, &cosk);
+#else
+    cosk = cospif(phase);
+    sink = sinpif(phase);
+#endif
+
+    // Load visibility and weight - use __ldg for read-only scalar values
+    const float weight = __ldg(&w[v]);
+    const float vr_real = __ldg(&Vr[v].x);
+    const float vr_imag = __ldg(&Vr[v].y);
+
+    // Accumulate weighted contribution using FMA for better precision and
+    // performance
+    dchi2 = fmaf(weight, vr_real * cosk + vr_imag * sink, dchi2);
+  }
+
+  // Apply scaling factors
+  dchi2 *= scale_factor;
+
+  if (normalize) {
+    dchi2 /= numVisibilities;
+  }
+
+  // Write result
+  dChi2[N * i + j] = -dchi2;
 }
 
 __global__ void DChi2(float* noise,
@@ -3734,39 +3700,76 @@ __global__ void DChi2(float* noise,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  int x0 = phs_xobs;
-  int y0 = phs_yobs;
-  double x = (j - x0) * DELTAX * RPDEG_D;
-  double y = (i - y0) * DELTAY * RPDEG_D;
-  double z = sqrtf(1 - x * x - y * y);
-
-  float Ukv, Vkv, Wkv, cosk, sink, atten, gcf_i;
-
-  atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                      ref_yobs, DELTAX, DELTAY, primary_beam);
-  gcf_i = gcf[N * i + j];
-  float dchi2 = 0.0f;
-  if (noise[N * i + j] < noise_cut) {
-    for (int v = 0; v < numVisibilities; v++) {
-      Ukv = x * UVW[v].x;
-      Vkv = y * UVW[v].y;
-      Wkv = (z - 1.0) * UVW[v].z;
-#if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv + Wkv), &sink, &cosk);
-#else
-      cosk = cospif(2.0 * (Ukv + Vkv + Wkv));
-      sink = sinpif(2.0 * (Ukv + Vkv + Wkv));
-#endif
-      dchi2 += w[v] * ((Vr[v].x * cosk) + (Vr[v].y * sink));
-    }
-
-    dchi2 *= fg_scale * atten * gcf_i;
-
-    if (normalize)
-      dchi2 /= numVisibilities;
-
-    dChi2[N * i + j] = -1.0f * dchi2;
+  // Early exit: check noise threshold first to avoid unnecessary computation
+  const float noise_val = noise[N * i + j];
+  if (noise_val >= noise_cut) {
+    return;
   }
+
+  // Compute pixel coordinates and direction cosines
+  const int x0 = phs_xobs;
+  const int y0 = phs_yobs;
+  const double x = (j - x0) * DELTAX * RPDEG_D;
+  const double y = (i - y0) * DELTAY * RPDEG_D;
+  const double z = sqrt(1.0 - x * x - y * y);
+
+  // Compute attenuation and GCF only if we pass the noise check
+  const float atten =
+      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
+                  ref_yobs, DELTAX, DELTAY, primary_beam);
+  const float gcf_i = gcf[N * i + j];
+  const float scale_factor = fg_scale * atten * gcf_i;
+
+  // Accumulate chi-squared derivative
+  float dchi2 = 0.0f;
+
+  // Precompute constants for the loop
+  const double z_minus_one = z - 1.0;
+  const double two = 2.0;
+
+// Unroll loop for better performance (compiler hint)
+#pragma unroll 4
+  for (int v = 0; v < numVisibilities; v++) {
+    // Load UVW values - compiler will optimize memory access
+    // For structs, regular access is fine as arrays are contiguous
+    const double uvw_x = UVW[v].x;
+    const double uvw_y = UVW[v].y;
+    const double uvw_z = UVW[v].z;
+
+    // Compute phase components (FMA-friendly operations)
+    const double Ukv = x * uvw_x;
+    const double Vkv = y * uvw_y;
+    const double Wkv = z_minus_one * uvw_z;
+    const double phase = two * (Ukv + Vkv + Wkv);
+
+    // Compute sin and cos of phase
+    float cosk, sink;
+#if (__CUDA_ARCH__ >= 300)
+    sincospif(phase, &sink, &cosk);
+#else
+    cosk = cospif(phase);
+    sink = sinpif(phase);
+#endif
+
+    // Load visibility and weight - use __ldg for read-only scalar values
+    const float weight = __ldg(&w[v]);
+    const float vr_real = __ldg(&Vr[v].x);
+    const float vr_imag = __ldg(&Vr[v].y);
+
+    // Accumulate weighted contribution using FMA for better precision and
+    // performance
+    dchi2 = fmaf(weight, vr_real * cosk + vr_imag * sink, dchi2);
+  }
+
+  // Apply scaling factors
+  dchi2 *= scale_factor;
+
+  if (normalize) {
+    dchi2 /= numVisibilities;
+  }
+
+  // Write result
+  dChi2[N * i + j] = -dchi2;
 }
 
 __global__ void AddToDPhi(float* dphi, float* dgi, long N, long M, int index) {
@@ -4121,6 +4124,9 @@ __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
             datasets[d].fields[f].phs_yobs_pix);
         checkCudaErrors(cudaDeviceSynchronize());
 
+        // Texture memory removed - using regular global memory with __ldg()
+        // instead
+
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].data.corr_type[s] == LL ||
               datasets[d].data.corr_type[s] == RR ||
@@ -4249,6 +4255,9 @@ __host__ float chi2(float* I,
             datasets[d].fields[f].phs_xobs_pix,
             datasets[d].fields[f].phs_yobs_pix);
         checkCudaErrors(cudaDeviceSynchronize());
+
+        // Texture memory removed - using regular global memory with __ldg()
+        // instead
 
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].data.corr_type[s] == LL ||

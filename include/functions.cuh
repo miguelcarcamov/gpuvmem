@@ -384,30 +384,33 @@ __global__ void noise_image(float* noise_image,
                             float max_weight,
                             float noise_jypix,
                             long N);
-__global__ void phase_rotate(cufftComplex* data,
+__global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
                              double yphs);
-__global__ void vis_mod(cufftComplex* Vm,
-                        cufftComplex* V,
-                        double3* UVW,
-                        float* weight,
-                        double deltau,
-                        double deltav,
-                        long numVisibilities,
-                        long N);
-__global__ void vis_mod2(cufftComplex* Vm,
-                         cufftComplex* V,
-                         double3* UVW,
-                         float* weight,
-                         double deltau,
-                         double deltav,
-                         long numVisibilities,
-                         long N);
-__global__ void residual(cufftComplex* Vr,
-                         cufftComplex* Vm,
-                         cufftComplex* Vo,
+// Optimized bilinear interpolation kernels using regular global memory with
+// __ldg()
+__global__ void vis_mod(cufftComplex* __restrict__ Vm,
+                        const cufftComplex* __restrict__ V,
+                        const double3* __restrict__ UVW,
+                        float* __restrict__ weight,
+                        const double deltau,
+                        const double deltav,
+                        const long numVisibilities,
+                        const long N);
+__global__ void vis_mod2(cufftComplex* __restrict__ Vm,
+                         const cufftComplex* __restrict__ V,
+                         const double3* __restrict__ UVW,
+                         float* __restrict__ weight,
+                         const double deltau,
+                         const double deltav,
+                         const long numVisibilities,
+                         const long N,
+                         const float N_half);
+__global__ void residual(cufftComplex* __restrict__ Vr,
+                         const cufftComplex* __restrict__ Vm,
+                         const cufftComplex* __restrict__ Vo,
                          long numVisibilities);
 __global__ void makePositive(cufftComplex* I, long N);
 __global__ void evaluateXt(float* xt,
@@ -422,10 +425,10 @@ __global__ void evaluateXtNoPositivity(cufftComplex* xt,
                                        float* xicom,
                                        float x,
                                        long N);
-__global__ void chi2Vector(float* chi2,
-                           cufftComplex* Vr,
-                           float* w,
-                           int numVisibilities);
+__global__ void chi2Vector(float* __restrict__ chi2,
+                           const cufftComplex* __restrict__ Vr,
+                           const float* __restrict__ w,
+                           long numVisibilities);
 __global__ void SVector(float* S,
                         float* noise,
                         cufftComplex* I,

@@ -99,7 +99,7 @@ void optimizationOrder(Optimizer* optimizer, Image* image) {
 
 __host__ int main(int argc, char** argv) {
   ////CHECK FOR AVAILABLE GPUs
-  cudaGetDeviceCount(&num_gpus);
+  cudaError_t err = cudaGetDeviceCount(&num_gpus);
 
   printf(
       "gpuvmem Copyright (C) 2016-2020  Miguel Carcamo, Pablo Roman, Simon "
@@ -112,8 +112,27 @@ __host__ int main(int argc, char** argv) {
       "This is free software, and you are welcome to redistribute it under "
       "certain conditions; use option -c for details.\n\n\n");
 
+  if (err != cudaSuccess) {
+    printf("CUDA Error: %s (code: %d)\n", cudaGetErrorString(err), err);
+    printf("This usually means:\n");
+    printf("  1. CUDA driver/runtime version mismatch\n");
+    printf("  2. CUDA libraries not found (check LD_LIBRARY_PATH)\n");
+    printf("  3. NVIDIA driver not properly installed\n");
+    printf(
+        "  4. GPU not accessible (check permissions, CUDA_VISIBLE_DEVICES)\n");
+    printf("\nTroubleshooting:\n");
+    printf("  - Run: nvidia-smi (should show your GPU)\n");
+    printf("  - Check: echo $LD_LIBRARY_PATH (should include CUDA lib path)\n");
+    printf("  - Check: ls -la /opt/cuda/lib64/libcudart.so.*\n");
+    return 1;
+  }
+
   if (num_gpus < 1) {
     printf("No CUDA capable devices were detected\n");
+    printf("This could mean:\n");
+    printf("  - No GPUs are available\n");
+    printf("  - GPUs are not CUDA-capable\n");
+    printf("  - CUDA_VISIBLE_DEVICES is set incorrectly\n");
     return 1;
   }
 
