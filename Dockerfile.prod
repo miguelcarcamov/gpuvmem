@@ -1,20 +1,34 @@
 FROM ghcr.io/miguelcarcamov/gpuvmem:base
-ENV BUILD_DIR "build"
-ENV CONFIG "Release"
 
-RUN echo "Installing GPUVMEM"
+# Build arguments
+ARG CUDA_ARCH=75
+
+# Build configuration
+ENV BUILD_DIR=build \
+    CONFIG=Release \
+    CUDA_ARCH=${CUDA_ARCH}
+
+# Clone and build gpuvmem
 RUN --mount=type=secret,id=BRANCH_NAME \
-    export BRANCH_NAME=$(cat /run/secrets/BRANCH_NAME) && \
-    echo "The source branch of the PR is ${BRANCH_NAME}" && \
-    echo "Git cloning branch ${BRANCH_NAME}" && \
-    git clone -b "${BRANCH_NAME}" https://github.com/miguelcarcamov/gpuvmem.git
+    BRANCH_NAME=$(cat /run/secrets/BRANCH_NAME) && \
+    echo "Building from branch: ${BRANCH_NAME}" && \
+    git clone -b "${BRANCH_NAME}" --depth 1 \
+        https://github.com/miguelcarcamov/gpuvmem.git /tmp/gpuvmem && \
+    cd /tmp/gpuvmem && \
+    cmake . -B ${BUILD_DIR} \
+            -DCMAKE_BUILD_TYPE=${CONFIG} \
+            -DCUDA_ARCH=${CUDA_ARCH} && \
+    cmake --build ${BUILD_DIR} \
+          --target install \
+          --verbose \
+          -j$(nproc) && \
+    pip3 install --no-cache-dir -r requirements.txt && \
+    mkdir -p ${HOME}/.casa/data && \
+    rm -rf /tmp/gpuvmem
 
-RUN cd gpuvmem && \
-    cmake . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CONFIG && \
-    cd $BUILD_DIR && \
-    cmake --build . --target install --verbose -j `nproc` && \
-    cd .. && \
-    pip3 install -r requirements.txt && \
-    mkdir -p $HOME/.casa/data
-RUN echo "Hello there! from GPUVMEM production image"
-LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem"
+# Verify installation
+RUN test -f /usr/local/bin/gpuvmem || test -f /usr/bin/gpuvmem && \
+    echo "gpuvmem installed successfully"
+
+LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem" \
+      org.opencontainers.image.description="Production image for gpuvmem"
