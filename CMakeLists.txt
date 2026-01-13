@@ -187,19 +187,24 @@ else()
       COMMAND ${NVIDIA_SMI} --query-gpu=compute_cap --format=csv,noheader
       OUTPUT_VARIABLE GPU_COMPUTE_CAP
       ERROR_VARIABLE NVIDIA_SMI_ERROR
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_STRIP_TRAILING_WHITESPACE
+      OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_STRIP_TRAILING_WHITESPACE
       RESULT_VARIABLE NVIDIA_SMI_RESULT)
 
     if(NOT NVIDIA_SMI_RESULT EQUAL 0)
-      message(WARNING "nvidia-smi failed (exit code ${NVIDIA_SMI_RESULT}): ${NVIDIA_SMI_ERROR}")
+      message(
+        WARNING
+          "nvidia-smi failed (exit code ${NVIDIA_SMI_RESULT}): ${NVIDIA_SMI_ERROR}"
+      )
     elseif(NOT GPU_COMPUTE_CAP)
-      message(WARNING "nvidia-smi returned empty output. GPU may not be available or driver not loaded.")
+      message(
+        WARNING
+          "nvidia-smi returned empty output. GPU may not be available or driver not loaded."
+      )
     else()
-      # Parse "X.Y" format to "XY" (e.g., "6.1" -> "61")
-      # First, split by newlines (handles both single-GPU and multi-GPU systems)
-      # Single GPU: "8.0\n" -> "8.0;" -> processes "80" and "" (empty skipped)
-      # Multi-GPU: "8.0\n8.0\n8.0" -> "8.0;8.0;8.0;" -> processes all "80" values
+      # Parse "X.Y" format to "XY" (e.g., "6.1" -> "61") First, split by
+      # newlines (handles both single-GPU and multi-GPU systems) Single GPU:
+      # "8.0\n" -> "8.0;" -> processes "80" and "" (empty skipped) Multi-GPU:
+      # "8.0\n8.0\n8.0" -> "8.0;8.0;8.0;" -> processes all "80" values
       string(REPLACE "\n" ";" GPU_COMPUTE_CAP "${GPU_COMPUTE_CAP}")
       # Then replace dots and commas
       string(REPLACE "." "" GPU_COMPUTE_CAP "${GPU_COMPUTE_CAP}")
@@ -208,7 +213,9 @@ else()
       foreach(CAP ${GPU_COMPUTE_CAP})
         string(STRIP "${CAP}" CAP)
         # Skip empty entries (from trailing newlines or blank lines)
-        if(CAP AND CAP MATCHES "^[0-9]+$" AND NOT CAP STREQUAL "53")
+        if(CAP
+           AND CAP MATCHES "^[0-9]+$"
+           AND NOT CAP STREQUAL "53")
           list(APPEND CUDA_ARCH_LIST "${CAP}")
         endif()
       endforeach()
@@ -217,39 +224,95 @@ else()
       if(CUDA_ARCH_LIST)
         list(REMOVE_DUPLICATES CUDA_ARCH_LIST)
       else()
-        message(WARNING "nvidia-smi output parsed but no valid architectures found. Raw output: ${GPU_COMPUTE_CAP}")
+        message(
+          WARNING
+            "nvidia-smi output parsed but no valid architectures found. Raw output: ${GPU_COMPUTE_CAP}"
+        )
       endif()
     endif()
   else()
-    message(WARNING "nvidia-smi not found in PATH. Cannot auto-detect CUDA architecture.")
+    message(
+      WARNING
+        "nvidia-smi not found in PATH. Cannot auto-detect CUDA architecture.")
   endif()
 
   # Fallback if auto-detection failed
   if(NOT CUDA_ARCH_LIST)
-    set(ERROR_MSG "Could not detect CUDA architecture.\n")
-    
-    if(NOT NVIDIA_SMI)
-      string(APPEND ERROR_MSG "  - nvidia-smi not found in PATH\n")
+    # Check if we're in a CI/CD environment (GitHub Actions, GitLab CI, etc.)
+    if(DEFINED ENV{CI}
+       OR DEFINED ENV{GITHUB_ACTIONS}
+       OR DEFINED ENV{GITLAB_CI})
+      message(
+        STATUS
+          "CI/CD environment detected - using fallback architecture selection")
+
+      # Query nvcc for supported architectures to use as fallback
+      execute_process(
+        COMMAND nvcc --list-gpu-arch
+        OUTPUT_VARIABLE NVCC_FALLBACK_ARCHS
+        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
+      if(NVCC_FALLBACK_ARCHS)
+        # Extract architecture numbers (e.g., "compute_75" -> "75")
+        string(REGEX MATCHALL "compute_([0-9]+)" FALLBACK_MATCHES
+                     "${NVCC_FALLBACK_ARCHS}")
+        foreach(MATCH ${FALLBACK_MATCHES})
+          string(REGEX REPLACE "compute_([0-9]+)" "\\1" ARCH_NUM "${MATCH}")
+          if(ARCH_NUM AND NOT ARCH_NUM STREQUAL "53")
+            list(APPEND CUDA_ARCH_LIST "${ARCH_NUM}")
+          endif()
+        endforeach()
+
+        if(CUDA_ARCH_LIST)
+          list(SORT CUDA_ARCH_LIST)
+          list(GET CUDA_ARCH_LIST 0 CUDA_ARCH_LIST) # Use minimum supported
+          set(CUDA_ARCH_LIST "${CUDA_ARCH_LIST}") # Ensure it's a list
+          message(
+            STATUS
+              "Using minimum supported CUDA architecture: ${CUDA_ARCH_LIST} (from nvcc)"
+          )
+        endif()
+      endif()
+
+      # Final fallback: use common architecture (75 = Turing, widely supported)
+      if(NOT CUDA_ARCH_LIST)
+        set(CUDA_ARCH_LIST "75")
+        message(
+          STATUS "Using default CUDA architecture: 75 (Turing) for CI/CD build")
+      endif()
     else()
-      string(APPEND ERROR_MSG "  - nvidia-smi found but detection failed\n")
-      if(DEFINED NVIDIA_SMI_ERROR)
-        string(APPEND ERROR_MSG "  - Error: ${NVIDIA_SMI_ERROR}\n")
+      # Not in CI - require manual specification
+      set(ERROR_MSG "Could not detect CUDA architecture.\n")
+
+      if(NOT NVIDIA_SMI)
+        string(APPEND ERROR_MSG "  - nvidia-smi not found in PATH\n")
+      else()
+        string(APPEND ERROR_MSG "  - nvidia-smi found but detection failed\n")
+        if(DEFINED NVIDIA_SMI_ERROR)
+          string(APPEND ERROR_MSG "  - Error: ${NVIDIA_SMI_ERROR}\n")
+        endif()
+        if(DEFINED GPU_COMPUTE_CAP)
+          string(APPEND ERROR_MSG "  - Output: '${GPU_COMPUTE_CAP}'\n")
+        endif()
       endif()
-      if(DEFINED GPU_COMPUTE_CAP)
-        string(APPEND ERROR_MSG "  - Output: '${GPU_COMPUTE_CAP}'\n")
-      endif()
+
+      string(APPEND ERROR_MSG "\n")
+      string(APPEND ERROR_MSG "Solutions:\n")
+      string(APPEND ERROR_MSG
+             "  1. Specify manually: cmake -DCUDA_ARCH=<number> ..\n")
+      string(APPEND ERROR_MSG "  2. Check GPU availability: nvidia-smi\n")
+      string(
+        APPEND
+        ERROR_MSG
+        "  3. Check compute capability: nvidia-smi --query-gpu=compute_cap --format=csv\n"
+      )
+      string(APPEND ERROR_MSG "\n")
+      string(APPEND ERROR_MSG "Common architecture values:\n")
+      string(APPEND ERROR_MSG
+             "  - 60 (Pascal), 75 (Turing), 80 (Ampere), 89 (Ada), 90 (Hopper)")
+
+      message(FATAL_ERROR "${ERROR_MSG}")
     endif()
-    
-    string(APPEND ERROR_MSG "\n")
-    string(APPEND ERROR_MSG "Solutions:\n")
-    string(APPEND ERROR_MSG "  1. Specify manually: cmake -DCUDA_ARCH=<number> ..\n")
-    string(APPEND ERROR_MSG "  2. Check GPU availability: nvidia-smi\n")
-    string(APPEND ERROR_MSG "  3. Check compute capability: nvidia-smi --query-gpu=compute_cap --format=csv\n")
-    string(APPEND ERROR_MSG "\n")
-    string(APPEND ERROR_MSG "Common architecture values:\n")
-    string(APPEND ERROR_MSG "  - 60 (Pascal), 75 (Turing), 80 (Ampere), 89 (Ada), 90 (Hopper)")
-    
-    message(FATAL_ERROR "${ERROR_MSG}")
   endif()
 endif()
 

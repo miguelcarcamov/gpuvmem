@@ -28,7 +28,7 @@ on:
 env:
   BUILD_DIR: build
   CONFIG: Debug
-
+  CUDA_ARCH: 75  # Default architecture for CI (Turing - widely supported)
 
 permissions:
   contents: read
@@ -43,30 +43,57 @@ jobs:
         password: ${{ secrets.REGISTRY_TOKEN }}
 
     steps:
-    - name: Install GIT LFS
+    - name: Verify CUDA installation
+      run: |
+        nvcc --version
+        test -f /usr/local/cuda/bin/nvcc
+        echo "CUDA verified successfully"
+
+    - name: Install Git LFS
       run: |
         apt-get update
-        apt-get install -y git-lfs
-    - uses: actions/checkout@v3.0.2
+        apt-get install -y --no-install-recommends git-lfs
+        rm -rf /var/lib/apt/lists/*
+
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
         lfs: true
-    - name: Configure cmake
+
+    - name: Configure CMake
       id: configure
-      run: cmake . -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.CONFIG }}
-    - name: Configure Error Processing
-      if: ${{ failure() && steps.configure.outcome == 'failure' }}
+      run: |
+        cmake . -B ${{ env.BUILD_DIR }} \
+               -DCMAKE_BUILD_TYPE=${{ env.CONFIG }} \
+               -DCUDA_ARCH=${{ env.CUDA_ARCH }}
+
+    - name: Show CMake configuration errors
+      if: failure() && steps.configure.outcome == 'failure'
       working-directory: ${{ env.BUILD_DIR }}
       run: |
+        echo "=== CMake Configuration Errors ==="
         if [[ -f "CMakeFiles/CMakeOutput.log" ]]; then
-          echo "---- CMakeFiles/CMakeOutput.log"
-          cat CMakeFiles/CMakeOutput.log
+          echo "---- CMakeFiles/CMakeOutput.log ----"
+          tail -100 CMakeFiles/CMakeOutput.log
           echo "----"
         fi
         if [[ -f "CMakeFiles/CMakeError.log" ]]; then
-          echo "---- CMakeFiles/CMakeError.log"
-          cat CMakeFiles/CMakeError.log
+          echo "---- CMakeFiles/CMakeError.log ----"
+          tail -100 CMakeFiles/CMakeError.log
           echo "----"
         fi
-    - name: Build everything else
+
+    - name: Build gpuvmem
       working-directory: ${{ env.BUILD_DIR }}
-      run: cmake --build . --target all --verbose -j `nproc`
+      run: |
+        cmake --build . --target all --verbose -j$(nproc)
+
+    - name: Verify build output
+      run: |
+        if [[ -f "${{ env.BUILD_DIR }}/bin/gpuvmem" ]]; then
+          echo "Build successful: gpuvmem binary found"
+          ls -lh ${{ env.BUILD_DIR }}/bin/gpuvmem
+        else
+          echo "Warning: gpuvmem binary not found in expected location"
+          find ${{ env.BUILD_DIR }} -name "gpuvmem" -type f || true
+        fi
