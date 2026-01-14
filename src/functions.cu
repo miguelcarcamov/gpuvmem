@@ -1317,6 +1317,25 @@ __global__ void DFT2D(cufftComplex* Vm,
   }
 }
 
+/**
+ * Grids irregular visibilities from a measurement set onto a regular grid.
+ * 
+ * This function performs convolution gridding of visibility data:
+ * 1. Creates Hermitian symmetric visibilities (MS only contains half the data)
+ * 2. Converts UVW coordinates from meters to lambda units
+ * 3. Grids visibilities using a convolution kernel
+ * 4. Normalizes gridded visibilities and calculates effective weights
+ * 5. Extracts non-zero gridded visibilities back to sparse format
+ * 
+ * @param fields Vector of Field structures containing visibility data
+ * @param data MSData structure with measurement set metadata
+ * @param deltau Grid spacing in u direction (lambda units)
+ * @param deltav Grid spacing in v direction (lambda units)
+ * @param M Grid size in v direction (rows)
+ * @param N Grid size in u direction (columns)
+ * @param ckernel Convolution kernel for gridding
+ * @param gridding Number of OpenMP threads for parallel gridding
+ */
 __host__ void do_gridding(std::vector<Field>& fields,
                           MSData* data,
                           double deltau,
@@ -1325,44 +1344,62 @@ __host__ void do_gridding(std::vector<Field>& fields,
                           int N,
                           CKernel* ckernel,
                           int gridding) {
-  std::vector<float> g_weights(M * N);
-  std::vector<float> g_weights_aux(M * N);
-  std::vector<cufftComplex> g_Vo(M * N);
-  std::vector<double3> g_uvw(M * N);
+  // ========================================================================
+  // Initialize grid arrays (reused for each frequency/stokes combination)
+  // ========================================================================
+  std::vector<float> g_weights(M * N);           // Accumulated weights
+  std::vector<float> g_weights_aux(M * N);      // Sum of weight^2 (for effective weight calc)
+  std::vector<cufftComplex> g_Vo(M * N);         // Gridded visibilities
+  std::vector<double3> g_uvw(M * N);             // Grid UVW coordinates in meters
+  
+  // Zero-initialization constants
   cufftComplex complex_zero = floatComplexZero();
+  double3 double3_zero = {0.0, 0.0, 0.0};
 
-  double3 double3_zero;
-  double3_zero.x = 0.0;
-  double3_zero.y = 0.0;
-  double3_zero.z = 0.0;
-
+  // Track maximum number of visibilities across all channels/stokes
   int local_max = 0;
   int max = 0;
-  float pow2_factor, S2, w_avg;
 
-  /*
-     Private variables - parallel for loop
-   */
-  int j, k;
-  int grid_pos_x, grid_pos_y;
-  double3 uvw;
-  float w;
-  cufftComplex Vo;
-  int herm_j, herm_k;
-  int shifted_j, shifted_k;
-  int kernel_i, kernel_j;
-  int visCounterPerFreq = 0;
-  float ckernel_result = 1.0;
+  // ========================================================================
+  // Private variables for parallel gridding loop
+  // ========================================================================
+  double j_fp, k_fp;              // Floating-point grid coordinates
+  int j, k;                        // Integer grid pixel indices
+  double grid_pos_x, grid_pos_y;  // Grid positions in lambda units
+  double3 uvw;                     // UVW coordinates
+  float w;                         // Visibility weight
+  cufftComplex Vo;                 // Visibility value
+  int shifted_j, shifted_k;         // Shifted grid indices (for kernel convolution)
+  int kernel_i, kernel_j;          // Kernel array indices
+  int visCounterPerFreq = 0;       // Counter for visibilities per frequency
+  float ckernel_result = 1.0;     // Kernel value at current position
+  // ========================================================================
+  // Main loop: Process each field, frequency, and stokes parameter
+  // ========================================================================
+  // Pre-calculate constants that don't change per frequency/stokes
+  double center_j = floor(N / 2.0);
+  double center_k = floor(M / 2.0);
+  int support_x = ckernel->getSupportX();
+  int support_y = ckernel->getSupportY();
+  
   for (int f = 0; f < data->nfields; f++) {
     for (int i = 0; i < data->total_frequencies; i++) {
       visCounterPerFreq = 0;
+      
+      // Pre-calculate frequency-dependent constants (same for all stokes)
+      float freq = fields[f].nu[i];
+      float lambda = freq_to_wavelength(freq);
+      
       for (int s = 0; s < data->nstokes; s++) {
-        fields[f].backup_visibilities[i][s].uvw.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].backup_visibilities[i][s].Vo.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].backup_visibilities[i][s].weight.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+        // ====================================================================
+        // Step 1: Backup original visibility data before gridding
+        // ====================================================================
+        int num_visibilities = fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+        fields[f].backup_visibilities[i][s].uvw.resize(num_visibilities);
+        fields[f].backup_visibilities[i][s].Vo.resize(num_visibilities);
+        fields[f].backup_visibilities[i][s].weight.resize(num_visibilities);
+        
+        // Copy original data to backup
         fields[f].backup_visibilities[i][s].uvw.assign(
             fields[f].visibilities[i][s].uvw.begin(),
             fields[f].visibilities[i][s].uvw.end());
@@ -1372,178 +1409,266 @@ __host__ void do_gridding(std::vector<Field>& fields,
         fields[f].backup_visibilities[i][s].Vo.assign(
             fields[f].visibilities[i][s].Vo.begin(),
             fields[f].visibilities[i][s].Vo.end());
-#pragma omp parallel for schedule(static, 1) num_threads(gridding)          \
-    shared(g_weights, g_weights_aux, g_Vo) private(                         \
-            j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
-                kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
-        for (int z = 0; z < 2 * fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-             z++) {
-          // Loop here is done twice since dataset only has half of the data
-          int index = z;
-          if (z >= fields[f].numVisibilitiesPerFreqPerStoke[i][s])
-            index = z - fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+        
+        // ====================================================================
+        // Step 2: Grid visibilities using convolution kernel
+        // ====================================================================
+        // Process each visibility twice: once as-is, once as Hermitian symmetric
+        // (Measurement sets only contain half the data due to symmetry)
+        // Use thread-local accumulation to eliminate critical section bottleneck
+        int grid_size = M * N;
+        
+#pragma omp parallel num_threads(gridding) \
+    shared(g_weights, g_weights_aux, g_Vo, freq, center_j, center_k, \
+           support_x, support_y, num_visibilities, grid_size) \
+    private(j_fp, k_fp, j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, \
+            shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result)
+        {
+          // Allocate thread-local accumulation arrays
+          std::vector<float> local_weights(grid_size, 0.0f);
+          std::vector<float> local_weights_aux(grid_size, 0.0f);
+          std::vector<cufftComplex> local_Vo(grid_size, floatComplexZero());
+          
+          // Parallel loop over visibilities
+#pragma omp for schedule(static)
+          for (int z = 0; z < 2 * num_visibilities; z++) {
+            // Determine which visibility to use (first half: original, second half: Hermitian)
+            int vis_index = (z < num_visibilities) ? z : (z - num_visibilities);
+            
+            // Load visibility data
+            uvw = fields[f].visibilities[i][s].uvw[vis_index];
+            w = fields[f].visibilities[i][s].weight[vis_index];
+            Vo = fields[f].visibilities[i][s].Vo[vis_index];
 
-          uvw = fields[f].visibilities[i][s].uvw[index];
-          w = fields[f].visibilities[i][s].weight[index];
-          Vo = fields[f].visibilities[i][s].Vo[index];
+            // ================================================================
+            // Step 2a: Create Hermitian symmetric visibility for second half
+            // ================================================================
+            // For V(u,v): V*(-u,-v) = V*(u,v) where * denotes complex conjugate
+            if (z >= num_visibilities) {
+              uvw.x *= -1.0;  // Negate u coordinate
+              uvw.y *= -1.0;  // Negate v coordinate
+              uvw.z *= -1.0;  // Negate w coordinate
+              Vo.y *= -1.0f;  // Negate imaginary part (complex conjugate)
+            }
 
-          // The second half of the data must be the Hermitian symmetric
-          // visibilities
-          if (z >= fields[f].numVisibilitiesPerFreqPerStoke[i][s]) {
-            uvw.x *= -1.0;
-            uvw.y *= -1.0;
-            uvw.z *= -1.0;
-            Vo.y *= -1.0f;
-          }
+            // ================================================================
+            // Step 2b: Convert UVW coordinates from meters to lambda units
+            // ================================================================
+            uvw.x = metres_to_lambda(uvw.x, freq);
+            uvw.y = metres_to_lambda(uvw.y, freq);
+            uvw.z = metres_to_lambda(uvw.z, freq);
 
-          // Visibilities from metres to klambda
-          uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
-          uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
-          uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
+            // ================================================================
+            // Step 2c: Calculate grid pixel coordinates
+            // ================================================================
+            grid_pos_x = uvw.x / deltau;  // Grid position in u direction
+            grid_pos_y = uvw.y / deltav;  // Grid position in v direction
+            
+            // Center the grid: center pixel is at floor(N/2) for both even and odd N
+            // The +0.5 ensures proper rounding when converting to integer pixel index
+            j_fp = grid_pos_x + center_j + 0.5;
+            k_fp = grid_pos_y + center_k + 0.5;
+            j = int(j_fp);  // Column index in grid
+            k = int(k_fp);  // Row index in grid
 
-          grid_pos_x = uvw.x / deltau;
-          grid_pos_y = uvw.y / deltav;
-          j = grid_pos_x + int(floor(N / 2)) + 0.5;
-          k = grid_pos_y + int(floor(M / 2)) + 0.5;
-
-          for (int m = -ckernel->getSupportY(); m <= ckernel->getSupportY();
-               m++) {
-            for (int n = -ckernel->getSupportX(); n <= ckernel->getSupportX();
-                 n++) {
-              shifted_j = j + n;
-              shifted_k = k + m;
-              kernel_j = n + ckernel->getSupportX();
-              kernel_i = m + ckernel->getSupportY();
-#pragma omp ordered
-              {
-#pragma omp critical
-                {
-                  if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 &&
-                      shifted_j < N) {
-                    ckernel_result =
-                        ckernel->getKernelValue(kernel_i, kernel_j);
-                    g_Vo[N * shifted_k + shifted_j].x +=
-                        w * Vo.x * ckernel_result;
-                    g_Vo[N * shifted_k + shifted_j].y +=
-                        w * Vo.y * ckernel_result;
-                    g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
-                    g_weights_aux[N * shifted_k + shifted_j] +=
-                        w * ckernel_result * ckernel_result;
-                  }
+            // ================================================================
+            // Step 2d: Apply convolution kernel to grid this visibility
+            // ================================================================
+            // The kernel spreads each visibility over neighboring grid pixels
+            // Accumulate into thread-local arrays (no synchronization needed)
+            for (int m = -support_y; m <= support_y; m++) {
+              for (int n = -support_x; n <= support_x; n++) {
+                // Calculate shifted grid position
+                shifted_j = j + n;
+                shifted_k = k + m;
+                
+                // Calculate kernel array indices (kernel is centered at support)
+                kernel_j = n + support_x;
+                kernel_i = m + support_y;
+                
+                // Check bounds: grid must be valid AND kernel indices must be valid
+                if (shifted_k >= 0 && shifted_k < M && 
+                    shifted_j >= 0 && shifted_j < N && 
+                    kernel_i >= 0 && kernel_i < ckernel->getm() && 
+                    kernel_j >= 0 && kernel_j < ckernel->getn()) {
+                  
+                  // Get kernel value at this position
+                  ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
+                  
+                  // Accumulate into thread-local arrays (no synchronization needed)
+                  int grid_idx = N * shifted_k + shifted_j;
+                  
+                  // Accumulate weighted visibility: V_grid += w * V * kernel
+                  local_Vo[grid_idx].x += w * Vo.x * ckernel_result;
+                  local_Vo[grid_idx].y += w * Vo.y * ckernel_result;
+                  
+                  // Accumulate weights: sum of w * kernel
+                  local_weights[grid_idx] += w * ckernel_result;
+                  
+                  // Accumulate auxiliary weights: sum of w * kernel^2 (for effective weight)
+                  local_weights_aux[grid_idx] += w * ckernel_result * ckernel_result;
                 }
               }
             }
           }
-        }
+          
+          // ================================================================
+          // Step 2e: Merge thread-local arrays into global arrays
+          // ================================================================
+          // Use atomic operations for simple increments, critical for complex numbers
+#pragma omp critical
+          {
+            for (int idx = 0; idx < grid_size; idx++) {
+              g_Vo[idx].x += local_Vo[idx].x;
+              g_Vo[idx].y += local_Vo[idx].y;
+              g_weights[idx] += local_weights[idx];
+              g_weights_aux[idx] += local_weights_aux[idx];
+            }
+          }
+        }  // End parallel region
 
-// fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_beforedividing.fits",
-// "./", 0, 1.0, M, N, 0, false); OFITS(g_weights.data(), mod_in, "./",
-// "weights_grid_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
-// OFITS(g_weights_aux.data(), mod_in, "./",
-// "weights_grid_aux_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
-//  Normalize visibilities and weights
-#pragma omp parallel for schedule(static, 1) \
-    shared(g_weights, g_weights_aux, g_Vo, g_uvw)
-        for (int k = 0; k < M; k++) {
-          for (int j = 0; j < N; j++) {
-            double u_lambdas = (j - int(floor(N / 2))) * deltau;
-            double v_lambdas = (k - int(floor(M / 2))) * deltav;
-
-            double u_meters = u_lambdas * freq_to_wavelength(data->max_freq);
-            double v_meters = v_lambdas * freq_to_wavelength(data->max_freq);
-
-            g_uvw[N * k + j].x = u_meters;
-            g_uvw[N * k + j].y = v_meters;
-            float ws = g_weights[N * k + j];
-            float aux_ws = g_weights_aux[N * k + j];
-            float weight;
+        // ====================================================================
+        // Step 3: Normalize gridded visibilities and calculate effective weights
+        // ====================================================================
+        // Convert grid coordinates from lambda back to meters and normalize
+#pragma omp parallel for schedule(static) \
+    shared(g_weights, g_weights_aux, g_Vo, g_uvw, lambda, center_j, center_k)
+        for (int grid_k = 0; grid_k < M; grid_k++) {
+          for (int grid_j = 0; grid_j < N; grid_j++) {
+            int grid_idx = N * grid_k + grid_j;
+            
+            // ================================================================
+            // Step 3a: Calculate UVW coordinates in meters for this grid cell
+            // ================================================================
+            // Use same centering formula as forward calculation
+            double u_lambdas = (grid_j - center_j) * deltau;
+            double v_lambdas = (grid_k - center_k) * deltav;
+            
+            // Convert from lambda units back to meters using the frequency for this channel
+            double u_meters = u_lambdas * lambda;
+            double v_meters = v_lambdas * lambda;
+            
+            g_uvw[grid_idx].x = u_meters;
+            g_uvw[grid_idx].y = v_meters;
+            
+            // ================================================================
+            // Step 3b: Normalize visibilities and calculate effective weights
+            // ================================================================
+            float ws = g_weights[grid_idx];           // Sum of weights: Σ(w * kernel)
+            float aux_ws = g_weights_aux[grid_idx];   // Sum of weight^2: Σ(w * kernel^2)
+            
             if (aux_ws != 0.0f && ws != 0.0f) {
-              weight = ws * ws / aux_ws;
-              g_Vo[N * k + j].x /= ws;
-              g_Vo[N * k + j].y /= ws;
-              g_weights[N * k + j] = weight;
+              // Effective weight accounts for kernel convolution:
+              //   weight_eff = (Σ w_i * k_i)^2 / Σ (w_i * k_i)^2
+              // This gives the equivalent weight if all visibilities were at the same point
+              float weight_eff = ws * ws / aux_ws;
+              
+              // Normalize visibility: divide by accumulated weight sum
+              // This gives the weighted average visibility at this grid point
+              g_Vo[grid_idx].x /= ws;
+              g_Vo[grid_idx].y /= ws;
+              
+              // Store effective weight
+              g_weights[grid_idx] = weight_eff;
             } else {
-              g_weights[N * k + j] = 0.0f;
+              // No valid data at this grid point (no visibilities contributed)
+              g_weights[grid_idx] = 0.0f;
+              g_Vo[grid_idx].x = 0.0f;
+              g_Vo[grid_idx].y = 0.0f;
             }
           }
         }
 
-        // The following lines are to create images with the resulting (u,v)
-        // grid and weights
-        // fitsOutputCufftComplex(g_Vo.data(), mod_in,
-        // "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
-        // OFITS(g_weights.data(), mod_in, "./",
-        // "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N,
-        // false);
-
-        // We already know that in quadrants < N/2 there are only zeros
-        // Therefore, we start j from N/2
+        // ====================================================================
+        // Step 4: Extract non-zero gridded visibilities back to sparse format
+        // ====================================================================
+        // Count how many grid cells have valid (non-zero) visibilities
         int visCounter = 0;
-#pragma omp parallel for shared(g_weights) reduction(+ : visCounter)
-        for (int k = 0; k < M; k++) {
-          for (int j = 0; j < N; j++) {
-            float weight = g_weights[N * k + j];
-            if (weight > 0.0f) {
+#pragma omp parallel for schedule(static) shared(g_weights) reduction(+ : visCounter)
+        for (int grid_k = 0; grid_k < M; grid_k++) {
+          for (int grid_j = 0; grid_j < N; grid_j++) {
+            int grid_idx = N * grid_k + grid_j;
+            if (g_weights[grid_idx] > 0.0f) {
               visCounter++;
             }
           }
         }
 
+        // Resize output arrays to hold only non-zero visibilities
         fields[f].visibilities[i][s].uvw.resize(visCounter);
         fields[f].visibilities[i][s].Vo.resize(visCounter);
-
         fields[f].visibilities[i][s].Vm.resize(visCounter);
-        memset(&fields[f].visibilities[i][s].Vm[0], 0,
-               fields[f].visibilities[i][s].Vm.size() * sizeof(cufftComplex));
-
         fields[f].visibilities[i][s].weight.resize(visCounter);
+        
+        // Initialize Vm (model visibilities) to zero
+        if (visCounter > 0) {
+          memset(&fields[f].visibilities[i][s].Vm[0], 0,
+                 visCounter * sizeof(cufftComplex));
+        }
 
-        int l = 0;
-        float weight;
-        for (int k = 0; k < M; k++) {
-          for (int j = 0; j < N; j++) {
-            weight = g_weights[N * k + j];
+        // Copy non-zero gridded visibilities to output arrays
+        int output_idx = 0;
+        for (int grid_k = 0; grid_k < M; grid_k++) {
+          for (int grid_j = 0; grid_j < N; grid_j++) {
+            int grid_idx = N * grid_k + grid_j;
+            float weight = g_weights[grid_idx];
+            
             if (weight > 0.0f) {
-              fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
-              fields[f].visibilities[i][s].uvw[l].y = g_uvw[N * k + j].y;
-              fields[f].visibilities[i][s].uvw[l].z = 0.0;
-              fields[f].visibilities[i][s].Vo[l] =
-                  make_cuFloatComplex(g_Vo[N * k + j].x, g_Vo[N * k + j].y);
-              fields[f].visibilities[i][s].weight[l] = g_weights[N * k + j];
-              l++;
+              // Copy UVW coordinates (w is set to 0 for gridded data)
+              fields[f].visibilities[i][s].uvw[output_idx].x = g_uvw[grid_idx].x;
+              fields[f].visibilities[i][s].uvw[output_idx].y = g_uvw[grid_idx].y;
+              fields[f].visibilities[i][s].uvw[output_idx].z = 0.0;
+              
+              // Copy normalized visibility
+              fields[f].visibilities[i][s].Vo[output_idx] =
+                  make_cuFloatComplex(g_Vo[grid_idx].x, g_Vo[grid_idx].y);
+              
+              // Copy effective weight
+              fields[f].visibilities[i][s].weight[output_idx] = weight;
+              
+              output_idx++;
             }
           }
         }
 
+        // ====================================================================
+        // Step 5: Update visibility counts and backup
+        // ====================================================================
+        // Backup old count before updating
         fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s] =
             fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-
-        if (fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-          fields[f].numVisibilitiesPerFreqPerStoke[i][s] = visCounter;
+        
+        // Update to actual gridded visibility count
+        fields[f].numVisibilitiesPerFreqPerStoke[i][s] = visCounter;
+        if (visCounter > 0) {
           visCounterPerFreq += visCounter;
-        } else {
-          fields[f].numVisibilitiesPerFreqPerStoke[i][s] = 0;
         }
 
+        // ====================================================================
+        // Step 6: Clear grid arrays for next stokes parameter
+        // ====================================================================
         std::fill_n(g_weights_aux.begin(), M * N, 0.0f);
         std::fill_n(g_weights.begin(), M * N, 0.0f);
         std::fill_n(g_uvw.begin(), M * N, double3_zero);
         std::fill_n(g_Vo.begin(), M * N, complex_zero);
-      }
+      }  // End stokes loop
 
-      local_max =
-          *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
-                            fields[f].numVisibilitiesPerFreqPerStoke[i].end());
+      // Track maximum number of visibilities across all stokes for this frequency
+      local_max = *std::max_element(
+          fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
+          fields[f].numVisibilitiesPerFreqPerStoke[i].end());
       if (local_max > max) {
         max = local_max;
       }
 
+      // Update total visibilities per frequency
       fields[f].backup_numVisibilitiesPerFreq[i] =
           fields[f].numVisibilitiesPerFreq[i];
       fields[f].numVisibilitiesPerFreq[i] = visCounterPerFreq;
-    }
-  }
+    }  // End frequency loop
+  }  // End field loop
 
+  // Store global maximum across all fields/frequencies/stokes
   data->max_number_visibilities_in_channel_and_stokes = max;
 }
 
