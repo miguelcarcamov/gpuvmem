@@ -1415,117 +1415,97 @@ __host__ void do_gridding(std::vector<Field>& fields,
         // ====================================================================
         // Process each visibility twice: once as-is, once as Hermitian symmetric
         // (Measurement sets only contain half the data due to symmetry)
-        // Use thread-local accumulation to eliminate critical section bottleneck
-        int grid_size = M * N;
-        
-#pragma omp parallel num_threads(gridding) \
+#pragma omp parallel for schedule(static) num_threads(gridding) \
     shared(g_weights, g_weights_aux, g_Vo, freq, center_j, center_k, \
-           support_x, support_y, num_visibilities, grid_size) \
-    private(j_fp, k_fp, j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, \
+           support_x, support_y) private( \
+            j_fp, k_fp, j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, \
             shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result)
-        {
-          // Allocate thread-local accumulation arrays
-          std::vector<float> local_weights(grid_size, 0.0f);
-          std::vector<float> local_weights_aux(grid_size, 0.0f);
-          std::vector<cufftComplex> local_Vo(grid_size, floatComplexZero());
+        for (int z = 0; z < 2 * num_visibilities; z++) {
+          // Determine which visibility to use (first half: original, second half: Hermitian)
+          int vis_index = (z < num_visibilities) ? z : (z - num_visibilities);
           
-          // Parallel loop over visibilities
-#pragma omp for schedule(static)
-          for (int z = 0; z < 2 * num_visibilities; z++) {
-            // Determine which visibility to use (first half: original, second half: Hermitian)
-            int vis_index = (z < num_visibilities) ? z : (z - num_visibilities);
-            
-            // Load visibility data
-            uvw = fields[f].visibilities[i][s].uvw[vis_index];
-            w = fields[f].visibilities[i][s].weight[vis_index];
-            Vo = fields[f].visibilities[i][s].Vo[vis_index];
+          // Load visibility data
+          uvw = fields[f].visibilities[i][s].uvw[vis_index];
+          w = fields[f].visibilities[i][s].weight[vis_index];
+          Vo = fields[f].visibilities[i][s].Vo[vis_index];
 
-            // ================================================================
-            // Step 2a: Create Hermitian symmetric visibility for second half
-            // ================================================================
-            // For V(u,v): V*(-u,-v) = V*(u,v) where * denotes complex conjugate
-            if (z >= num_visibilities) {
-              uvw.x *= -1.0;  // Negate u coordinate
-              uvw.y *= -1.0;  // Negate v coordinate
-              uvw.z *= -1.0;  // Negate w coordinate
-              Vo.y *= -1.0f;  // Negate imaginary part (complex conjugate)
-            }
+          // ================================================================
+          // Step 2a: Create Hermitian symmetric visibility for second half
+          // ================================================================
+          // For V(u,v): V*(-u,-v) = V*(u,v) where * denotes complex conjugate
+          if (z >= num_visibilities) {
+            uvw.x *= -1.0;  // Negate u coordinate
+            uvw.y *= -1.0;  // Negate v coordinate
+            uvw.z *= -1.0;  // Negate w coordinate
+            Vo.y *= -1.0f;  // Negate imaginary part (complex conjugate)
+          }
 
-            // ================================================================
-            // Step 2b: Convert UVW coordinates from meters to lambda units
-            // ================================================================
-            uvw.x = metres_to_lambda(uvw.x, freq);
-            uvw.y = metres_to_lambda(uvw.y, freq);
-            uvw.z = metres_to_lambda(uvw.z, freq);
+          // ================================================================
+          // Step 2b: Convert UVW coordinates from meters to lambda units
+          // ================================================================
+          uvw.x = metres_to_lambda(uvw.x, freq);
+          uvw.y = metres_to_lambda(uvw.y, freq);
+          uvw.z = metres_to_lambda(uvw.z, freq);
 
-            // ================================================================
-            // Step 2c: Calculate grid pixel coordinates
-            // ================================================================
-            grid_pos_x = uvw.x / deltau;  // Grid position in u direction
-            grid_pos_y = uvw.y / deltav;  // Grid position in v direction
-            
-            // Center the grid: center pixel is at floor(N/2) for both even and odd N
-            // The +0.5 ensures proper rounding when converting to integer pixel index
-            j_fp = grid_pos_x + center_j + 0.5;
-            k_fp = grid_pos_y + center_k + 0.5;
-            j = int(j_fp);  // Column index in grid
-            k = int(k_fp);  // Row index in grid
+          // ================================================================
+          // Step 2c: Calculate grid pixel coordinates
+          // ================================================================
+          grid_pos_x = uvw.x / deltau;  // Grid position in u direction
+          grid_pos_y = uvw.y / deltav;  // Grid position in v direction
+          
+          // Center the grid: center pixel is at floor(N/2) for both even and odd N
+          // The +0.5 ensures proper rounding when converting to integer pixel index
+          j_fp = grid_pos_x + center_j + 0.5;
+          k_fp = grid_pos_y + center_k + 0.5;
+          j = int(j_fp);  // Column index in grid
+          k = int(k_fp);  // Row index in grid
 
-            // ================================================================
-            // Step 2d: Apply convolution kernel to grid this visibility
-            // ================================================================
-            // The kernel spreads each visibility over neighboring grid pixels
-            // Accumulate into thread-local arrays (no synchronization needed)
-            for (int m = -support_y; m <= support_y; m++) {
-              for (int n = -support_x; n <= support_x; n++) {
-                // Calculate shifted grid position
-                shifted_j = j + n;
-                shifted_k = k + m;
+          // ================================================================
+          // Step 2d: Apply convolution kernel to grid this visibility
+          // ================================================================
+          // The kernel spreads each visibility over neighboring grid pixels
+          for (int m = -support_y; m <= support_y; m++) {
+            for (int n = -support_x; n <= support_x; n++) {
+              // Calculate shifted grid position
+              shifted_j = j + n;
+              shifted_k = k + m;
+              
+              // Calculate kernel array indices (kernel is centered at support)
+              kernel_j = n + support_x;
+              kernel_i = m + support_y;
+              
+              // Check bounds: grid must be valid AND kernel indices must be valid
+              if (shifted_k >= 0 && shifted_k < M && 
+                  shifted_j >= 0 && shifted_j < N && 
+                  kernel_i >= 0 && kernel_i < ckernel->getm() && 
+                  kernel_j >= 0 && kernel_j < ckernel->getn()) {
                 
-                // Calculate kernel array indices (kernel is centered at support)
-                kernel_j = n + support_x;
-                kernel_i = m + support_y;
+                // Get kernel value at this position
+                ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
                 
-                // Check bounds: grid must be valid AND kernel indices must be valid
-                if (shifted_k >= 0 && shifted_k < M && 
-                    shifted_j >= 0 && shifted_j < N && 
-                    kernel_i >= 0 && kernel_i < ckernel->getm() && 
-                    kernel_j >= 0 && kernel_j < ckernel->getn()) {
-                  
-                  // Get kernel value at this position
-                  ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
-                  
-                  // Accumulate into thread-local arrays (no synchronization needed)
-                  int grid_idx = N * shifted_k + shifted_j;
-                  
-                  // Accumulate weighted visibility: V_grid += w * V * kernel
-                  local_Vo[grid_idx].x += w * Vo.x * ckernel_result;
-                  local_Vo[grid_idx].y += w * Vo.y * ckernel_result;
-                  
-                  // Accumulate weights: sum of w * kernel
-                  local_weights[grid_idx] += w * ckernel_result;
-                  
-                  // Accumulate auxiliary weights: sum of w * kernel^2 (for effective weight)
-                  local_weights_aux[grid_idx] += w * ckernel_result * ckernel_result;
+                // Cache squared kernel value to avoid recomputation
+                float ckernel_result_sq = ckernel_result * ckernel_result;
+                
+                int grid_idx = N * shifted_k + shifted_j;
+                
+                // Use atomic operations for simple weight accumulations (faster than critical)
+#pragma omp atomic
+                g_weights[grid_idx] += w * ckernel_result;
+                
+#pragma omp atomic
+                g_weights_aux[grid_idx] += w * ckernel_result_sq;
+                
+                // Critical section only for complex number updates (g_Vo)
+                // Complex numbers require synchronized updates of both real and imaginary parts
+#pragma omp critical
+                {
+                  g_Vo[grid_idx].x += w * Vo.x * ckernel_result;
+                  g_Vo[grid_idx].y += w * Vo.y * ckernel_result;
                 }
               }
             }
           }
-          
-          // ================================================================
-          // Step 2e: Merge thread-local arrays into global arrays
-          // ================================================================
-          // Use atomic operations for simple increments, critical for complex numbers
-#pragma omp critical
-          {
-            for (int idx = 0; idx < grid_size; idx++) {
-              g_Vo[idx].x += local_Vo[idx].x;
-              g_Vo[idx].y += local_Vo[idx].y;
-              g_weights[idx] += local_weights[idx];
-              g_weights_aux[idx] += local_weights_aux[idx];
-            }
-          }
-        }  // End parallel region
+        }
 
         // ====================================================================
         // Step 3: Normalize gridded visibilities and calculate effective weights
@@ -1679,17 +1659,27 @@ __host__ void calc_sBeam(std::vector<double3> uvw,
                          double* s_vv,
                          double* s_uv) {
   double u_lambda, v_lambda;
-#pragma omp parallel for shared(uvw, weight) private(u_lambda, v_lambda)
+  double local_s_uu = 0.0;
+  double local_s_vv = 0.0;
+  double local_s_uv = 0.0;
+  
+  // Use reduction for efficient parallel accumulation
+#pragma omp parallel for shared(uvw, weight) private(u_lambda, v_lambda) \
+    reduction(+ : local_s_uu, local_s_vv, local_s_uv)
   for (int i = 0; i < uvw.size(); i++) {
     u_lambda = metres_to_lambda(uvw[i].x, nu);
     v_lambda = metres_to_lambda(uvw[i].y, nu);
-#pragma omp critical
-    {
-      *s_uu += u_lambda * u_lambda * weight[i];
-      *s_vv += v_lambda * v_lambda * weight[i];
-      *s_uv += u_lambda * v_lambda * weight[i];
-    }
+    
+    // Accumulate into reduction variables (no synchronization needed)
+    local_s_uu += u_lambda * u_lambda * weight[i];
+    local_s_vv += v_lambda * v_lambda * weight[i];
+    local_s_uv += u_lambda * v_lambda * weight[i];
   }
+  
+  // Update output pointers after parallel reduction
+  *s_uu += local_s_uu;
+  *s_vv += local_s_vv;
+  *s_uv += local_s_uv;
 }
 
 __host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv) {
