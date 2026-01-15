@@ -2157,42 +2157,18 @@ __host__ void degridding(std::vector<Field>& fields,
       int gpu_id = -1;
       cudaGetDevice(&gpu_id);
 
-      // Recompute FFT of final image for this frequency/channel
-      // This gives us the full, accurate model visibility grid (not sparse bilinear-interpolated samples)
-      ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I,
-                       fields[f].nu[i]);
-
-      // Apply primary beam (need antenna info from dataset)
-      if (dataset.antennas.size() > 0) {
-        ip->apply_beam(vars_gpu[gpu_idx].device_I_nu,
-                       dataset.antennas[0].antenna_diameter,
-                       dataset.antennas[0].pb_factor,
-                       dataset.antennas[0].pb_cutoff,
-                       fields[f].ref_xobs_pix,
-                       fields[f].ref_yobs_pix,
-                       fields[f].nu[i],
-                       dataset.antennas[0].primary_beam, 1.0f);
-      }
-
-      // Apply Gridding Correction Function (GCF) if using convolution kernel
-      if (ckernel != NULL && ckernel->getGCFGPU() != NULL) {
-        apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
-            vars_gpu[gpu_idx].device_I_nu, ckernel->getGCFGPU(), N);
-        checkCudaErrors(cudaDeviceSynchronize());
-      }
-
-      // FFT 2D: Transform image to visibility grid
+      // Compute visibility grid from image using common pipeline
       // Use shift=true to move DC component to center, matching the gridding
       // coordinate system which uses center_j = floor(N/2.0)
-      FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
-            vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, true);
-
-      // Phase rotate to correct phase center
-      phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-          vars_gpu[gpu_idx].device_V, M, N,
-          fields[f].phs_xobs_pix,
-          fields[f].phs_yobs_pix);
-      checkCudaErrors(cudaDeviceSynchronize());
+      if (dataset.antennas.size() > 0) {
+        computeImageToVisibilityGrid(
+            I, ip, vars_gpu, gpu_idx, M, N, fields[f].nu[i],
+            fields[f].ref_xobs_pix, fields[f].ref_yobs_pix,
+            fields[f].phs_xobs_pix, fields[f].phs_yobs_pix,
+            dataset.antennas[0].antenna_diameter, dataset.antennas[0].pb_factor,
+            dataset.antennas[0].pb_cutoff, dataset.antennas[0].primary_beam,
+            1.0f, ckernel, true);
+      }
 
       for (int s = 0; s < data.nstokes; s++) {
         // Now the number of visibilities will be the original one (restore from backup)
@@ -2327,6 +2303,52 @@ __host__ void initFFT(varsPerGPU* vars_gpu,
     cudaSetDevice((g % num_gpus) + firstgpu);
     checkCudaErrors(cufftPlan2d(&vars_gpu[g].plan, N, M, CUFFT_C2C));
   }
+}
+
+// Helper function to compute visibility grid from image (common pipeline)
+// This encapsulates the repeated pattern: calculateInu -> apply_beam -> apply_GCF -> FFT2D -> phase_rotate
+__host__ void computeImageToVisibilityGrid(
+    float* I,
+    VirtualImageProcessor* ip,
+    varsPerGPU* vars_gpu,
+    int gpu_idx,
+    long M,
+    long N,
+    float nu,
+    float ref_xobs_pix,
+    float ref_yobs_pix,
+    float phs_xobs_pix,
+    float phs_yobs_pix,
+    float antenna_diameter,
+    float pb_factor,
+    float pb_cutoff,
+    int primary_beam,
+    float fg_scale,
+    CKernel* ckernel,
+    bool fft_shift) {
+  // Recompute FFT of final image for this frequency/channel
+  ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I, nu);
+
+  // Apply primary beam
+  ip->apply_beam(vars_gpu[gpu_idx].device_I_nu, antenna_diameter, pb_factor,
+                 pb_cutoff, ref_xobs_pix, ref_yobs_pix, nu, primary_beam,
+                 fg_scale);
+
+  // Apply Gridding Correction Function (GCF) if using convolution kernel
+  if (ckernel != NULL && ckernel->getGCFGPU() != NULL) {
+    apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
+        vars_gpu[gpu_idx].device_I_nu, ckernel->getGCFGPU(), N);
+    checkCudaErrors(cudaDeviceSynchronize());
+  }
+
+  // FFT 2D: Transform image to visibility grid
+  FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
+        vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, fft_shift);
+
+  // Phase rotate to correct phase center
+  phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
+      vars_gpu[gpu_idx].device_V, M, N, phs_xobs_pix, phs_yobs_pix);
+  checkCudaErrors(cudaDeviceSynchronize());
 }
 
 __host__ void FFT2D(cufftComplex* output_data,
@@ -2764,111 +2786,106 @@ __global__ void getGriddedVisFromPix(cufftComplex* Vm,
 }
 
 /*
- * Interpolate in the visibility array to find the visibility at (u,v);
- * Optimized version using regular global memory with __ldg()
+ * Bilinear interpolation of visibilities from gridded visibility plane
+ * dc_at_center: true if DC component is at center (N/2, M/2), false if at corner (0,0)
+ * This unified function replaces vis_mod (DC at corner) and vis_mod2 (DC at center)
  */
-__global__ void vis_mod(cufftComplex* __restrict__ Vm,
-                        const cufftComplex* __restrict__ V,
-                        const double3* __restrict__ UVW,
-                        float* __restrict__ weight,
-                        const double deltau,
-                        const double deltav,
-                        const long numVisibilities,
-                        const long N) {
+__global__ void bilinearInterpolateVisibility(
+    cufftComplex* __restrict__ Vm,
+    const cufftComplex* __restrict__ V,
+    const double3* __restrict__ UVW,
+    float* __restrict__ weight,
+    const double deltau,
+    const double deltav,
+    const long numVisibilities,
+    const long N,
+    const bool dc_at_center) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
     // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
     const double3 uvw = UVW[i];
-    double uv_x = uvw.x / deltau;
-    double uv_y = uvw.y / deltav;
+    double uv_x, uv_y;
+    int i1, i2, j1, j2;
+    double du, dv;
 
-    // Handle negative coordinates
-    if (uv_x < 0.0)
-      uv_x += N;
-    if (uv_y < 0.0)
-      uv_y += N;
+    if (dc_at_center) {
+      // DC at center: add N/2 offset to coordinates
+      const double N_half = N * 0.5;
+      uv_x = uvw.x / deltau + N_half;
+      uv_y = uvw.y / deltav + N_half;
 
-    const int i1 = __double2int_rd(uv_x);
-    const int i2 = (i1 + 1) % N;
-    const double du = uv_x - i1;
+      i1 = __double2int_rd(uv_x);
+      i2 = i1 + 1;
+      du = uv_x - i1;
 
-    const int j1 = __double2int_rd(uv_y);
-    const int j2 = (j1 + 1) % N;
-    const double dv = uv_y - j1;
+      j1 = __double2int_rd(uv_y);
+      j2 = j1 + 1;
+      dv = uv_y - j1;
 
-    // Optimized boundary check (i2 and j2 are always valid due to modulo)
-    if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N) {
-      // Use regular global memory with __ldg for read-only cached access
-      const cufftComplex v11 = __ldg(&V[N * j1 + i1]);
-      const cufftComplex v12 = __ldg(&V[N * j2 + i1]);
-      const cufftComplex v21 = __ldg(&V[N * j1 + i2]);
-      const cufftComplex v22 = __ldg(&V[N * j2 + i2]);
+      // Check all boundaries explicitly (no wrapping)
+      if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N && i2 >= 0 && i2 < N &&
+          j2 >= 0 && j2 < N) {
+        // Use regular global memory with __ldg for read-only cached access
+        const cufftComplex v11 = __ldg(&V[N * j1 + i1]);
+        const cufftComplex v12 = __ldg(&V[N * j1 + i2]);
+        const cufftComplex v21 = __ldg(&V[N * j2 + i1]);
+        const cufftComplex v22 = __ldg(&V[N * j2 + i2]);
 
-      // Optimized bilinear interpolation (factor out common terms)
-      const float w11 = (1.0f - du) * (1.0f - dv);
-      const float w12 = (1.0f - du) * dv;
-      const float w21 = du * (1.0f - dv);
-      const float w22 = du * dv;
+        // Optimized bilinear interpolation weights
+        const float w11 = (1.0f - du) * (1.0f - dv);
+        const float w12 = du * (1.0f - dv);
+        const float w21 = (1.0f - du) * dv;
+        const float w22 = du * dv;
 
-      const float Zreal = w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
-      const float Zimag = w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
-
-      Vm[i] = make_cuFloatComplex(Zreal, Zimag);
+        Vm[i] = make_cuFloatComplex(
+            w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
+            w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
+      } else {
+        weight[i] = 0.0f;
+      }
     } else {
-      weight[i] = 0.0f;
-    }
-  }
-}
+      // DC at corner: handle negative coordinates with wrapping
+      uv_x = uvw.x / deltau;
+      uv_y = uvw.y / deltav;
 
-/*
- * Interpolate in the visibility array to find the visibility at (u,v);
- * Optimized version using regular global memory with __ldg()
- */
-__global__ void vis_mod2(cufftComplex* __restrict__ Vm,
-                         const cufftComplex* __restrict__ V,
-                         const double3* __restrict__ UVW,
-                         float* __restrict__ weight,
-                         const double deltau,
-                         const double deltav,
-                         const long numVisibilities,
-                         const long N,
-                         const float N_half) {  // Precomputed N/2
-  const int i = threadIdx.x + blockDim.x * blockIdx.x;
+      // Handle negative coordinates by wrapping
+      if (uv_x < 0.0)
+        uv_x += N;
+      if (uv_y < 0.0)
+        uv_y += N;
 
-  if (i < numVisibilities) {
-    // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
-    const double3 uvw = UVW[i];
-    double f_j = uvw.x / deltau + N_half;
-    double f_k = uvw.y / deltav + N_half;
+      i1 = __double2int_rd(uv_x);
+      i2 = (i1 + 1) % N;  // Wrap around
+      du = uv_x - i1;
 
-    const int j1 = __double2int_rd(f_j);
-    const int j2 = j1 + 1;
-    f_j = f_j - j1;
+      j1 = __double2int_rd(uv_y);
+      j2 = (j1 + 1) % N;  // Wrap around
+      dv = uv_y - j1;
 
-    const int k1 = __double2int_rd(f_k);
-    const int k2 = k1 + 1;
-    f_k = f_k - k1;
+      // Optimized boundary check (i2 and j2 are always valid due to modulo)
+      if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N) {
+        // Use regular global memory with __ldg for read-only cached access
+        const cufftComplex v11 = __ldg(&V[N * j1 + i1]);
+        const cufftComplex v12 = __ldg(&V[N * j2 + i1]);
+        const cufftComplex v21 = __ldg(&V[N * j1 + i2]);
+        const cufftComplex v22 = __ldg(&V[N * j2 + i2]);
 
-    if (j1 >= 0 && j1 < N && k1 >= 0 && k1 < N && j2 >= 0 && j2 < N &&
-        k2 >= 0 && k2 < N) {
-      // Use regular global memory with __ldg for read-only cached access
-      const cufftComplex v11 = __ldg(&V[N * k1 + j1]);
-      const cufftComplex v12 = __ldg(&V[N * k1 + j2]);
-      const cufftComplex v21 = __ldg(&V[N * k2 + j1]);
-      const cufftComplex v22 = __ldg(&V[N * k2 + j2]);
+        // Optimized bilinear interpolation (factor out common terms)
+        const float w11 = (1.0f - du) * (1.0f - dv);
+        const float w12 = (1.0f - du) * dv;
+        const float w21 = du * (1.0f - dv);
+        const float w22 = du * dv;
 
-      // Optimized bilinear interpolation weights
-      const float w11 = (1.0f - f_j) * (1.0f - f_k);
-      const float w12 = f_j * (1.0f - f_k);
-      const float w21 = (1.0f - f_j) * f_k;
-      const float w22 = f_j * f_k;
+        const float Zreal =
+            w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
+        const float Zimag =
+            w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
 
-      Vm[i] = make_cuFloatComplex(
-          w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
-          w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
-    } else {
-      weight[i] = 0.0f;
+        Vm[i] = make_cuFloatComplex(Zreal, Zimag);
+      } else {
+        weight[i] = 0.0f;
+      }
     }
   }
 }
@@ -4405,133 +4422,9 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
 }
 
 __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
-  cudaSetDevice(firstgpu);
-
-  float resultchi2 = 0.0f;
-
-  ip->clipWNoise(I);
-
-  for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
-    reduction(+ : resultchi2)
-      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-        float result = 0.0;
-        unsigned int j = omp_get_thread_num();
-        unsigned int num_cpu_threads = omp_get_num_threads();
-        int gpu_idx = i % num_gpus;
-        cudaSetDevice(gpu_idx + firstgpu);
-        int gpu_id = -1;
-        cudaGetDevice(&gpu_id);
-
-        ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I,
-                         datasets[d].fields[f].nu[i]);
-
-        ip->apply_beam(vars_gpu[gpu_idx].device_I_nu,
-                       datasets[d].antennas[0].antenna_diameter,
-                       datasets[d].antennas[0].pb_factor,
-                       datasets[d].antennas[0].pb_cutoff,
-                       datasets[d].fields[f].ref_xobs_pix,
-                       datasets[d].fields[f].ref_yobs_pix,
-                       datasets[d].fields[f].nu[i],
-                       datasets[d].antennas[0].primary_beam, fg_scale);
-
-        if (NULL != ip->getCKernel()) {
-          apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
-              vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
-          checkCudaErrors(cudaDeviceSynchronize());
-        }
-        // FFT 2D
-        FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
-              vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, false);
-
-        // PHASE_ROTATE
-        phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-            vars_gpu[gpu_idx].device_V, M, N,
-            datasets[d].fields[f].phs_xobs_pix,
-            datasets[d].fields[f].phs_yobs_pix);
-        checkCudaErrors(cudaDeviceSynchronize());
-
-        // Texture memory removed - using regular global memory with __ldg()
-        // instead
-
-        for (int s = 0; s < datasets[d].data.nstokes; s++) {
-          if (datasets[d].data.corr_type[s] == LL ||
-              datasets[d].data.corr_type[s] == RR ||
-              datasets[d].data.corr_type[s] == XX ||
-              datasets[d].data.corr_type[s] == YY) {
-            if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] >
-                0) {
-              checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
-                                         sizeof(float) * max_number_vis));
-
-              // TODO: Here we could just use vis_mod and see what happens
-              // Use always bilinear interpolation since we don't have
-              // degridding yet
-              vis_mod<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  vars_gpu[gpu_idx].device_V,
-                  datasets[d].fields[f].device_visibilities[i][s].uvw,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  deltau, deltav,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  N);
-              checkCudaErrors(cudaDeviceSynchronize());
-
-              // RESIDUAL CALCULATION
-              residual<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vr,
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  datasets[d].fields[f].device_visibilities[i][s].Vo,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-              checkCudaErrors(cudaDeviceSynchronize());
-
-              ////chi2 VECTOR
-              chi2Vector<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  vars_gpu[gpu_idx].device_chi2,
-                  datasets[d].fields[f].device_visibilities[i][s].Vr,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-              checkCudaErrors(cudaDeviceSynchronize());
-
-              result = deviceReduce<float>(
-                  vars_gpu[gpu_idx].device_chi2,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV);
-              // REDUCTIONS
-              // chi2
-              resultchi2 +=
-                  result /
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-            }
-          }
-        }
-      }
-    }
-  }
-
-  cudaSetDevice(firstgpu);
-
-  return 0.5f * resultchi2;
-};
+  // simulate is equivalent to chi2 with normalize=true
+  return chi2(I, ip, true, fg_scale);
+}
 
 __host__ float chi2(float* I,
                     VirtualImageProcessor* ip,
@@ -4556,33 +4449,19 @@ __host__ float chi2(float* I,
         int gpu_id = -1;
         cudaGetDevice(&gpu_id);
 
-        ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I,
-                         datasets[d].fields[f].nu[i]);
-
-        ip->apply_beam(vars_gpu[gpu_idx].device_I_nu,
-                       datasets[d].antennas[0].antenna_diameter,
-                       datasets[d].antennas[0].pb_factor,
-                       datasets[d].antennas[0].pb_cutoff,
-                       datasets[d].fields[f].ref_xobs_pix,
-                       datasets[d].fields[f].ref_yobs_pix,
-                       datasets[d].fields[f].nu[i],
-                       datasets[d].antennas[0].primary_beam, fg_scale);
-
-        if (NULL != ip->getCKernel()) {
-          apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
-              vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
-          checkCudaErrors(cudaDeviceSynchronize());
-        }
-        // FFT 2D
-        FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
-              vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, false);
-
-        // PHASE_ROTATE
-        phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-            vars_gpu[gpu_idx].device_V, M, N,
+        // Compute visibility grid from image using common pipeline
+        // Use fft_shift=true (DC at center) to match degridding and gridding procedures
+        computeImageToVisibilityGrid(
+            I, ip, vars_gpu, gpu_idx, M, N, datasets[d].fields[f].nu[i],
+            datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix,
             datasets[d].fields[f].phs_xobs_pix,
-            datasets[d].fields[f].phs_yobs_pix);
-        checkCudaErrors(cudaDeviceSynchronize());
+            datasets[d].fields[f].phs_yobs_pix,
+            datasets[d].antennas[0].antenna_diameter,
+            datasets[d].antennas[0].pb_factor,
+            datasets[d].antennas[0].pb_cutoff,
+            datasets[d].antennas[0].primary_beam, fg_scale,
+            ip->getCKernel(), true);  // fft_shift=true (DC at center)
 
         // Texture memory removed - using regular global memory with __ldg()
         // instead
@@ -4597,9 +4476,8 @@ __host__ float chi2(float* I,
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                          sizeof(float) * max_number_vis));
 
-              // Use always bilinear interpolation since we don't have
-              // degridding yet
-              vis_mod<<<
+              // Use bilinear interpolation with DC at center (matching fft_shift=true)
+              bilinearInterpolateVisibility<<<
                   datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                   datasets[d]
                       .fields[f]
@@ -4611,7 +4489,7 @@ __host__ float chi2(float* I,
                   datasets[d].fields[f].device_visibilities[i][s].weight,
                   deltau, deltav,
                   datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  N);
+                  N, true);  // dc_at_center=true (DC at center, matching fft_shift=true)
               checkCudaErrors(cudaDeviceSynchronize());
 
               // RESIDUAL CALCULATION

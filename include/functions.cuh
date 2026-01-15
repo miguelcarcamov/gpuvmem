@@ -133,6 +133,27 @@ __host__ void initFFT(varsPerGPU* vars_gpu,
                       long N,
                       int firstgpu,
                       int num_gpus);
+// Helper function to compute visibility grid from image (common pipeline)
+// This encapsulates the repeated pattern: calculateInu -> apply_beam -> apply_GCF -> FFT2D -> phase_rotate
+__host__ void computeImageToVisibilityGrid(
+    float* I,
+    VirtualImageProcessor* ip,
+    varsPerGPU* vars_gpu,
+    int gpu_idx,
+    long M,
+    long N,
+    float nu,
+    float ref_xobs_pix,
+    float ref_yobs_pix,
+    float phs_xobs_pix,
+    float phs_yobs_pix,
+    float antenna_diameter,
+    float pb_factor,
+    float pb_cutoff,
+    int primary_beam,
+    float fg_scale,
+    CKernel* ckernel,
+    bool fft_shift);
 __host__ void FFT2D(cufftComplex* output_data,
                     cufftComplex* input_data,
                     cufftHandle plan,
@@ -397,23 +418,18 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              double yphs);
 // Optimized bilinear interpolation kernels using regular global memory with
 // __ldg()
-__global__ void vis_mod(cufftComplex* __restrict__ Vm,
-                        const cufftComplex* __restrict__ V,
-                        const double3* __restrict__ UVW,
-                        float* __restrict__ weight,
-                        const double deltau,
-                        const double deltav,
-                        const long numVisibilities,
-                        const long N);
-__global__ void vis_mod2(cufftComplex* __restrict__ Vm,
-                         const cufftComplex* __restrict__ V,
-                         const double3* __restrict__ UVW,
-                         float* __restrict__ weight,
-                         const double deltau,
-                         const double deltav,
-                         const long numVisibilities,
-                         const long N,
-                         const float N_half);
+// Bilinear interpolation of visibilities from gridded visibility plane
+// dc_at_center: true if DC component is at center (N/2, M/2), false if at corner (0,0)
+__global__ void bilinearInterpolateVisibility(
+    cufftComplex* __restrict__ Vm,
+    const cufftComplex* __restrict__ V,
+    const double3* __restrict__ UVW,
+    float* __restrict__ weight,
+    const double deltau,
+    const double deltav,
+    const long numVisibilities,
+    const long N,
+    const bool dc_at_center);
 __global__ void residual(cufftComplex* __restrict__ Vr,
                          const cufftComplex* __restrict__ Vm,
                          const cufftComplex* __restrict__ Vo,
