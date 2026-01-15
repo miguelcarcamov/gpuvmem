@@ -1016,15 +1016,138 @@ __host__ float deviceMinReduce(float* in, long N, int input_threads) {
   return min;
 }
 
-__global__ void fftshift_2D(cufftComplex* data, int N1, int N2) {
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+// Shared device function: Fast shift using multiplication trick (-1)^(i+j)
+// Works correctly for even dimensions, same for both fftshift and ifftshift
+__device__ __forceinline__ void shift_multiply(cufftComplex* data, int i, int j, int N2) {
+  const float a = 1.0f - 2.0f * ((i + j) & 1);
+  const int idx = N2 * i + j;
+  data[idx].x *= a;
+  data[idx].y *= a;
+}
+
+// Device function: Proper fftshift using quadrant swapping
+// Works correctly for both even and odd dimensions
+__device__ __forceinline__ void fftshift_swap(cufftComplex* data, int i, int j, int N1, int N2) {
+  const int h2 = (N1 + 1) / 2;  // ceil(N1/2) for fftshift
+  const int w2 = (N2 + 1) / 2;  // ceil(N2/2) for fftshift
+
+  // Process only top half to avoid double-swapping
+  if (i < h2) {
+    // Top-left quadrant: swap with bottom-right
+    if (j < w2) {
+      int i2 = i + h2;
+      int j2 = j + w2;
+      if (i2 >= N1) i2 -= N1;
+      if (j2 >= N2) j2 -= N2;
+      
+      if (i2 < N1 && j2 < N2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    }
+    // Top-right quadrant: swap with bottom-left
+    else if (j < N2) {
+      int i2 = i + h2;
+      int j2 = j - w2;
+      if (i2 >= N1) i2 -= N1;
+      if (j2 < 0) j2 += N2;
+      
+      if (i2 < N1 && j2 >= 0 && j2 < w2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    }
+  }
+}
+
+// Device function: Proper ifftshift using quadrant swapping
+// Works correctly for both even and odd dimensions
+__device__ __forceinline__ void ifftshift_swap(cufftComplex* data, int i, int j, int N1, int N2) {
+  const int h2 = N1 / 2;  // floor(N1/2) for ifftshift
+  const int w2 = N2 / 2;  // floor(N2/2) for ifftshift
+
+  // Process only top half to avoid double-swapping
+  if (i < h2 && j < N2) {
+    // Top-left quadrant: swap with bottom-right
+    if (j < w2) {
+      int i2 = i + h2;
+      int j2 = j + w2;
+      // For odd dimensions, skip center row/col
+      if (N1 % 2 == 1) i2 += 1;
+      if (N2 % 2 == 1) j2 += 1;
+      
+      if (i2 < N1 && j2 < N2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    }
+    // Top-right quadrant: swap with bottom-left
+    else {
+      int i2 = i + h2;
+      int j2 = j - w2;
+      // For odd dimensions, skip center row/col
+      if (N1 % 2 == 1) i2 += 1;
+      if (N2 % 2 == 1) j2 -= 1;
+      
+      if (i2 < N1 && j2 >= 0 && j2 < w2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    }
+  }
+}
+
+// Generic fftshift: automatically chooses fastest method based on dimensions
+// Uses multiplication trick for even dimensions (faster), quadrant swap for odd (correct)
+__global__ void fftshift_2D(cufftComplex* __restrict__ data, int N1, int N2) {
+  const int i = blockIdx.y * blockDim.y + threadIdx.y;
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < N1 && j < N2) {
-    float a = 1 - 2 * ((i + j) & 1);
+    // Check if both dimensions are even (fast path)
+    if ((N1 % 2 == 0) && (N2 % 2 == 0)) {
+      shift_multiply(data, i, j, N2);
+    } else {
+      // Use proper quadrant swapping for odd dimensions
+      fftshift_swap(data, i, j, N1, N2);
+    }
+  }
+}
 
-    data[N2 * i + j].x *= a;
-    data[N2 * i + j].y *= a;
+// Generic ifftshift: automatically chooses fastest method based on dimensions
+// Uses multiplication trick for even dimensions (faster), quadrant swap for odd (correct)
+__global__ void ifftshift_2D(cufftComplex* __restrict__ data, int N1, int N2) {
+  const int i = blockIdx.y * blockDim.y + threadIdx.y;
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (i < N1 && j < N2) {
+    // Check if both dimensions are even (fast path)
+    if ((N1 % 2 == 0) && (N2 % 2 == 0)) {
+      shift_multiply(data, i, j, N2);
+    } else {
+      // Use proper quadrant swapping for odd dimensions
+      ifftshift_swap(data, i, j, N1, N2);
+    }
   }
 }
 
@@ -1830,14 +1953,33 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
 
   std::fill_n(Vm_gridded.begin(), M * N, complex_zero);
 
+  double center_j = floor(N / 2.0);
+  double center_k = floor(M / 2.0);
+  
+  // Parallelize the loop with protection against race conditions
+  // In theory, each visibility maps to a unique grid cell, but floating-point
+  // rounding could cause collisions, so we protect the write with a critical section
   int j, k;
-  int grid_pos_x, grid_pos_y;
+  double grid_pos_x, grid_pos_y;
+#pragma omp parallel for schedule(static) \
+    shared(Vm_gridded, uvw_gridded_sp, Vm_gridded_sp, deltau_meters, deltav_meters, \
+          center_j, center_k, M, N) \
+    private(j, k, grid_pos_x, grid_pos_y)
   for (int i = 0; i < numvis; i++) {
     grid_pos_x = uvw_gridded_sp[i].x / deltau_meters;
     grid_pos_y = uvw_gridded_sp[i].y / deltav_meters;
-    j = grid_pos_x + int(floor(N / 2));
-    k = grid_pos_y + int(floor(M / 2));
-    Vm_gridded[N * k + j] = Vm_gridded_sp[i];
+    // Match the gridding coordinate calculation exactly:
+    // j_fp = grid_pos_x + center_j + 0.5; j = int(j_fp)
+    j = int(grid_pos_x + center_j + 0.5);
+    k = int(grid_pos_y + center_k + 0.5);
+    if (j >= 0 && j < N && k >= 0 && k < M) {
+      // Critical section protects against potential collisions (should be rare)
+      // Each visibility should map to a unique grid cell after gridding
+#pragma omp critical
+      {
+        Vm_gridded[N * k + j] = Vm_gridded_sp[i];
+      }
+    }
   }
 }
 
@@ -1994,13 +2136,16 @@ __host__ void degridding(std::vector<Field>& fields,
                          int blockSizeV,
                          long M,
                          long N,
-                         CKernel* ckernel) {
+                         CKernel* ckernel,
+                         float* I,
+                         VirtualImageProcessor* ip,
+                         MSDataset& dataset) {
   long UVpow2;
 
-  modelToHost(fields, data, num_gpus, firstgpu);
-
-  std::vector<std::vector<cufftComplex>> gridded_visibilities(
-      num_gpus, std::vector<cufftComplex>(M * N));
+  // Instead of using sparse gridded model visibilities (computed with bilinear
+  // interpolation), we recompute the FFT of the final image for each
+  // frequency/channel and use the full grid directly. This is more accurate than
+  // reconstructing from sparse samples.
 
   for (int f = 0; f < data.nfields; f++) {
 #pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
@@ -2012,16 +2157,45 @@ __host__ void degridding(std::vector<Field>& fields,
       int gpu_id = -1;
       cudaGetDevice(&gpu_id);
 
+      // Recompute FFT of final image for this frequency/channel
+      // This gives us the full, accurate model visibility grid (not sparse bilinear-interpolated samples)
+      ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I,
+                       fields[f].nu[i]);
+
+      // Apply primary beam (need antenna info from dataset)
+      if (dataset.antennas.size() > 0) {
+        ip->apply_beam(vars_gpu[gpu_idx].device_I_nu,
+                       dataset.antennas[0].antenna_diameter,
+                       dataset.antennas[0].pb_factor,
+                       dataset.antennas[0].pb_cutoff,
+                       fields[f].ref_xobs_pix,
+                       fields[f].ref_yobs_pix,
+                       fields[f].nu[i],
+                       dataset.antennas[0].primary_beam, 1.0f);
+      }
+
+      // Apply Gridding Correction Function (GCF) if using convolution kernel
+      if (ckernel != NULL && ckernel->getGCFGPU() != NULL) {
+        apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
+            vars_gpu[gpu_idx].device_I_nu, ckernel->getGCFGPU(), N);
+        checkCudaErrors(cudaDeviceSynchronize());
+      }
+
+      // FFT 2D: Transform image to visibility grid
+      // Use shift=true to move DC component to center, matching the gridding
+      // coordinate system which uses center_j = floor(N/2.0)
+      FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
+            vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, true);
+
+      // Phase rotate to correct phase center
+      phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
+          vars_gpu[gpu_idx].device_V, M, N,
+          fields[f].phs_xobs_pix,
+          fields[f].phs_yobs_pix);
+      checkCudaErrors(cudaDeviceSynchronize());
+
       for (int s = 0; s < data.nstokes; s++) {
-        // Put gridded visibilities in a M*N grid
-        griddedTogrid(
-            gridded_visibilities[gpu_idx], fields[f].visibilities[i][s].Vm,
-            fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i],
-            M, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        /*
-        Model visibilities and original (u,v) positions to GPU.
-        */
-        // Now the number of visibilities will be the original one.
+        // Now the number of visibilities will be the original one (restore from backup)
         fields[f].numVisibilitiesPerFreqPerStoke[i][s] =
             fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
 
@@ -2042,6 +2216,14 @@ __host__ void degridding(std::vector<Field>& fields,
             cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
                        sizeof(cufftComplex) *
                            fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+        checkCudaErrors(
+            cudaMalloc(&fields[f].device_visibilities[i][s].Vr,
+                       sizeof(cufftComplex) *
+                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
+        checkCudaErrors(
+            cudaMemset(fields[f].device_visibilities[i][s].Vr, 0,
+                       sizeof(cufftComplex) *
+                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
 
         checkCudaErrors(cudaMalloc(
             &fields[f].device_visibilities[i][s].uvw,
@@ -2059,10 +2241,8 @@ __host__ void degridding(std::vector<Field>& fields,
             fields[f].backup_visibilities[i][s].Vo.begin(),
             fields[f].backup_visibilities[i][s].Vo.end());
 
-        // Copy gridded model visibilities to device
-        checkCudaErrors(cudaMemcpy(
-            vars_gpu[gpu_idx].device_V, gridded_visibilities[gpu_idx].data(),
-            sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
+        // Note: vars_gpu[gpu_idx].device_V already contains the full FFT grid
+        // (computed above), so we don't need to copy from gridded_visibilities
 
         // Copy original (u,v) positions and weights to host and device
 
@@ -2108,31 +2288,30 @@ __host__ void degridding(std::vector<Field>& fields,
               blockSizeV);
         }
 
-        /*hermitianSymmetry<<<
-            fields[f].device_visibilities[i][s].numBlocksUV,
-            fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
+        // Convert UVW coordinates from meters to lambda units (required for degriddingGPU)
+        // We use a simple conversion that doesn't apply Hermitian symmetry because:
+        // 1. We want to sample at original coordinates (from backup)
+        // 2. degriddingGPU handles Hermitian symmetry when accessing the grid
+        // 3. MSFITSIO will handle conjugation when writing (if u > 0)
+        convertUVWToLambda<<<fields[f].device_visibilities[i][s].numBlocksUV,
+                             fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
             fields[f].device_visibilities[i][s].uvw,
-            fields[f].device_visibilities[i][s].Vo, fields[f].nu[i],
+            fields[f].nu[i],
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        checkCudaErrors(cudaDeviceSynchronize());*/
+        checkCudaErrors(cudaDeviceSynchronize());
 
-        // Interpolation / Degridding
-        vis_mod2<<<fields[f].device_visibilities[i][s].numBlocksUV,
-                   fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
-            fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V,
+        // Degridding: Use proper convolution kernel degridding (works for both
+        // 1x1 PillBox and larger kernels). For 1x1 PillBox, support=0 so it
+        // reduces to nearest neighbor, matching the gridding procedure exactly.
+        degriddingGPU<<<fields[f].device_visibilities[i][s].numBlocksUV,
+                        fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
             fields[f].device_visibilities[i][s].uvw,
-            fields[f].device_visibilities[i][s].weight, deltau, deltav,
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s], N,
-            (float)(N / 2.0));
-        // degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-        //             fields[f].device_visibilities[i][s].threadsPerBlockUV
-        //             >>>(fields[f].device_visibilities[i][s].uvw,
-        //             fields[f].device_visibilities[i][s].Vm,
-        //             vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
-        //             deltau, deltav,
-        //             fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N,
-        //             ckernel->getm(), ckernel->getn(), ckernel->getSupportX(),
-        //             ckernel->getSupportY());
+            fields[f].device_visibilities[i][s].Vm,
+            vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
+            deltau, deltav,
+            fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N,
+            ckernel->getm(), ckernel->getn(), ckernel->getSupportX(),
+            ckernel->getSupportY());
         checkCudaErrors(cudaDeviceSynchronize());
       }
     }
@@ -2158,7 +2337,10 @@ __host__ void FFT2D(cufftComplex* output_data,
                     int direction,
                     bool shift) {
   if (shift) {
-    fftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(input_data, M, N);
+    // Before FFT/IFFT: use ifftshift to move DC from center to (0,0)
+    // cuFFT expects DC component at (0,0) for proper FFT computation
+    // In-place operation on input_data
+    ifftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(input_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
   }
 
@@ -2170,6 +2352,9 @@ __host__ void FFT2D(cufftComplex* output_data,
   // after FFT2D calls in the calling code.
 
   if (shift) {
+    // After FFT/IFFT: use fftshift to move DC from (0,0) to center
+    // This matches our gridding coordinate system which uses center_j = floor(N/2.0)
+    // In-place operation on output_data
     fftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(output_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
   }
@@ -2224,8 +2409,15 @@ __global__ void degriddingGPU(double3* uvw,
   float ckernel_result;
 
   if (i < visibilities) {
-    j = uvw[i].x / deltau + int(floorf(N / 2)) + 0.5;
-    k = uvw[i].y / deltav + int(floorf(M / 2)) + 0.5;
+    // Match gridding coordinate calculation exactly:
+    // grid_pos = uvw / deltau, j = int(grid_pos + center + 0.5)
+    // Use double precision for center calculation to match gridding
+    double center_j = floor(N / 2.0);
+    double center_k = floor(M / 2.0);
+    double grid_pos_x = uvw[i].x / deltau;
+    double grid_pos_y = uvw[i].y / deltav;
+    j = int(grid_pos_x + center_j + 0.5);
+    k = int(grid_pos_y + center_k + 0.5);
 
     for (int m = -supportY; m <= supportY; m++) {
       for (int n = -supportX; n <= supportX; n++) {
@@ -2233,13 +2425,21 @@ __global__ void degriddingGPU(double3* uvw,
         shifted_k = k + m;
         kernel_j = n + supportX;
         kernel_i = m + supportY;
-        if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 &&
-            shifted_j < N) {
+        // Check bounds: grid must be valid AND kernel indices must be valid
+        if (shifted_k >= 0 && shifted_k < M && 
+            shifted_j >= 0 && shifted_j < N &&
+            kernel_i >= 0 && kernel_i < kernel_m &&
+            kernel_j >= 0 && kernel_j < kernel_n) {
           ckernel_result = kernel[kernel_n * kernel_i + kernel_j];
-          if (shifted_j >= N / 2) {
+          // Determine if we're on positive u side (j >= center) or negative u side (j < center)
+          // Use center_j comparison for consistency with gridding
+          if (shifted_j >= (int)center_j) {
+            // Positive u side (or center): access grid directly
             degrid_val.x += ckernel_result * Vm_g[N * shifted_k + shifted_j].x;
             degrid_val.y += ckernel_result * Vm_g[N * shifted_k + shifted_j].y;
           } else {
+            // Negative u side: use Hermitian symmetry
+            // Access grid at symmetric position (N-shifted_j, M-shifted_k) and conjugate
             herm_j = N - shifted_j;
             herm_k = M - shifted_k;
             degrid_val.x += ckernel_result * Vm_g[N * herm_k + herm_j].x;
@@ -2266,6 +2466,19 @@ __global__ void hermitianSymmetry(double3* UVW,
       // UVW[i].z *= -1.0;
       Vo[i].y *= -1.0f;
     }
+    UVW[i].x = metres_to_lambda(UVW[i].x, freq);
+    UVW[i].y = metres_to_lambda(UVW[i].y, freq);
+    UVW[i].z = metres_to_lambda(UVW[i].z, freq);
+  }
+}
+
+// Convert UVW coordinates from meters to lambda units without applying Hermitian symmetry
+__global__ void convertUVWToLambda(double3* UVW,
+                                   float freq,
+                                   int numVisibilities) {
+  const int i = threadIdx.x + blockDim.x * blockIdx.x;
+
+  if (i < numVisibilities) {
     UVW[i].x = metres_to_lambda(UVW[i].x, freq);
     UVW[i].y = metres_to_lambda(UVW[i].y, freq);
     UVW[i].z = metres_to_lambda(UVW[i].z, freq);

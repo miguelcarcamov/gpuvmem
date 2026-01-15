@@ -110,7 +110,10 @@ __host__ void degridding(std::vector<Field>& fields,
                          int blockSizeV,
                          long M,
                          long N,
-                         CKernel* ckernel);
+                         CKernel* ckernel,
+                         float* I,
+                         VirtualImageProcessor* ip,
+                         MSDataset& dataset);
 __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets,
                                      int* total_visibilities,
                                      int blockSizeV,
@@ -360,6 +363,9 @@ __global__ void hermitianSymmetry(double3* UVW,
                                   cufftComplex* Vo,
                                   float freq,
                                   int numVisibilities);
+__global__ void convertUVWToLambda(double3* UVW,
+                                   float freq,
+                                   int numVisibilities);
 __global__ void distance_image(float* distance_image,
                                float xobs,
                                float yobs,
@@ -633,6 +639,7 @@ __global__ void CGGradCondition(float* temp,
                                 int image);
 __global__ void searchDirection_LBFGS(float* xi, long N, long M, int image);
 __global__ void fftshift_2D(cufftComplex* data, int N1, int N2);
+__global__ void ifftshift_2D(cufftComplex* data, int N1, int N2);
 __global__ void do_griddingGPU(float3* uvw,
                                cufftComplex* Vo,
                                cufftComplex* Vo_g,
@@ -657,5 +664,8 @@ __global__ void degriddingGPU(double3* uvw,
                               int kernel_n,
                               int supportX,
                               int supportY);
+__global__ void apply_GCF(cufftComplex* __restrict__ image,
+                          const float* __restrict__ gcf,
+                          long N);
 
 #endif

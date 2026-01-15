@@ -1114,7 +1114,8 @@ __host__ void MScopy(const char* in_dir, const char* in_dir_dest) {
 __host__ void modelToHost(std::vector<Field>& fields,
                           MSData data,
                           int num_gpus,
-                          int firstgpu) {
+                          int firstgpu,
+                          bool apply_hermitian_conjugation) {
   for (int f = 0; f < data.nfields; f++) {
     for (int i = 0; i < data.total_frequencies; i++) {
       cudaSetDevice((i % num_gpus) + firstgpu);
@@ -1125,11 +1126,17 @@ __host__ void modelToHost(std::vector<Field>& fields,
                        sizeof(cufftComplex) *
                            fields[f].numVisibilitiesPerFreqPerStoke[i][s],
                        cudaMemcpyDeviceToHost));
-        for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-             j++) {
-          if (fields[f].visibilities[i][s].uvw[j].x > 0) {
-            fields[f].visibilities[i][s].Vm[j] =
-                cuConjf(fields[f].visibilities[i][s].Vm[j]);
+        
+        // Apply conjugation only if Hermitian symmetry was applied to coordinates
+        // (e.g., via hermitianSymmetry kernel). If degriddingGPU was used, it already
+        // handles Hermitian symmetry internally, so no conjugation needed here.
+        if (apply_hermitian_conjugation) {
+          for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+               j++) {
+            if (fields[f].visibilities[i][s].uvw[j].x > 0) {
+              fields[f].visibilities[i][s].Vm[j] =
+                  cuConjf(fields[f].visibilities[i][s].Vm[j]);
+            }
           }
         }
       }
