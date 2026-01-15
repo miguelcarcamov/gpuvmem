@@ -2060,6 +2060,7 @@ __host__ void degridding(std::vector<Field>& fields,
                          VirtualImageProcessor* ip,
                          MSDataset& dataset) {
   long UVpow2;
+  bool fft_shift = true; // fft_shift=false (DC at corner 0,0)
 
   // Instead of using sparse gridded model visibilities (computed with bilinear
   // interpolation), we recompute the FFT of the final image for each
@@ -2086,7 +2087,7 @@ __host__ void degridding(std::vector<Field>& fields,
             fields[f].phs_xobs_pix, fields[f].phs_yobs_pix,
             dataset.antennas[0].antenna_diameter, dataset.antennas[0].pb_factor,
             dataset.antennas[0].pb_cutoff, dataset.antennas[0].primary_beam,
-            1.0f, ckernel, true);
+            1.0f, ckernel, fft_shift);
       }
 
       for (int s = 0; s < data.nstokes; s++) {
