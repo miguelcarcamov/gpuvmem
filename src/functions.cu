@@ -2321,13 +2321,23 @@ __global__ void do_griddingGPU(float3* uvw,
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int k, j;
   if (i < visibilities) {
-    j = uvw[i].x / deltau + int(floorf(M / 2)) + 0.5;
-    k = uvw[i].y / deltav + int(floorf(N / 2)) + 0.5;
+    // Precompute center values once
+    const double center_j = floor(M / 2.0);
+    const double center_k = floor(N / 2.0);
+    
+    // Use __ldg for read-only cached access to input data
+    const float3 uvw_val = uvw[i];  // float3 is 12 bytes, __ldg doesn't apply but compiler may optimize
+    const cufftComplex Vo_val = __ldg(&Vo[i]);
+    const float w_val = __ldg(&w[i]);
+    
+    j = (int)(uvw_val.x / deltau + center_j + 0.5);
+    k = (int)(uvw_val.y / deltav + center_k + 0.5);
 
     if (k < M && j < N) {
-      atomicAdd(&Vo_g[N * k + j].x, w[i] * Vo[i].x);
-      atomicAdd(&Vo_g[N * k + j].y, w[i] * Vo[i].y);
-      atomicAdd(&w_g[N * k + j], w[i]);
+      const int grid_idx = N * k + j;
+      atomicAdd(&Vo_g[grid_idx].x, w_val * Vo_val.x);
+      atomicAdd(&Vo_g[grid_idx].y, w_val * Vo_val.y);
+      atomicAdd(&w_g[grid_idx], w_val);
     }
   }
 }
@@ -2375,20 +2385,23 @@ __global__ void degriddingGPU(double3* uvw,
             shifted_j >= 0 && shifted_j < N &&
             kernel_i >= 0 && kernel_i < kernel_m &&
             kernel_j >= 0 && kernel_j < kernel_n) {
-          ckernel_result = kernel[kernel_n * kernel_i + kernel_j];
+          // Use __ldg for read-only cached access to kernel (read-only)
+          ckernel_result = __ldg(&kernel[kernel_n * kernel_i + kernel_j]);
           // Determine if we're on positive u side (j >= center) or negative u side (j < center)
           // Use center_j comparison for consistency with gridding
           if (shifted_j >= (int)center_j) {
-            // Positive u side (or center): access grid directly
-            degrid_val.x += ckernel_result * Vm_g[N * shifted_k + shifted_j].x;
-            degrid_val.y += ckernel_result * Vm_g[N * shifted_k + shifted_j].y;
+            // Positive u side (or center): access grid directly with __ldg (read-only)
+            const cufftComplex grid_val = __ldg(&Vm_g[N * shifted_k + shifted_j]);
+            degrid_val.x += ckernel_result * grid_val.x;
+            degrid_val.y += ckernel_result * grid_val.y;
           } else {
             // Negative u side: use Hermitian symmetry
             // Access grid at symmetric position (N-shifted_j, M-shifted_k) and conjugate
             herm_j = N - shifted_j;
             herm_k = M - shifted_k;
-            degrid_val.x += ckernel_result * Vm_g[N * herm_k + herm_j].x;
-            degrid_val.y -= ckernel_result * Vm_g[N * herm_k + herm_j].y;
+            const cufftComplex grid_val = __ldg(&Vm_g[N * herm_k + herm_j]);
+            degrid_val.x += ckernel_result * grid_val.x;
+            degrid_val.y -= ckernel_result * grid_val.y;
           }
         }
       }
@@ -2652,10 +2665,12 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
 
   if (j < N && k < M) {
     double u_freq, v_freq;
+    double xphs_relative, yphs_relative;
     
     if (dc_at_center) {
       // DC at center: frequencies are centered after fftshift
       // Frequencies: [-N/2, ..., -1, 0, 1, ..., N/2-1] / N
+      // Compute centers once and reuse for both frequency and coordinate calculations
       const double center_j = floor(N / 2.0);  // Column center (u direction, width N)
       const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
       
@@ -2664,6 +2679,10 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
       
       // v frequencies (row direction, height M) - v maps to k (rows)
       v_freq = ((double)k - center_k) / (double)M;
+      
+      // FFT grid center is at (N/2, M/2), so convert from absolute to relative to center
+      xphs_relative = xphs - center_j;  // Convert to cartesian (relative to FFT grid center)
+      yphs_relative = yphs - center_k;
     } else {
       // DC at corner: frequencies go from 0 to N-1 (standard fftfreq)
       // u frequencies (column direction)
@@ -2679,21 +2698,7 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
       } else {
         v_freq = ((double)k - (double)M) / (double)M;  // Negative frequencies
       }
-    }
-    
-    // Phase shift: -2π * (u * x0 + v * y0)
-    // When dc_at_center=true: frequencies are relative to center, so coordinates should be too
-    // When dc_at_center=false: frequencies are relative to corner, so coordinates should be too
-    // xphs and yphs are passed as pixel coordinates (absolute), but we need to convert them
-    // to be relative to the FFT grid origin (center or corner) to match the frequency system
-    double xphs_relative, yphs_relative;
-    if (dc_at_center) {
-      // FFT grid center is at (N/2, M/2), so convert from absolute to relative to center
-      const double center_j = floor(N / 2.0);
-      const double center_k = floor(M / 2.0);
-      xphs_relative = xphs - center_j;  // Convert to cartesian (relative to FFT grid center)
-      yphs_relative = yphs - center_k;
-    } else {
+      
       // FFT grid corner is at (0, 0), so coordinates are already relative to corner
       xphs_relative = xphs;  // Already relative to corner (0,0)
       yphs_relative = yphs;
