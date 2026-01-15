@@ -1016,30 +1016,23 @@ __host__ float deviceMinReduce(float* in, long N, int input_threads) {
   return min;
 }
 
-// Shared device function: Fast shift using multiplication trick (-1)^(i+j)
-// Works correctly for even dimensions, same for both fftshift and ifftshift
-__device__ __forceinline__ void shift_multiply(cufftComplex* data, int i, int j, int N2) {
-  const float a = 1.0f - 2.0f * ((i + j) & 1);
-  const int idx = N2 * i + j;
-  data[idx].x *= a;
-  data[idx].y *= a;
-}
-
 // Device function: Proper fftshift using quadrant swapping
 // Works correctly for both even and odd dimensions
+// For even N: ceil(N/2) = N/2, swaps first N/2 with second N/2
+// For odd N: ceil(N/2) = (N+1)/2, swaps first (N+1)/2 with last (N-1)/2
+// fftshift swaps: Q1(top-left)↔Q3(bottom-right), Q2(top-right)↔Q4(bottom-left)
 __device__ __forceinline__ void fftshift_swap(cufftComplex* data, int i, int j, int N1, int N2) {
   const int h2 = (N1 + 1) / 2;  // ceil(N1/2) for fftshift
   const int w2 = (N2 + 1) / 2;  // ceil(N2/2) for fftshift
 
-  // Process only top half to avoid double-swapping
+  // Process only elements in first half to avoid double-swapping
   if (i < h2) {
-    // Top-left quadrant: swap with bottom-right
+    int i2 = i + (N1 - h2);  // Target row: shift by (N1 - ceil(N1/2))
+    // For even: N1 - N1/2 = N1/2, for odd: N1 - (N1+1)/2 = (N1-1)/2
+    
     if (j < w2) {
-      int i2 = i + h2;
-      int j2 = j + w2;
-      if (i2 >= N1) i2 -= N1;
-      if (j2 >= N2) j2 -= N2;
-      
+      // Top-left quadrant (Q1): swap with bottom-right (Q3)
+      int j2 = j + (N2 - w2);  // Target column: shift right by (N2 - w2)
       if (i2 < N1 && j2 < N2) {
         const int idx1 = N2 * i + j;
         const int idx2 = N2 * i2 + j2;
@@ -1049,14 +1042,9 @@ __device__ __forceinline__ void fftshift_swap(cufftComplex* data, int i, int j, 
           data[idx2] = tmp;
         }
       }
-    }
-    // Top-right quadrant: swap with bottom-left
-    else if (j < N2) {
-      int i2 = i + h2;
-      int j2 = j - w2;
-      if (i2 >= N1) i2 -= N1;
-      if (j2 < 0) j2 += N2;
-      
+    } else if (j >= w2 && j < N2) {
+      // Top-right quadrant (Q2): swap with bottom-left (Q4)
+      int j2 = j - w2;  // Target column: shift left by w2
       if (i2 < N1 && j2 >= 0 && j2 < w2) {
         const int idx1 = N2 * i + j;
         const int idx2 = N2 * i2 + j2;
@@ -1072,20 +1060,21 @@ __device__ __forceinline__ void fftshift_swap(cufftComplex* data, int i, int j, 
 
 // Device function: Proper ifftshift using quadrant swapping
 // Works correctly for both even and odd dimensions
+// For even N: floor(N/2) = N/2, swaps first N/2 with second N/2 (same as fftshift)
+// For odd N: floor(N/2) = (N-1)/2, swaps first (N-1)/2 with last (N+1)/2
+// ifftshift swaps: Q1(top-left)↔Q3(bottom-right), Q2(top-right)↔Q4(bottom-left)
 __device__ __forceinline__ void ifftshift_swap(cufftComplex* data, int i, int j, int N1, int N2) {
   const int h2 = N1 / 2;  // floor(N1/2) for ifftshift
   const int w2 = N2 / 2;  // floor(N2/2) for ifftshift
 
-  // Process only top half to avoid double-swapping
-  if (i < h2 && j < N2) {
-    // Top-left quadrant: swap with bottom-right
+  // Process only elements in first half to avoid double-swapping
+  if (i < h2) {
+    int i2 = i + (N1 - h2);  // Target row: shift by (N1 - floor(N1/2))
+    // For even: N1 - N1/2 = N1/2, for odd: N1 - (N1-1)/2 = (N1+1)/2
+    
     if (j < w2) {
-      int i2 = i + h2;
-      int j2 = j + w2;
-      // For odd dimensions, skip center row/col
-      if (N1 % 2 == 1) i2 += 1;
-      if (N2 % 2 == 1) j2 += 1;
-      
+      // Top-left quadrant (Q1): swap with bottom-right (Q3)
+      int j2 = j + (N2 - w2);  // Target column: shift right by (N2 - w2)
       if (i2 < N1 && j2 < N2) {
         const int idx1 = N2 * i + j;
         const int idx2 = N2 * i2 + j2;
@@ -1095,16 +1084,25 @@ __device__ __forceinline__ void ifftshift_swap(cufftComplex* data, int i, int j,
           data[idx2] = tmp;
         }
       }
-    }
-    // Top-right quadrant: swap with bottom-left
-    else {
-      int i2 = i + h2;
+    } else if (j >= w2 && j < N2) {
+      // Top-right quadrant (Q2): swap with bottom-left (Q4)
+      // For even N: w2 = N/2, so Q2 has j in [w2, N-1] = [N/2, N-1] (N/2 elements)
+      //            and Q4 has j in [0, w2-1] = [0, N/2-1] (N/2 elements)
+      //            They match perfectly, so j2 = j - w2 maps all of Q2 to Q4
+      // For odd N: Q2 has ceil(N/2) elements, Q4 has floor(N/2) elements
+      //            Only first floor(N/2) elements of Q2 swap with Q4
+      bool should_swap = true;
       int j2 = j - w2;
-      // For odd dimensions, skip center row/col
-      if (N1 % 2 == 1) i2 += 1;
-      if (N2 % 2 == 1) j2 -= 1;
       
-      if (i2 < N1 && j2 >= 0 && j2 < w2) {
+      if (N2 % 2 != 0) {
+        // Odd N: only first w2 elements of Q2 swap with Q4
+        if (j >= w2 + w2) {
+          // Last element of Q2 (for odd N) doesn't swap with Q4, skip it
+          should_swap = false;
+        }
+      }
+      
+      if (should_swap && i2 < N1 && j2 >= 0 && j2 < w2) {
         const int idx1 = N2 * i + j;
         const int idx2 = N2 * i2 + j2;
         if (idx1 != idx2) {
@@ -1117,36 +1115,101 @@ __device__ __forceinline__ void ifftshift_swap(cufftComplex* data, int i, int j,
   }
 }
 
-// Generic fftshift: automatically chooses fastest method based on dimensions
-// Uses multiplication trick for even dimensions (faster), quadrant swap for odd (correct)
+// Generic fftshift: uses quadrant swapping for all dimensions
+// For even dimensions, fftshift and ifftshift are identical
+// For odd dimensions, they differ by one sample
+// Optimized fftshift: computes target index directly (more efficient for even dimensions)
+// For even dimensions: shift by N/2, for odd: shift by ceil(N/2)
 __global__ void fftshift_2D(cufftComplex* __restrict__ data, int N1, int N2) {
   const int i = blockIdx.y * blockDim.y + threadIdx.y;
   const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < N1 && j < N2) {
-    // Check if both dimensions are even (fast path)
-    if ((N1 % 2 == 0) && (N2 % 2 == 0)) {
-      shift_multiply(data, i, j, N2);
-    } else {
-      // Use proper quadrant swapping for odd dimensions
-      fftshift_swap(data, i, j, N1, N2);
+    // Compute target indices directly (avoids quadrant checking overhead)
+    const int h2 = (N1 + 1) / 2;  // ceil(N1/2) for fftshift
+    const int w2 = (N2 + 1) / 2;  // ceil(N2/2) for fftshift
+    
+    // Only process first half to avoid double-swapping
+    if (i < h2) {
+      int i2 = i + (N1 - h2);  // Target row
+      
+      if (j < w2) {
+        // Q1 (top-left): swap with Q3 (bottom-right)
+        int j2 = j + (N2 - w2);  // Target column
+        if (i2 < N1 && j2 < N2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      } else if (j >= w2 && j < N2) {
+        // Q2 (top-right): swap with Q4 (bottom-left)
+        int j2 = j - w2;  // Target column
+        if (i2 < N1 && j2 >= 0 && j2 < w2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      }
     }
   }
 }
 
-// Generic ifftshift: automatically chooses fastest method based on dimensions
-// Uses multiplication trick for even dimensions (faster), quadrant swap for odd (correct)
+// Optimized ifftshift: computes target index directly (more efficient for even dimensions)
+// For even dimensions: same as fftshift, for odd: shift by floor(N/2)
 __global__ void ifftshift_2D(cufftComplex* __restrict__ data, int N1, int N2) {
   const int i = blockIdx.y * blockDim.y + threadIdx.y;
   const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < N1 && j < N2) {
-    // Check if both dimensions are even (fast path)
-    if ((N1 % 2 == 0) && (N2 % 2 == 0)) {
-      shift_multiply(data, i, j, N2);
-    } else {
-      // Use proper quadrant swapping for odd dimensions
-      ifftshift_swap(data, i, j, N1, N2);
+    // Compute target indices directly (avoids quadrant checking overhead)
+    const int h2 = N1 / 2;  // floor(N1/2) for ifftshift
+    const int w2 = N2 / 2;  // floor(N2/2) for ifftshift
+    
+    // Only process first half to avoid double-swapping
+    if (i < h2) {
+      int i2 = i + (N1 - h2);  // Target row
+      
+      if (j < w2) {
+        // Q1 (top-left): swap with Q3 (bottom-right)
+        int j2 = j + (N2 - w2);  // Target column
+        if (i2 < N1 && j2 < N2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      } else if (j >= w2 && j < N2) {
+        // Q2 (top-right): swap with Q4 (bottom-left)
+        // For even N: all of Q2 swaps; for odd N: only first w2 elements
+        bool should_swap = true;
+        int j2 = j - w2;
+        
+        if (N2 % 2 != 0 && j >= w2 + w2) {
+          // Odd N: skip last element of Q2
+          should_swap = false;
+        }
+        
+        if (should_swap && i2 < N1 && j2 >= 0 && j2 < w2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      }
     }
   }
 }
@@ -1983,150 +2046,6 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
   }
 }
 
-__host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
-                                          MSData data,
-                                          int num_gpus,
-                                          int firstgpu,
-                                          int blockSizeV) {
-  int local_max = 0;
-  int max = 0;
-  for (int f = 0; f < data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
-    for (int i = 0; i < data.total_frequencies; i++) {
-      unsigned int j = omp_get_thread_num();
-      unsigned int num_cpu_threads = omp_get_num_threads();
-      int gpu_idx = i % num_gpus;
-      cudaSetDevice(gpu_idx + firstgpu);
-      int gpu_id = -1;
-      cudaGetDevice(&gpu_id);
-
-      for (int s = 0; s < data.nstokes; s++) {
-        // Now the number of visibilities will be the original one.
-
-        fields[f].numVisibilitiesPerFreqPerStoke[i][s] =
-            fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
-
-        fields[f].visibilities[i][s].uvw.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].visibilities[i][s].weight.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].visibilities[i][s].Vm.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s], floatComplexZero());
-        fields[f].visibilities[i][s].Vo.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-
-        checkCudaErrors(
-            cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(
-            cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(
-            cudaMalloc(&fields[f].device_visibilities[i][s].Vr,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(
-            cudaMemset(fields[f].device_visibilities[i][s].Vr, 0,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-
-        checkCudaErrors(cudaMalloc(
-            &fields[f].device_visibilities[i][s].uvw,
-            sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(
-            cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(cudaMalloc(
-            &fields[f].device_visibilities[i][s].weight,
-            sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-
-        // Copy original Vo visibilities to host
-        fields[f].visibilities[i][s].Vo.assign(
-            fields[f].backup_visibilities[i][s].Vo.begin(),
-            fields[f].backup_visibilities[i][s].Vo.end());
-
-        // Copy original (u,v) positions and weights to host and device
-
-        fields[f].visibilities[i][s].uvw.assign(
-            fields[f].backup_visibilities[i][s].uvw.begin(),
-            fields[f].backup_visibilities[i][s].uvw.end());
-
-        fields[f].visibilities[i][s].weight.assign(
-            fields[f].backup_visibilities[i][s].weight.begin(),
-            fields[f].backup_visibilities[i][s].weight.end());
-
-        checkCudaErrors(cudaMemcpy(
-            fields[f].device_visibilities[i][s].uvw,
-            fields[f].visibilities[i][s].uvw.data(),
-            sizeof(double3) * fields[f].visibilities[i][s].uvw.size(),
-            cudaMemcpyHostToDevice));
-        checkCudaErrors(cudaMemcpy(
-            fields[f].device_visibilities[i][s].Vo,
-            fields[f].visibilities[i][s].Vo.data(),
-            sizeof(cufftComplex) * fields[f].visibilities[i][s].Vo.size(),
-            cudaMemcpyHostToDevice));
-        checkCudaErrors(cudaMemcpy(
-            fields[f].device_visibilities[i][s].weight,
-            fields[f].visibilities[i][s].weight.data(),
-            sizeof(float) * fields[f].visibilities[i][s].weight.size(),
-            cudaMemcpyHostToDevice));
-
-        long UVpow2 =
-            NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        if (blockSizeV == -1) {
-          int threads1D, blocks1D;
-          int threadsV, blocksV;
-          threads1D = 512;
-          blocks1D = iDivUp(UVpow2, threads1D);
-          getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV,
-                                 false);
-          fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
-          fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
-        } else {
-          fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-          fields[f].device_visibilities[i][s].numBlocksUV =
-              iDivUp(UVpow2, blockSizeV);
-        }
-
-        hermitianSymmetry<<<
-            fields[f].device_visibilities[i][s].numBlocksUV,
-            fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
-            fields[f].device_visibilities[i][s].uvw,
-            fields[f].device_visibilities[i][s].Vo, fields[f].nu[i],
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        checkCudaErrors(cudaDeviceSynchronize());
-      }
-    }
-  }
-
-  for (int f = 0; f < data.nfields; f++) {
-    for (int i = 0; i < data.total_frequencies; i++) {
-      local_max =
-          *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
-                            fields[f].numVisibilitiesPerFreqPerStoke[i].end());
-      if (local_max > max) {
-        max = local_max;
-      }
-    }
-  }
-
-  data.max_number_visibilities_in_channel_and_stokes = max;
-  max_number_vis = max;
-
-  for (int g = 0; g < num_gpus; g++) {
-    cudaSetDevice((g % num_gpus) + firstgpu);
-    checkCudaErrors(
-        cudaMalloc(&vars_gpu[g].device_chi2, sizeof(float) * max_number_vis));
-    checkCudaErrors(
-        cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float) * max_number_vis));
-  }
-
-  cudaSetDevice(firstgpu);
-}
-
 __host__ void degridding(std::vector<Field>& fields,
                          MSData data,
                          double deltau,
@@ -2346,8 +2265,9 @@ __host__ void computeImageToVisibilityGrid(
         vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, fft_shift);
 
   // Phase rotate to correct phase center
+  // Pass fft_shift as dc_at_center since they match (fft_shift=true means DC at center)
   phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-      vars_gpu[gpu_idx].device_V, M, N, phs_xobs_pix, phs_yobs_pix);
+      vars_gpu[gpu_idx].device_V, M, N, phs_xobs_pix, phs_yobs_pix, fft_shift);
   checkCudaErrors(cudaDeviceSynchronize());
 }
 
@@ -2361,6 +2281,7 @@ __host__ void FFT2D(cufftComplex* output_data,
   if (shift) {
     // Before FFT/IFFT: use ifftshift to move DC from center to (0,0)
     // cuFFT expects DC component at (0,0) for proper FFT computation
+    // This is the same for both CUFFT_FORWARD and CUFFT_INVERSE
     // In-place operation on input_data
     ifftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(input_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
@@ -2375,7 +2296,8 @@ __host__ void FFT2D(cufftComplex* output_data,
 
   if (shift) {
     // After FFT/IFFT: use fftshift to move DC from (0,0) to center
-    // This matches our gridding coordinate system which uses center_j = floor(N/2.0)
+    // cuFFT always outputs with DC at (0,0) regardless of direction (FORWARD/INVERSE)
+    // We restore DC to center to match our gridding coordinate system (center_j = floor(N/2.0))
     // In-place operation on output_data
     fftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(output_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
@@ -2475,22 +2397,22 @@ __global__ void degriddingGPU(double3* uvw,
   }
 }
 
-__global__ void hermitianSymmetry(double3* UVW,
-                                  cufftComplex* Vo,
-                                  float freq,
-                                  int numVisibilities) {
+
+// Apply Hermitian symmetry only (flip u,v,w and conjugate visibility when u > 0)
+// Hermitian symmetry: V(u,v,w) = V*(-u,-v,-w)* where * denotes complex conjugate
+// Does NOT convert to lambda units - use convertUVWToLambda separately
+__global__ void applyHermitianSymmetry(double3* UVW,
+                                       cufftComplex* Vo,
+                                       int numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
     if (UVW[i].x > 0.0) {
-      UVW[i].x *= -1.0;
-      UVW[i].y *= -1.0;
-      // UVW[i].z *= -1.0;
-      Vo[i].y *= -1.0f;
+      UVW[i].x *= -1.0;  // Negate u coordinate
+      UVW[i].y *= -1.0;  // Negate v coordinate
+      UVW[i].z *= -1.0;  // Negate w coordinate (for consistency with gridding)
+      Vo[i].y *= -1.0f;  // Conjugate: flip imaginary part
     }
-    UVW[i].x = metres_to_lambda(UVW[i].x, freq);
-    UVW[i].y = metres_to_lambda(UVW[i].y, freq);
-    UVW[i].z = metres_to_lambda(UVW[i].z, freq);
   }
 }
 
@@ -2713,75 +2635,80 @@ __global__ void apply_GCF(cufftComplex* __restrict__ image,
 /*--------------------------------------------------------------------
  * Phase rotate the visibility data in "image" to refer phase to point
  * (x,y) instead of (0,0).
- * Multiply pixel V(i,j) by exp(2 pi i (x/ni + y/nj))
+ * Multiply pixel V(i,j) by exp(-2 pi i (x/ni + y/nj))
  *--------------------------------------------------------------------*/
 __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
-                             double yphs) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+                             double yphs,
+                             bool dc_at_center) {
+  // cuFFT uses row-major layout: data[N * row + column]
+  // Match gridding convention: j = column (u direction), k = row (v direction)
+  // Array indexing: V[N * row + column] = V[N * k + j]
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;  // Column index (u direction)
+  const int k = threadIdx.y + blockDim.y * blockIdx.y;  // Row index (v direction)
 
-  float u, v, phase, c, s;
-  double upix = xphs / (double)M;
-  double vpix = yphs / (double)N;
-  cufftComplex exp_phase;
-
-  if (j < M / 2) {
-    u = upix * j;
-  } else {
-    u = upix * (j - M);
-  }
-
-  if (i < N / 2) {
-    v = vpix * i;
-  } else {
-    v = vpix * (i - N);
-  }
-
-  phase = -2.0f * (u + v);
+  if (j < N && k < M) {
+    double u_freq, v_freq;
+    
+    if (dc_at_center) {
+      // DC at center: frequencies are centered after fftshift
+      // Frequencies: [-N/2, ..., -1, 0, 1, ..., N/2-1] / N
+      const double center_j = floor(N / 2.0);  // Column center (u direction, width N)
+      const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
+      
+      // u frequencies (column direction, width N) - u maps to j (columns)
+      u_freq = ((double)j - center_j) / (double)N;
+      
+      // v frequencies (row direction, height M) - v maps to k (rows)
+      v_freq = ((double)k - center_k) / (double)M;
+    } else {
+      // DC at corner: frequencies go from 0 to N-1 (standard fftfreq)
+      // u frequencies (column direction)
+      if (j < (N + 1) / 2) {
+        u_freq = (double)j / (double)N;  // Positive frequencies
+      } else {
+        u_freq = ((double)j - (double)N) / (double)N;  // Negative frequencies
+      }
+      
+      // v frequencies (row direction)
+      if (k < (M + 1) / 2) {
+        v_freq = (double)k / (double)M;  // Positive frequencies
+      } else {
+        v_freq = ((double)k - (double)M) / (double)M;  // Negative frequencies
+      }
+    }
+    
+    // Phase shift: -2π * (u * x0 + v * y0)
+    // When dc_at_center=true: frequencies are relative to center, so coordinates should be too
+    // When dc_at_center=false: frequencies are relative to corner, so coordinates should be too
+    // xphs and yphs are passed as pixel coordinates (absolute), but we need to convert them
+    // to be relative to the FFT grid origin (center or corner) to match the frequency system
+    double xphs_relative, yphs_relative;
+    if (dc_at_center) {
+      // FFT grid center is at (N/2, M/2), so convert from absolute to relative to center
+      const double center_j = floor(N / 2.0);
+      const double center_k = floor(M / 2.0);
+      xphs_relative = xphs - center_j;  // Convert to cartesian (relative to FFT grid center)
+      yphs_relative = yphs - center_k;
+    } else {
+      // FFT grid corner is at (0, 0), so coordinates are already relative to corner
+      xphs_relative = xphs;  // Already relative to corner (0,0)
+      yphs_relative = yphs;
+    }
+    double phase = -2.0 * CUDART_PI * (u_freq * xphs_relative + v_freq * yphs_relative);
+    
+    float c, s;
 #if (__CUDA_ARCH__ >= 300)
-  sincospif(phase, &s, &c);
+    sincosf((float)phase, &s, &c);
 #else
-  c = cospif(phase);
-  s = sinpif(phase);
+    c = cosf((float)phase);
+    s = sinf((float)phase);
 #endif
-  exp_phase = make_cuFloatComplex(c, s);  // Create the complex cos + i sin
-  data[N * i + j] =
-      cuCmulf(data[N * i + j], exp_phase);  // Complex multiplication
-}
-
-__global__ void getGriddedVisFromPix(cufftComplex* Vm,
-                                     cufftComplex* V,
-                                     double3* UVW,
-                                     float* weight,
-                                     double deltau,
-                                     double deltav,
-                                     long numVisibilities,
-                                     long N) {
-  const int i = threadIdx.x + blockDim.x * blockIdx.x;
-  int i1, j1;
-  double du, dv;
-  double2 uv;
-
-  if (i < numVisibilities) {
-    uv.x = UVW[i].x / deltau;
-    uv.y = UVW[i].y / deltav;
-
-    if (uv.x < 0.0)
-      uv.x += N;
-
-    if (uv.y < 0.0)
-      uv.y += N;
-
-    j1 = uv.x;
-    i1 = uv.y;
-
-    if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N)
-      Vm[i] = V[N * i1 + j1];
-    else
-      weight[i] = 0.0f;
+    cufftComplex exp_phase = make_cuFloatComplex(c, s);  // e^(-2πi*(u*x0 + v*y0))
+    // Array indexing matches cuFFT and gridding: V[N * row + column] = V[N * k + j]
+    data[N * k + j] = cuCmulf(data[N * k + j], exp_phase);  // Complex multiplication
   }
 }
 
@@ -2798,6 +2725,7 @@ __global__ void bilinearInterpolateVisibility(
     const double deltau,
     const double deltav,
     const long numVisibilities,
+    const long M,
     const long N,
     const bool dc_at_center) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -2810,27 +2738,55 @@ __global__ void bilinearInterpolateVisibility(
     double du, dv;
 
     if (dc_at_center) {
-      // DC at center: add N/2 offset to coordinates
-      const double N_half = N * 0.5;
-      uv_x = uvw.x / deltau + N_half;
-      uv_y = uvw.y / deltav + N_half;
-
-      i1 = __double2int_rd(uv_x);
-      i2 = i1 + 1;
-      du = uv_x - i1;
-
-      j1 = __double2int_rd(uv_y);
+      // DC at center: standard bilinear interpolation
+      // Use floor(N/2.0) and floor(M/2.0) to match gridding coordinate system
+      // IMPORTANT: Match gridding convention: j = column (u), k = row (v)
+      const double center_j = floor(N / 2.0);  // Column center (u direction, width N)
+      const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
+      
+      // Standard bilinear interpolation: continuous coordinate without +0.5
+      // The +0.5 is only for rounding to nearest pixel (used in gridding), not for interpolation
+      // Match Python implementation: u_pix = u/deltau + center (no +0.5 for bilinear)
+      // Match gridding: j = column (u), k = row (v)
+      double grid_pos_x = uvw.x / deltau;  // u -> j (column)
+      double grid_pos_y = uvw.y / deltav;  // v -> k (row)
+      
+      // Continuous coordinate in grid space (centered) - NO +0.5 for bilinear interpolation
+      // Gridding uses +0.5 for rounding to nearest pixel center, but for bilinear interpolation
+      // we need to interpolate between pixel centers (at integer positions), so we use floor
+      double j_cont = grid_pos_x + center_j;  // Column (u direction) - continuous coordinate
+      double k_cont = grid_pos_y + center_k;  // Row (v direction) - continuous coordinate
+      
+      // Get integer parts using floor (standard bilinear interpolation)
+      // Note: floor gives us the lower-left corner of the interpolation cell
+      j1 = __double2int_rd(j_cont);  // Column index (u) - floor
       j2 = j1 + 1;
-      dv = uv_y - j1;
+      du = j_cont - j1;  // Fractional part for interpolation
+
+      i1 = __double2int_rd(k_cont);  // Row index (v) - using i1 for row to match array indexing
+      i2 = i1 + 1;
+      dv = k_cont - i1;  // Fractional part for interpolation
 
       // Check all boundaries explicitly (no wrapping)
-      if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N && i2 >= 0 && i2 < N &&
-          j2 >= 0 && j2 < N) {
+      // Note: j1, j2 are column indices (u), i1, i2 are row indices (v)
+      // Array indexing must match gridding: V[N * row + column] = V[N * k + j] = V[N * i + j]
+      // where i = row (v direction), j = column (u direction)
+      // For bilinear interpolation, we need all four corners to be valid
+      // Allow i1, j1 to be -1 (for coordinates just below 0 after centering)
+      // but ensure i2, j2 are within bounds
+      if (j1 >= -1 && j1 < N && i1 >= -1 && i1 < M && j2 >= 0 && j2 < N &&
+          i2 >= 0 && i2 < M) {
+        // Clamp negative indices to 0 for array access
+        int j1_safe = (j1 < 0) ? 0 : j1;
+        int i1_safe = (i1 < 0) ? 0 : i1;
         // Use regular global memory with __ldg for read-only cached access
-        const cufftComplex v11 = __ldg(&V[N * j1 + i1]);
-        const cufftComplex v12 = __ldg(&V[N * j1 + i2]);
-        const cufftComplex v21 = __ldg(&V[N * j2 + i1]);
-        const cufftComplex v22 = __ldg(&V[N * j2 + i2]);
+        // Array layout matches gridding: V[N * row + column] = V[N * i + j]
+        // where i = row index (v), j = column index (u)
+        // Use safe indices to handle edge cases where i1 or j1 might be -1
+        const cufftComplex v11 = __ldg(&V[N * i1_safe + j1_safe]);  // (i1, j1) = (row, column)
+        const cufftComplex v12 = __ldg(&V[N * i1_safe + j2]);  // (i1, j2)
+        const cufftComplex v21 = __ldg(&V[N * i2 + j1_safe]);  // (i2, j1)
+        const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
 
         // Optimized bilinear interpolation weights
         const float w11 = (1.0f - du) * (1.0f - dv);
@@ -2846,36 +2802,41 @@ __global__ void bilinearInterpolateVisibility(
       }
     } else {
       // DC at corner: handle negative coordinates with wrapping
-      uv_x = uvw.x / deltau;
-      uv_y = uvw.y / deltav;
+      // Match gridding convention: j = column (u), k = row (v)
+      double grid_pos_x = uvw.x / deltau;  // u -> j (column)
+      double grid_pos_y = uvw.y / deltav;  // v -> k (row)
 
       // Handle negative coordinates by wrapping
-      if (uv_x < 0.0)
-        uv_x += N;
-      if (uv_y < 0.0)
-        uv_y += N;
+      if (grid_pos_x < 0.0)
+        grid_pos_x += N;  // Wrap u (columns, width N)
+      if (grid_pos_y < 0.0)
+        grid_pos_y += M;  // Wrap v (rows, height M)
 
-      i1 = __double2int_rd(uv_x);
-      i2 = (i1 + 1) % N;  // Wrap around
-      du = uv_x - i1;
+      // Get integer parts (floor)
+      j1 = __double2int_rd(grid_pos_x);  // Column index (u)
+      j2 = (j1 + 1) % N;  // Wrap around for columns
+      du = grid_pos_x - j1;  // Fractional part
 
-      j1 = __double2int_rd(uv_y);
-      j2 = (j1 + 1) % N;  // Wrap around
-      dv = uv_y - j1;
+      i1 = __double2int_rd(grid_pos_y);  // Row index (v) - using i1 for row
+      i2 = (i1 + 1) % M;  // Wrap around for rows (height M)
+      dv = grid_pos_y - i1;  // Fractional part
 
-      // Optimized boundary check (i2 and j2 are always valid due to modulo)
-      if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N) {
+      // Boundary check: j1, j2 are columns (u), i1, i2 are rows (v)
+      // Array indexing must match gridding: V[N * row + column] = V[N * i + j]
+      // where i = row (v direction, height M), j = column (u direction, width N)
+      if (j1 >= 0 && j1 < N && i1 >= 0 && i1 < M) {
         // Use regular global memory with __ldg for read-only cached access
-        const cufftComplex v11 = __ldg(&V[N * j1 + i1]);
-        const cufftComplex v12 = __ldg(&V[N * j2 + i1]);
-        const cufftComplex v21 = __ldg(&V[N * j1 + i2]);
-        const cufftComplex v22 = __ldg(&V[N * j2 + i2]);
+        // Note: i2 and j2 are wrapped, so they're always in range due to modulo
+        const cufftComplex v11 = __ldg(&V[N * i1 + j1]);  // (i1, j1) = (row, column)
+        const cufftComplex v12 = __ldg(&V[N * i1 + j2]);  // (i1, j2)
+        const cufftComplex v21 = __ldg(&V[N * i2 + j1]);  // (i2, j1)
+        const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
 
-        // Optimized bilinear interpolation (factor out common terms)
-        const float w11 = (1.0f - du) * (1.0f - dv);
-        const float w12 = (1.0f - du) * dv;
-        const float w21 = du * (1.0f - dv);
-        const float w22 = du * dv;
+        // Optimized bilinear interpolation weights (same as dc_at_center path)
+        const float w11 = (1.0f - du) * (1.0f - dv);  // Weight for (i1, j1) = lower-left
+        const float w12 = du * (1.0f - dv);           // Weight for (i1, j2) = lower-right
+        const float w21 = (1.0f - du) * dv;           // Weight for (i2, j1) = upper-left
+        const float w22 = du * dv;                     // Weight for (i2, j2) = upper-right
 
         const float Zreal =
             w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
@@ -4430,6 +4391,8 @@ __host__ float chi2(float* I,
                     VirtualImageProcessor* ip,
                     bool normalize,
                     float fg_scale) {
+
+  bool fft_shift = true; // fft_shift=false (DC at corner 0,0)
   cudaSetDevice(firstgpu);
 
   float reduced_chi2 = 0.0f;
@@ -4450,7 +4413,7 @@ __host__ float chi2(float* I,
         cudaGetDevice(&gpu_id);
 
         // Compute visibility grid from image using common pipeline
-        // Use fft_shift=true (DC at center) to match degridding and gridding procedures
+        // Use fft_shift=false (DC at corner 0,0) for testing
         computeImageToVisibilityGrid(
             I, ip, vars_gpu, gpu_idx, M, N, datasets[d].fields[f].nu[i],
             datasets[d].fields[f].ref_xobs_pix,
@@ -4461,7 +4424,7 @@ __host__ float chi2(float* I,
             datasets[d].antennas[0].pb_factor,
             datasets[d].antennas[0].pb_cutoff,
             datasets[d].antennas[0].primary_beam, fg_scale,
-            ip->getCKernel(), true);  // fft_shift=true (DC at center)
+            ip->getCKernel(), fft_shift);  // fft_shift=false (DC at corner 0,0)
 
         // Texture memory removed - using regular global memory with __ldg()
         // instead
@@ -4476,7 +4439,7 @@ __host__ float chi2(float* I,
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                          sizeof(float) * max_number_vis));
 
-              // Use bilinear interpolation with DC at center (matching fft_shift=true)
+              // Use bilinear interpolation with DC at corner (matching fft_shift=false)
               bilinearInterpolateVisibility<<<
                   datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                   datasets[d]
@@ -4489,7 +4452,7 @@ __host__ float chi2(float* I,
                   datasets[d].fields[f].device_visibilities[i][s].weight,
                   deltau, deltav,
                   datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  N, true);  // dc_at_center=true (DC at center, matching fft_shift=true)
+                  M, N, fft_shift);  // dc_at_center=false (DC at corner 0,0, matching fft_shift=false)
               checkCudaErrors(cudaDeviceSynchronize());
 
               // RESIDUAL CALCULATION

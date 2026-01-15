@@ -828,7 +828,8 @@ void MFS::setDevice() {
 
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-            hermitianSymmetry<<<
+            // Step 1: Apply Hermitian symmetry (flip u,v and conjugate visibility when u > 0)
+            applyHermitianSymmetry<<<
                 datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                 datasets[d]
                     .fields[f]
@@ -836,6 +837,17 @@ void MFS::setDevice() {
                     .threadsPerBlockUV>>>(
                 datasets[d].fields[f].device_visibilities[i][s].uvw,
                 datasets[d].fields[f].device_visibilities[i][s].Vo,
+                datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+            checkCudaErrors(cudaDeviceSynchronize());
+            
+            // Step 2: Convert UVW coordinates from meters to lambda units
+            convertUVWToLambda<<<
+                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                datasets[d]
+                    .fields[f]
+                    .device_visibilities[i][s]
+                    .threadsPerBlockUV>>>(
+                datasets[d].fields[f].device_visibilities[i][s].uvw,
                 datasets[d].fields[f].nu[i],
                 datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
             checkCudaErrors(cudaDeviceSynchronize());

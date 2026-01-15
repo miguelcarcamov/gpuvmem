@@ -96,11 +96,6 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
                             long M,
                             long N,
                             int numvis);
-__host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
-                                          MSData data,
-                                          int num_gpus,
-                                          int firstgpu,
-                                          int blockSizeV);
 __host__ void degridding(std::vector<Field>& fields,
                          MSData data,
                          double deltau,
@@ -380,10 +375,9 @@ __global__ void newPNoPositivity(cufftComplex* p,
                                  float xmin,
                                  long N);
 __global__ void clip(cufftComplex* I, long N, float MINPIX);
-__global__ void hermitianSymmetry(double3* UVW,
-                                  cufftComplex* Vo,
-                                  float freq,
-                                  int numVisibilities);
+__global__ void applyHermitianSymmetry(double3* UVW,
+                                       cufftComplex* Vo,
+                                       int numVisibilities);
 __global__ void convertUVWToLambda(double3* UVW,
                                    float freq,
                                    int numVisibilities);
@@ -415,7 +409,8 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
-                             double yphs);
+                             double yphs,
+                             bool dc_at_center);
 // Optimized bilinear interpolation kernels using regular global memory with
 // __ldg()
 // Bilinear interpolation of visibilities from gridded visibility plane
@@ -428,6 +423,7 @@ __global__ void bilinearInterpolateVisibility(
     const double deltau,
     const double deltav,
     const long numVisibilities,
+    const long M,
     const long N,
     const bool dc_at_center);
 __global__ void residual(cufftComplex* __restrict__ Vr,
