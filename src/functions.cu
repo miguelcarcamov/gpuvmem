@@ -31,6 +31,7 @@
  * -------------------------------------------------------------------------
  */
 #include "functions.cuh"
+#include "pillBox2D.cuh"
 
 namespace cg = cooperative_groups;
 
@@ -4464,6 +4465,25 @@ __host__ float chi2(float* I,
 
   float reduced_chi2 = 0.0f;
 
+  // Create static 1x1 PillBox kernel for degridding when gridding is enabled
+  // This kernel is used to sample the model visibility grid at original visibility locations
+  // We use 1x1 PillBox (nearest neighbor) instead of the gridding kernel to avoid
+  // double-applying the convolution kernel
+  static PillBox2D* degrid_kernel = NULL;
+  static bool degrid_kernel_initialized = false;
+  
+  // Check if gridding is enabled and initialize degrid kernel if needed
+  CKernel* ckernel = ip->getCKernel();
+  bool use_gridding = (ckernel != NULL && ckernel->getGPUKernel() != NULL);
+  
+  if (use_gridding && !degrid_kernel_initialized) {
+    degrid_kernel = new PillBox2D(1, 1);  // 1x1 PillBox for nearest neighbor sampling
+    degrid_kernel->setGPUID(firstgpu);  // Set GPU ID to ensure kernel is created on correct device
+    degrid_kernel->setSigmas(fabs(deltau), fabs(deltav));  // Set sigmas (not critical for 1x1)
+    degrid_kernel->buildKernel();  // Build and normalize the 1x1 kernel (value = 1.0)
+    degrid_kernel_initialized = true;
+  }
+
   ip->clipWNoise(I);
 
   for (int d = 0; d < nMeasurementSets; d++) {
@@ -4506,21 +4526,43 @@ __host__ float chi2(float* I,
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                          sizeof(float) * max_number_vis));
 
-              // Use bilinear interpolation with DC at corner (matching fft_shift=false)
-              bilinearInterpolateVisibility<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  vars_gpu[gpu_idx].device_V,
-                  datasets[d].fields[f].device_visibilities[i][s].uvw,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  deltau, deltav,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  M, N, fft_shift);  // dc_at_center=false (DC at corner 0,0, matching fft_shift=false)
-              checkCudaErrors(cudaDeviceSynchronize());
+              if (use_gridding) {
+                // Gridding enabled: use degridding with 1x1 PillBox kernel
+                // We use 1x1 PillBox (nearest neighbor) instead of the gridding kernel
+                // because the gridding kernel was already applied during gridding.
+                // For chi2, we just need to sample the model grid at original visibility locations.
+
+                // Degridding: Use 1x1 PillBox kernel for nearest neighbor sampling
+                degriddingGPU<<<datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                               datasets[d]
+                                   .fields[f]
+                                   .device_visibilities[i][s]
+                                   .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V, degrid_kernel->getGPUKernel(),
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N,
+                    degrid_kernel->getm(), degrid_kernel->getn(), 
+                    degrid_kernel->getSupportX(), degrid_kernel->getSupportY());
+                checkCudaErrors(cudaDeviceSynchronize());
+              } else {
+                // Gridding disabled: use bilinear interpolation
+                bilinearInterpolateVisibility<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    M, N, fft_shift);  // dc_at_center=false (DC at corner 0,0, matching fft_shift=false)
+                checkCudaErrors(cudaDeviceSynchronize());
+              }
 
               // RESIDUAL CALCULATION
               residual<<<
