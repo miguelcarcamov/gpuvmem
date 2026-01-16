@@ -2267,8 +2267,9 @@ __host__ void computeImageToVisibilityGrid(
 
   // Phase rotate to correct phase center
   // Pass fft_shift as dc_at_center since they match (fft_shift=true means DC at center)
+  // Pass crpix1 and crpix2 from FITS header (already declared as extern)
   phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-      vars_gpu[gpu_idx].device_V, M, N, phs_xobs_pix, phs_yobs_pix, fft_shift);
+      vars_gpu[gpu_idx].device_V, M, N, phs_xobs_pix, phs_yobs_pix, crpix1, crpix2, fft_shift);
   checkCudaErrors(cudaDeviceSynchronize());
 }
 
@@ -2647,6 +2648,59 @@ __global__ void apply_GCF(cufftComplex* __restrict__ image,
 }
 
 /*--------------------------------------------------------------------
+ * Device functions for phase rotation
+ *--------------------------------------------------------------------*/
+
+// Compute frequencies and relative phase coordinates for DC at center case
+__device__ void computeFrequenciesAndPhaseCenter(int j, int k, long M, long N,
+                                                  double xphs, double yphs,
+                                                  double crpix1, double crpix2,
+                                                  double& u_freq, double& v_freq,
+                                                  double& xphs_relative, double& yphs_relative) {
+  // DC at center: frequencies are centered after fftshift
+  // Frequencies: [-N/2, ..., -1, 0, 1, ..., N/2-1] / N
+  // Use actual center pixel from FITS header (crpix1, crpix2)
+  // FITS uses 1-indexed coordinates, so subtract 1 to get 0-indexed
+  const double center_j = crpix1 - 1.0;  // Column center (u direction, width N)
+  const double center_k = crpix2 - 1.0;  // Row center (v direction, height M)
+  
+  // u frequencies (column direction, width N) - u maps to j (columns)
+  u_freq = ((double)j - center_j) / (double)N;
+  
+  // v frequencies (row direction, height M) - v maps to k (rows)
+  v_freq = ((double)k - center_k) / (double)M;
+  
+  // FFT grid center is at (crpix1-1, crpix2-1), so convert from absolute to relative to center
+  xphs_relative = xphs - center_j;  // Convert to cartesian (relative to FFT grid center)
+  yphs_relative = yphs - center_k;
+}
+
+// Compute frequencies and relative phase coordinates for DC at corner case
+__device__ void computeFrequenciesAndPhaseCorner(int j, int k, long M, long N,
+                                                  double xphs, double yphs,
+                                                  double& u_freq, double& v_freq,
+                                                  double& xphs_relative, double& yphs_relative) {
+  // DC at corner: frequencies go from 0 to N-1 (standard fftfreq)
+  // u frequencies (column direction)
+  if (j < (N + 1) / 2) {
+    u_freq = (double)j / (double)N;  // Positive frequencies
+  } else {
+    u_freq = ((double)j - (double)N) / (double)N;  // Negative frequencies
+  }
+  
+  // v frequencies (row direction)
+  if (k < (M + 1) / 2) {
+    v_freq = (double)k / (double)M;  // Positive frequencies
+  } else {
+    v_freq = ((double)k - (double)M) / (double)M;  // Negative frequencies
+  }
+  
+  // FFT grid corner is at (0, 0), so coordinates are already relative to corner
+  xphs_relative = xphs;  // Already relative to corner (0,0)
+  yphs_relative = yphs;
+}
+
+/*--------------------------------------------------------------------
  * Phase rotate the visibility data in "image" to refer phase to point
  * (x,y) instead of (0,0).
  * Multiply pixel V(i,j) by exp(-2 pi i (x/ni + y/nj))
@@ -2656,6 +2710,8 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long N,
                              double xphs,
                              double yphs,
+                             double crpix1,
+                             double crpix2,
                              bool dc_at_center) {
   // cuFFT uses row-major layout: data[N * row + column]
   // Match gridding convention: j = column (u direction), k = row (v direction)
@@ -2668,41 +2724,13 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
     double xphs_relative, yphs_relative;
     
     if (dc_at_center) {
-      // DC at center: frequencies are centered after fftshift
-      // Frequencies: [-N/2, ..., -1, 0, 1, ..., N/2-1] / N
-      // Compute centers once and reuse for both frequency and coordinate calculations
-      const double center_j = floor(N / 2.0);  // Column center (u direction, width N)
-      const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
-      
-      // u frequencies (column direction, width N) - u maps to j (columns)
-      u_freq = ((double)j - center_j) / (double)N;
-      
-      // v frequencies (row direction, height M) - v maps to k (rows)
-      v_freq = ((double)k - center_k) / (double)M;
-      
-      // FFT grid center is at (N/2, M/2), so convert from absolute to relative to center
-      xphs_relative = xphs - center_j;  // Convert to cartesian (relative to FFT grid center)
-      yphs_relative = yphs - center_k;
+      computeFrequenciesAndPhaseCenter(j, k, M, N, xphs, yphs, crpix1, crpix2,
+                                       u_freq, v_freq, xphs_relative, yphs_relative);
     } else {
-      // DC at corner: frequencies go from 0 to N-1 (standard fftfreq)
-      // u frequencies (column direction)
-      if (j < (N + 1) / 2) {
-        u_freq = (double)j / (double)N;  // Positive frequencies
-      } else {
-        u_freq = ((double)j - (double)N) / (double)N;  // Negative frequencies
-      }
-      
-      // v frequencies (row direction)
-      if (k < (M + 1) / 2) {
-        v_freq = (double)k / (double)M;  // Positive frequencies
-      } else {
-        v_freq = ((double)k - (double)M) / (double)M;  // Negative frequencies
-      }
-      
-      // FFT grid corner is at (0, 0), so coordinates are already relative to corner
-      xphs_relative = xphs;  // Already relative to corner (0,0)
-      yphs_relative = yphs;
+      computeFrequenciesAndPhaseCorner(j, k, M, N, xphs, yphs,
+                                      u_freq, v_freq, xphs_relative, yphs_relative);
     }
+    
     double phase = -2.0 * CUDART_PI * (u_freq * xphs_relative + v_freq * yphs_relative);
     
     float c, s;
@@ -2716,6 +2744,140 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
     // Array indexing matches cuFFT and gridding: V[N * row + column] = V[N * k + j]
     data[N * k + j] = cuCmulf(data[N * k + j], exp_phase);  // Complex multiplication
   }
+}
+
+/*--------------------------------------------------------------------
+ * Device functions for bilinear interpolation
+ *--------------------------------------------------------------------*/
+
+// Bilinear interpolation for DC at center case
+__device__ bool interpolateVisibilityCenter(
+    const double3& uvw,
+    const double deltau,
+    const double deltav,
+    const long M,
+    const long N,
+    const cufftComplex* __restrict__ V,
+    cufftComplex& result) {
+  // DC at center: standard bilinear interpolation
+  // Use floor(N/2.0) and floor(M/2.0) to match gridding coordinate system
+  // IMPORTANT: Match gridding convention: j = column (u), k = row (v)
+  const double center_j = floor(N / 2.0);  // Column center (u direction, width N)
+  const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
+  
+  // Standard bilinear interpolation: continuous coordinate without +0.5
+  // The +0.5 is only for rounding to nearest pixel (used in gridding), not for interpolation
+  // Match Python implementation: u_pix = u/deltau + center (no +0.5 for bilinear)
+  // Match gridding: j = column (u), k = row (v)
+  double grid_pos_x = uvw.x / deltau;  // u -> j (column)
+  double grid_pos_y = uvw.y / deltav;  // v -> k (row)
+  
+  // Continuous coordinate in grid space (centered) - NO +0.5 for bilinear interpolation
+  // Gridding uses +0.5 for rounding to nearest pixel center, but for bilinear interpolation
+  // we need to interpolate between pixel centers (at integer positions), so we use floor
+  double j_cont = grid_pos_x + center_j;  // Column (u direction) - continuous coordinate
+  double k_cont = grid_pos_y + center_k;  // Row (v direction) - continuous coordinate
+  
+  // Get integer parts using floor (standard bilinear interpolation)
+  // Note: floor gives us the lower-left corner of the interpolation cell
+  int j1 = __double2int_rd(j_cont);  // Column index (u) - floor
+  int j2 = j1 + 1;
+  double du = j_cont - j1;  // Fractional part for interpolation
+
+  int i1 = __double2int_rd(k_cont);  // Row index (v) - using i1 for row to match array indexing
+  int i2 = i1 + 1;
+  double dv = k_cont - i1;  // Fractional part for interpolation
+
+  // Check all boundaries explicitly (no wrapping)
+  // Note: j1, j2 are column indices (u), i1, i2 are row indices (v)
+  // Array indexing must match gridding: V[N * row + column] = V[N * k + j] = V[N * i + j]
+  // where i = row (v direction), j = column (u direction)
+  // For bilinear interpolation, we need all four corners to be valid
+  // Allow i1, j1 to be -1 (for coordinates just below 0 after centering)
+  // but ensure i2, j2 are within bounds
+  if (j1 >= -1 && j1 < N && i1 >= -1 && i1 < M && j2 >= 0 && j2 < N &&
+      i2 >= 0 && i2 < M) {
+    // Clamp negative indices to 0 for array access
+    int j1_safe = (j1 < 0) ? 0 : j1;
+    int i1_safe = (i1 < 0) ? 0 : i1;
+    // Use regular global memory with __ldg for read-only cached access
+    // Array layout matches gridding: V[N * row + column] = V[N * i + j]
+    // where i = row index (v), j = column index (u)
+    // Use safe indices to handle edge cases where i1 or j1 might be -1
+    const cufftComplex v11 = __ldg(&V[N * i1_safe + j1_safe]);  // (i1, j1) = (row, column)
+    const cufftComplex v12 = __ldg(&V[N * i1_safe + j2]);  // (i1, j2)
+    const cufftComplex v21 = __ldg(&V[N * i2 + j1_safe]);  // (i2, j1)
+    const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
+
+    // Optimized bilinear interpolation weights
+    const float w11 = (1.0f - du) * (1.0f - dv);
+    const float w12 = du * (1.0f - dv);
+    const float w21 = (1.0f - du) * dv;
+    const float w22 = du * dv;
+
+    result = make_cuFloatComplex(
+        w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
+        w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
+    return true;
+  }
+  return false;
+}
+
+// Bilinear interpolation for DC at corner case
+__device__ bool interpolateVisibilityCorner(
+    const double3& uvw,
+    const double deltau,
+    const double deltav,
+    const long M,
+    const long N,
+    const cufftComplex* __restrict__ V,
+    cufftComplex& result) {
+  // DC at corner: handle negative coordinates with wrapping
+  // Match gridding convention: j = column (u), k = row (v)
+  double grid_pos_x = uvw.x / deltau;  // u -> j (column)
+  double grid_pos_y = uvw.y / deltav;  // v -> k (row)
+
+  // Handle negative coordinates by wrapping
+  if (grid_pos_x < 0.0)
+    grid_pos_x += N;  // Wrap u (columns, width N)
+  if (grid_pos_y < 0.0)
+    grid_pos_y += M;  // Wrap v (rows, height M)
+
+  // Get integer parts (floor)
+  int j1 = __double2int_rd(grid_pos_x);  // Column index (u)
+  int j2 = (j1 + 1) % N;  // Wrap around for columns
+  double du = grid_pos_x - j1;  // Fractional part
+
+  int i1 = __double2int_rd(grid_pos_y);  // Row index (v) - using i1 for row
+  int i2 = (i1 + 1) % M;  // Wrap around for rows (height M)
+  double dv = grid_pos_y - i1;  // Fractional part
+
+  // Boundary check: j1, j2 are columns (u), i1, i2 are rows (v)
+  // Array indexing must match gridding: V[N * row + column] = V[N * i + j]
+  // where i = row (v direction, height M), j = column (u direction, width N)
+  if (j1 >= 0 && j1 < N && i1 >= 0 && i1 < M) {
+    // Use regular global memory with __ldg for read-only cached access
+    // Note: i2 and j2 are wrapped, so they're always in range due to modulo
+    const cufftComplex v11 = __ldg(&V[N * i1 + j1]);  // (i1, j1) = (row, column)
+    const cufftComplex v12 = __ldg(&V[N * i1 + j2]);  // (i1, j2)
+    const cufftComplex v21 = __ldg(&V[N * i2 + j1]);  // (i2, j1)
+    const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
+
+    // Optimized bilinear interpolation weights (same as dc_at_center path)
+    const float w11 = (1.0f - du) * (1.0f - dv);  // Weight for (i1, j1) = lower-left
+    const float w12 = du * (1.0f - dv);           // Weight for (i1, j2) = lower-right
+    const float w21 = (1.0f - du) * dv;           // Weight for (i2, j1) = upper-left
+    const float w22 = du * dv;                     // Weight for (i2, j2) = upper-right
+
+    const float Zreal =
+        w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
+    const float Zimag =
+        w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
+
+    result = make_cuFloatComplex(Zreal, Zimag);
+    return true;
+  }
+  return false;
 }
 
 /*
@@ -2739,120 +2901,19 @@ __global__ void bilinearInterpolateVisibility(
   if (i < numVisibilities) {
     // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
     const double3 uvw = UVW[i];
-    double uv_x, uv_y;
-    int i1, i2, j1, j2;
-    double du, dv;
+    cufftComplex result;
+    bool success;
 
     if (dc_at_center) {
-      // DC at center: standard bilinear interpolation
-      // Use floor(N/2.0) and floor(M/2.0) to match gridding coordinate system
-      // IMPORTANT: Match gridding convention: j = column (u), k = row (v)
-      const double center_j = floor(N / 2.0);  // Column center (u direction, width N)
-      const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
-      
-      // Standard bilinear interpolation: continuous coordinate without +0.5
-      // The +0.5 is only for rounding to nearest pixel (used in gridding), not for interpolation
-      // Match Python implementation: u_pix = u/deltau + center (no +0.5 for bilinear)
-      // Match gridding: j = column (u), k = row (v)
-      double grid_pos_x = uvw.x / deltau;  // u -> j (column)
-      double grid_pos_y = uvw.y / deltav;  // v -> k (row)
-      
-      // Continuous coordinate in grid space (centered) - NO +0.5 for bilinear interpolation
-      // Gridding uses +0.5 for rounding to nearest pixel center, but for bilinear interpolation
-      // we need to interpolate between pixel centers (at integer positions), so we use floor
-      double j_cont = grid_pos_x + center_j;  // Column (u direction) - continuous coordinate
-      double k_cont = grid_pos_y + center_k;  // Row (v direction) - continuous coordinate
-      
-      // Get integer parts using floor (standard bilinear interpolation)
-      // Note: floor gives us the lower-left corner of the interpolation cell
-      j1 = __double2int_rd(j_cont);  // Column index (u) - floor
-      j2 = j1 + 1;
-      du = j_cont - j1;  // Fractional part for interpolation
-
-      i1 = __double2int_rd(k_cont);  // Row index (v) - using i1 for row to match array indexing
-      i2 = i1 + 1;
-      dv = k_cont - i1;  // Fractional part for interpolation
-
-      // Check all boundaries explicitly (no wrapping)
-      // Note: j1, j2 are column indices (u), i1, i2 are row indices (v)
-      // Array indexing must match gridding: V[N * row + column] = V[N * k + j] = V[N * i + j]
-      // where i = row (v direction), j = column (u direction)
-      // For bilinear interpolation, we need all four corners to be valid
-      // Allow i1, j1 to be -1 (for coordinates just below 0 after centering)
-      // but ensure i2, j2 are within bounds
-      if (j1 >= -1 && j1 < N && i1 >= -1 && i1 < M && j2 >= 0 && j2 < N &&
-          i2 >= 0 && i2 < M) {
-        // Clamp negative indices to 0 for array access
-        int j1_safe = (j1 < 0) ? 0 : j1;
-        int i1_safe = (i1 < 0) ? 0 : i1;
-        // Use regular global memory with __ldg for read-only cached access
-        // Array layout matches gridding: V[N * row + column] = V[N * i + j]
-        // where i = row index (v), j = column index (u)
-        // Use safe indices to handle edge cases where i1 or j1 might be -1
-        const cufftComplex v11 = __ldg(&V[N * i1_safe + j1_safe]);  // (i1, j1) = (row, column)
-        const cufftComplex v12 = __ldg(&V[N * i1_safe + j2]);  // (i1, j2)
-        const cufftComplex v21 = __ldg(&V[N * i2 + j1_safe]);  // (i2, j1)
-        const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
-
-        // Optimized bilinear interpolation weights
-        const float w11 = (1.0f - du) * (1.0f - dv);
-        const float w12 = du * (1.0f - dv);
-        const float w21 = (1.0f - du) * dv;
-        const float w22 = du * dv;
-
-        Vm[i] = make_cuFloatComplex(
-            w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
-            w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
-      } else {
-        weight[i] = 0.0f;
-      }
+      success = interpolateVisibilityCenter(uvw, deltau, deltav, M, N, V, result);
     } else {
-      // DC at corner: handle negative coordinates with wrapping
-      // Match gridding convention: j = column (u), k = row (v)
-      double grid_pos_x = uvw.x / deltau;  // u -> j (column)
-      double grid_pos_y = uvw.y / deltav;  // v -> k (row)
+      success = interpolateVisibilityCorner(uvw, deltau, deltav, M, N, V, result);
+    }
 
-      // Handle negative coordinates by wrapping
-      if (grid_pos_x < 0.0)
-        grid_pos_x += N;  // Wrap u (columns, width N)
-      if (grid_pos_y < 0.0)
-        grid_pos_y += M;  // Wrap v (rows, height M)
-
-      // Get integer parts (floor)
-      j1 = __double2int_rd(grid_pos_x);  // Column index (u)
-      j2 = (j1 + 1) % N;  // Wrap around for columns
-      du = grid_pos_x - j1;  // Fractional part
-
-      i1 = __double2int_rd(grid_pos_y);  // Row index (v) - using i1 for row
-      i2 = (i1 + 1) % M;  // Wrap around for rows (height M)
-      dv = grid_pos_y - i1;  // Fractional part
-
-      // Boundary check: j1, j2 are columns (u), i1, i2 are rows (v)
-      // Array indexing must match gridding: V[N * row + column] = V[N * i + j]
-      // where i = row (v direction, height M), j = column (u direction, width N)
-      if (j1 >= 0 && j1 < N && i1 >= 0 && i1 < M) {
-        // Use regular global memory with __ldg for read-only cached access
-        // Note: i2 and j2 are wrapped, so they're always in range due to modulo
-        const cufftComplex v11 = __ldg(&V[N * i1 + j1]);  // (i1, j1) = (row, column)
-        const cufftComplex v12 = __ldg(&V[N * i1 + j2]);  // (i1, j2)
-        const cufftComplex v21 = __ldg(&V[N * i2 + j1]);  // (i2, j1)
-        const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
-
-        // Optimized bilinear interpolation weights (same as dc_at_center path)
-        const float w11 = (1.0f - du) * (1.0f - dv);  // Weight for (i1, j1) = lower-left
-        const float w12 = du * (1.0f - dv);           // Weight for (i1, j2) = lower-right
-        const float w21 = (1.0f - du) * dv;           // Weight for (i2, j1) = upper-left
-        const float w22 = du * dv;                     // Weight for (i2, j2) = upper-right
-
-        const float Zreal =
-            w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
-        const float Zimag =
-            w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
-
-        Vm[i] = make_cuFloatComplex(Zreal, Zimag);
-      } else {
-        weight[i] = 0.0f;
-      }
+    if (success) {
+      Vm[i] = result;
+    } else {
+      weight[i] = 0.0f;
     }
   }
 }

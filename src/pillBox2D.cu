@@ -142,7 +142,8 @@ __host__ void PillBox2D::buildKernel(float amp,
       this->kernel[this->n * i + j] = pillBox2D(amp, x, y, limit_x, limit_y);
     }
   }
-
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
   this->copyKerneltoGPU();
 };
 
@@ -160,7 +161,8 @@ __host__ void PillBox2D::buildKernel() {
           pillBox2D(this->amp, x, y, limit_x, limit_y);
     }
   }
-
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
   this->copyKerneltoGPU();
 };
 

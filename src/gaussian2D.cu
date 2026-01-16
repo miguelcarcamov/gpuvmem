@@ -173,6 +173,8 @@ __host__ void Gaussian2D::buildKernel(float amp,
           gaussian2D(amp, x, y, x0, y0, sigma_x, sigma_y, this->w, this->alpha);
     }
   }
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
   this->copyKerneltoGPU();
 };
 
@@ -188,6 +190,8 @@ __host__ void Gaussian2D::buildKernel() {
                      this->sigma_y, this->w, this->alpha);
     }
   }
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
   this->copyKerneltoGPU();
 };
 

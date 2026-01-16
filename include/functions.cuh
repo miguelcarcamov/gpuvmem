@@ -410,6 +410,8 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long N,
                              double xphs,
                              double yphs,
+                             double crpix1,
+                             double crpix2,
                              bool dc_at_center);
 // Optimized bilinear interpolation kernels using regular global memory with
 // __ldg()

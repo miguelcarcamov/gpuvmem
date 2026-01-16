@@ -48,11 +48,14 @@ __host__ float pswf_11D_func(float nu) {
 
 __host__ float pswf_11D(float amp, float x, float x0, float sigma, float w) {
   float nu, pswf, nu_sq, val;
-  float radius = distance(x, 0.0f, x0, 0.0f);
+  // For 1D, use absolute difference instead of 2D distance calculation
+  float radius = fabsf(x - x0);
 
   nu = radius / (w * sigma);
-  if (nu == 0.0f) {
-    val = 1.0f;
+  // Use tolerance check instead of exact floating point equality
+  const float epsilon = 1e-7f;
+  if (nu < epsilon) {
+    val = amp;  // When nu=0, pswf=1, so val = amp * (1 - 0) * 1 = amp
   } else {
     pswf = pswf_11D_func(nu);
     nu_sq = nu * nu;
@@ -192,6 +195,8 @@ __host__ void PSWF_12D::buildKernel(float amp,
   this->setKernelMemory();
   float x, y;
   float val;
+  
+  // Build kernel values
   for (int i = 0; i < this->m; i++) {
     for (int j = 0; j < this->n; j++) {
       y = (i - this->support_y) * sigma_y;
@@ -200,6 +205,10 @@ __host__ void PSWF_12D::buildKernel(float amp,
       this->kernel[this->n * i + j] = val;
     }
   }
+  
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
+  
   this->copyKerneltoGPU();
   if (NULL != this->gcf) {
   }
@@ -209,6 +218,8 @@ __host__ void PSWF_12D::buildKernel() {
   this->setKernelMemory();
   float x, y;
   float val;
+  
+  // Build kernel values
   for (int i = 0; i < this->m; i++) {
     for (int j = 0; j < this->n; j++) {
       y = (i - this->support_y) * this->sigma_y;
@@ -218,6 +229,10 @@ __host__ void PSWF_12D::buildKernel() {
       this->kernel[this->n * i + j] = val;
     }
   }
+  
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
+  
   this->copyKerneltoGPU();
   if (NULL != this->gcf) {
   }
@@ -268,6 +283,11 @@ __host__ float PSWF_12D::GCF(float amp,
                              float w,
                              float alpha) {
   float val = pswf_12D(amp, x, y, x0, y0, sigma_x, sigma_y, w);
+  // Avoid division by zero or very small values
+  const float epsilon = 1e-10f;
+  if (fabsf(val) < epsilon) {
+    return 0.0f;  // Return 0 for invalid GCF values
+  }
   return 1.0f / val;
 };
 
