@@ -487,16 +487,16 @@ __host__ void readMS(const char* MS_name,
   casacore::Table maxuv_metres_tab(
       casacore::tableCommand(maxuv_metres_query.c_str()));
 
-  casacore::ROScalarColumn<casacore::Double> max_blength_col(
+  casacore::ROScalarColumn<double> max_blength_col(
       maxmin_baseline_tab, "MAX_BLENGTH");
-  casacore::ROScalarColumn<casacore::Double> min_blength_col(
+  casacore::ROScalarColumn<double> min_blength_col(
       maxmin_baseline_tab, "MIN_BLENGTH");
-  casacore::ROScalarColumn<casacore::Double> maxuv_metres_col(maxuv_metres_tab,
+  casacore::ROScalarColumn<double> maxuv_metres_col(maxuv_metres_tab,
                                                               "MAXUV");
 
-  casacore::ROScalarColumn<casacore::Double> min_freq_col(freq_tab, "MIN_FREQ");
-  casacore::ROScalarColumn<casacore::Double> max_freq_col(freq_tab, "MAX_FREQ");
-  casacore::ROScalarColumn<casacore::Double> ref_freq_col(freq_tab, "REF_FREQ");
+  casacore::ROScalarColumn<double> min_freq_col(freq_tab, "MIN_FREQ");
+  casacore::ROScalarColumn<double> max_freq_col(freq_tab, "MAX_FREQ");
+  casacore::ROScalarColumn<double> ref_freq_col(freq_tab, "REF_FREQ");
 
   data->nantennas = antenna_tab.nrow();
   data->nbaselines = (data->nantennas) * (data->nantennas - 1) / 2;
@@ -509,9 +509,9 @@ __host__ void readMS(const char* MS_name,
 
   float max_wavelength = freq_to_wavelength(data->min_freq);
 
-  casacore::ROArrayColumn<casacore::Double> dishposition_col(antenna_tab,
+  casacore::ROArrayColumn<double> dishposition_col(antenna_tab,
                                                              "POSITION");
-  casacore::ROScalarColumn<casacore::Double> dishdiameter_col(antenna_tab,
+  casacore::ROScalarColumn<double> dishdiameter_col(antenna_tab,
                                                               "DISH_DIAMETER");
   casacore::ROScalarColumn<casacore::String> dishname_col(antenna_tab, "NAME");
   casacore::ROScalarColumn<casacore::String> dishstation_col(antenna_tab,
@@ -584,7 +584,7 @@ __host__ void readMS(const char* MS_name,
 
   data->n_internal_frequencies = spectral_window_tab.nrow();
 
-  casacore::ROArrayColumn<casacore::Float> chan_freq_col(spectral_window_tab,
+  casacore::ROArrayColumn<double> chan_freq_col(spectral_window_tab,
                                                           "CHAN_FREQ");
 
   casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
@@ -609,7 +609,7 @@ __host__ void readMS(const char* MS_name,
 
   for (int f = 0; f < data->nfields; f++) {
     for (int i = 0; i < data->n_internal_frequencies; i++) {
-      casacore::Vector<float> chan_freq_vector;
+      casacore::Vector<double> chan_freq_vector;
       chan_freq_vector = chan_freq_col(i);
       for (int j = 0; j < data->channels[i]; j++) {
         fields[f].nu.push_back(chan_freq_vector[j]);
@@ -837,16 +837,16 @@ __host__ void readMS(const char* MS_name,
   casacore::Table maxuv_metres_tab(
       casacore::tableCommand(maxuv_metres_query.c_str()));
 
-  casacore::ROScalarColumn<casacore::Double> max_blength_col(
+  casacore::ROScalarColumn<double> max_blength_col(
       maxmin_baseline_tab, "MAX_BLENGTH");
-  casacore::ROScalarColumn<casacore::Double> min_blength_col(
+  casacore::ROScalarColumn<double> min_blength_col(
       maxmin_baseline_tab, "MIN_BLENGTH");
-  casacore::ROScalarColumn<casacore::Double> maxuv_metres_col(maxuv_metres_tab,
+  casacore::ROScalarColumn<double> maxuv_metres_col(maxuv_metres_tab,
                                                               "MAXUV");
 
-  casacore::ROScalarColumn<casacore::Double> min_freq_col(freq_tab, "MIN_FREQ");
-  casacore::ROScalarColumn<casacore::Double> max_freq_col(freq_tab, "MAX_FREQ");
-  casacore::ROScalarColumn<casacore::Double> ref_freq_col(freq_tab, "REF_FREQ");
+  casacore::ROScalarColumn<double> min_freq_col(freq_tab, "MIN_FREQ");
+  casacore::ROScalarColumn<double> max_freq_col(freq_tab, "MAX_FREQ");
+  casacore::ROScalarColumn<double> ref_freq_col(freq_tab, "REF_FREQ");
 
   data->nantennas = antenna_tab.nrow();
   data->nbaselines = (data->nantennas) * (data->nantennas - 1) / 2;
@@ -859,9 +859,9 @@ __host__ void readMS(const char* MS_name,
 
   float max_wavelength = freq_to_wavelength(data->min_freq);
 
-  casacore::ROArrayColumn<casacore::Double> dishposition_col(antenna_tab,
+  casacore::ROArrayColumn<double> dishposition_col(antenna_tab,
                                                              "POSITION");
-  casacore::ROScalarColumn<casacore::Double> dishdiameter_col(antenna_tab,
+  casacore::ROScalarColumn<double> dishdiameter_col(antenna_tab,
                                                               "DISH_DIAMETER");
   casacore::ROScalarColumn<casacore::String> dishname_col(antenna_tab, "NAME");
   casacore::ROScalarColumn<casacore::String> dishstation_col(antenna_tab,
@@ -934,7 +934,7 @@ __host__ void readMS(const char* MS_name,
 
   data->n_internal_frequencies = spectral_window_tab.nrow();
 
-  casacore::ROArrayColumn<casacore::Float> chan_freq_col(spectral_window_tab,
+  casacore::ROArrayColumn<float> chan_freq_col(spectral_window_tab,
                                                           "CHAN_FREQ");
 
   casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
@@ -1114,7 +1114,8 @@ __host__ void MScopy(const char* in_dir, const char* in_dir_dest) {
 __host__ void modelToHost(std::vector<Field>& fields,
                           MSData data,
                           int num_gpus,
-                          int firstgpu) {
+                          int firstgpu,
+                          bool apply_hermitian_conjugation) {
   for (int f = 0; f < data.nfields; f++) {
     for (int i = 0; i < data.total_frequencies; i++) {
       cudaSetDevice((i % num_gpus) + firstgpu);
@@ -1125,11 +1126,17 @@ __host__ void modelToHost(std::vector<Field>& fields,
                        sizeof(cufftComplex) *
                            fields[f].numVisibilitiesPerFreqPerStoke[i][s],
                        cudaMemcpyDeviceToHost));
-        for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-             j++) {
-          if (fields[f].visibilities[i][s].uvw[j].x > 0) {
-            fields[f].visibilities[i][s].Vm[j] =
-                cuConjf(fields[f].visibilities[i][s].Vm[j]);
+        
+        // Apply conjugation only if Hermitian symmetry was applied to coordinates
+        // (e.g., via hermitianSymmetry kernel). If degriddingGPU was used, it already
+        // handles Hermitian symmetry internally, so no conjugation needed here.
+        if (apply_hermitian_conjugation) {
+          for (int j = 0; j < fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+               j++) {
+            if (fields[f].visibilities[i][s].uvw[j].x > 0) {
+              fields[f].visibilities[i][s].Vm[j] =
+                  cuConjf(fields[f].visibilities[i][s].Vm[j]);
+            }
           }
         }
       }

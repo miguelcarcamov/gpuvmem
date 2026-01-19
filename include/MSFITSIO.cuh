@@ -221,7 +221,8 @@ __host__ void MScopy(const char* in_dir, const char* in_dir_dest);
 __host__ void modelToHost(std::vector<Field>& fields,
                           MSData data,
                           int num_gpus,
-                          int firstgpu);
+                          int firstgpu,
+                          bool apply_hermitian_conjugation = true);
 __host__ void writeMS(const char* outfile,
                       const char* out_col,
                       std::vector<Field> fields,

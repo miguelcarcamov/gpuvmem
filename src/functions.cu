@@ -31,6 +31,7 @@
  * -------------------------------------------------------------------------
  */
 #include "functions.cuh"
+#include "pillBox2D.cuh"
 
 namespace cg = cooperative_groups;
 
@@ -1016,15 +1017,201 @@ __host__ float deviceMinReduce(float* in, long N, int input_threads) {
   return min;
 }
 
-__global__ void fftshift_2D(cufftComplex* data, int N1, int N2) {
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+// Device function: Proper fftshift using quadrant swapping
+// Works correctly for both even and odd dimensions
+// For even N: ceil(N/2) = N/2, swaps first N/2 with second N/2
+// For odd N: ceil(N/2) = (N+1)/2, swaps first (N+1)/2 with last (N-1)/2
+// fftshift swaps: Q1(top-left)↔Q3(bottom-right), Q2(top-right)↔Q4(bottom-left)
+__device__ __forceinline__ void fftshift_swap(cufftComplex* data, int i, int j, int N1, int N2) {
+  const int h2 = (N1 + 1) / 2;  // ceil(N1/2) for fftshift
+  const int w2 = (N2 + 1) / 2;  // ceil(N2/2) for fftshift
+
+  // Process only elements in first half to avoid double-swapping
+  if (i < h2) {
+    int i2 = i + (N1 - h2);  // Target row: shift by (N1 - ceil(N1/2))
+    // For even: N1 - N1/2 = N1/2, for odd: N1 - (N1+1)/2 = (N1-1)/2
+    
+    if (j < w2) {
+      // Top-left quadrant (Q1): swap with bottom-right (Q3)
+      int j2 = j + (N2 - w2);  // Target column: shift right by (N2 - w2)
+      if (i2 < N1 && j2 < N2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    } else if (j >= w2 && j < N2) {
+      // Top-right quadrant (Q2): swap with bottom-left (Q4)
+      int j2 = j - w2;  // Target column: shift left by w2
+      if (i2 < N1 && j2 >= 0 && j2 < w2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    }
+  }
+}
+
+// Device function: Proper ifftshift using quadrant swapping
+// Works correctly for both even and odd dimensions
+// For even N: floor(N/2) = N/2, swaps first N/2 with second N/2 (same as fftshift)
+// For odd N: floor(N/2) = (N-1)/2, swaps first (N-1)/2 with last (N+1)/2
+// ifftshift swaps: Q1(top-left)↔Q3(bottom-right), Q2(top-right)↔Q4(bottom-left)
+__device__ __forceinline__ void ifftshift_swap(cufftComplex* data, int i, int j, int N1, int N2) {
+  const int h2 = N1 / 2;  // floor(N1/2) for ifftshift
+  const int w2 = N2 / 2;  // floor(N2/2) for ifftshift
+
+  // Process only elements in first half to avoid double-swapping
+  if (i < h2) {
+    int i2 = i + (N1 - h2);  // Target row: shift by (N1 - floor(N1/2))
+    // For even: N1 - N1/2 = N1/2, for odd: N1 - (N1-1)/2 = (N1+1)/2
+    
+    if (j < w2) {
+      // Top-left quadrant (Q1): swap with bottom-right (Q3)
+      int j2 = j + (N2 - w2);  // Target column: shift right by (N2 - w2)
+      if (i2 < N1 && j2 < N2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    } else if (j >= w2 && j < N2) {
+      // Top-right quadrant (Q2): swap with bottom-left (Q4)
+      // For even N: w2 = N/2, so Q2 has j in [w2, N-1] = [N/2, N-1] (N/2 elements)
+      //            and Q4 has j in [0, w2-1] = [0, N/2-1] (N/2 elements)
+      //            They match perfectly, so j2 = j - w2 maps all of Q2 to Q4
+      // For odd N: Q2 has ceil(N/2) elements, Q4 has floor(N/2) elements
+      //            Only first floor(N/2) elements of Q2 swap with Q4
+      bool should_swap = true;
+      int j2 = j - w2;
+      
+      if (N2 % 2 != 0) {
+        // Odd N: only first w2 elements of Q2 swap with Q4
+        if (j >= w2 + w2) {
+          // Last element of Q2 (for odd N) doesn't swap with Q4, skip it
+          should_swap = false;
+        }
+      }
+      
+      if (should_swap && i2 < N1 && j2 >= 0 && j2 < w2) {
+        const int idx1 = N2 * i + j;
+        const int idx2 = N2 * i2 + j2;
+        if (idx1 != idx2) {
+          const cufftComplex tmp = data[idx1];
+          data[idx1] = data[idx2];
+          data[idx2] = tmp;
+        }
+      }
+    }
+  }
+}
+
+// Generic fftshift: uses quadrant swapping for all dimensions
+// For even dimensions, fftshift and ifftshift are identical
+// For odd dimensions, they differ by one sample
+// Optimized fftshift: computes target index directly (more efficient for even dimensions)
+// For even dimensions: shift by N/2, for odd: shift by ceil(N/2)
+__global__ void fftshift_2D(cufftComplex* __restrict__ data, int N1, int N2) {
+  const int i = blockIdx.y * blockDim.y + threadIdx.y;
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < N1 && j < N2) {
-    float a = 1 - 2 * ((i + j) & 1);
+    // Compute target indices directly (avoids quadrant checking overhead)
+    const int h2 = (N1 + 1) / 2;  // ceil(N1/2) for fftshift
+    const int w2 = (N2 + 1) / 2;  // ceil(N2/2) for fftshift
+    
+    // Only process first half to avoid double-swapping
+    if (i < h2) {
+      int i2 = i + (N1 - h2);  // Target row
+      
+      if (j < w2) {
+        // Q1 (top-left): swap with Q3 (bottom-right)
+        int j2 = j + (N2 - w2);  // Target column
+        if (i2 < N1 && j2 < N2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      } else if (j >= w2 && j < N2) {
+        // Q2 (top-right): swap with Q4 (bottom-left)
+        int j2 = j - w2;  // Target column
+        if (i2 < N1 && j2 >= 0 && j2 < w2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      }
+    }
+  }
+}
 
-    data[N2 * i + j].x *= a;
-    data[N2 * i + j].y *= a;
+// Optimized ifftshift: computes target index directly (more efficient for even dimensions)
+// For even dimensions: same as fftshift, for odd: shift by floor(N/2)
+__global__ void ifftshift_2D(cufftComplex* __restrict__ data, int N1, int N2) {
+  const int i = blockIdx.y * blockDim.y + threadIdx.y;
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (i < N1 && j < N2) {
+    // Compute target indices directly (avoids quadrant checking overhead)
+    const int h2 = N1 / 2;  // floor(N1/2) for ifftshift
+    const int w2 = N2 / 2;  // floor(N2/2) for ifftshift
+    
+    // Only process first half to avoid double-swapping
+    if (i < h2) {
+      int i2 = i + (N1 - h2);  // Target row
+      
+      if (j < w2) {
+        // Q1 (top-left): swap with Q3 (bottom-right)
+        int j2 = j + (N2 - w2);  // Target column
+        if (i2 < N1 && j2 < N2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      } else if (j >= w2 && j < N2) {
+        // Q2 (top-right): swap with Q4 (bottom-left)
+        // For even N: all of Q2 swaps; for odd N: only first w2 elements
+        bool should_swap = true;
+        int j2 = j - w2;
+        
+        if (N2 % 2 != 0 && j >= w2 + w2) {
+          // Odd N: skip last element of Q2
+          should_swap = false;
+        }
+        
+        if (should_swap && i2 < N1 && j2 >= 0 && j2 < w2) {
+          const int idx1 = N2 * i + j;
+          const int idx2 = N2 * i2 + j2;
+          if (idx1 != idx2) {
+            const cufftComplex tmp = data[idx1];
+            data[idx1] = data[idx2];
+            data[idx2] = tmp;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -1317,6 +1504,25 @@ __global__ void DFT2D(cufftComplex* Vm,
   }
 }
 
+/**
+ * Grids irregular visibilities from a measurement set onto a regular grid.
+ * 
+ * This function performs convolution gridding of visibility data:
+ * 1. Creates Hermitian symmetric visibilities (MS only contains half the data)
+ * 2. Converts UVW coordinates from meters to lambda units
+ * 3. Grids visibilities using a convolution kernel
+ * 4. Normalizes gridded visibilities and calculates effective weights
+ * 5. Extracts non-zero gridded visibilities back to sparse format
+ * 
+ * @param fields Vector of Field structures containing visibility data
+ * @param data MSData structure with measurement set metadata
+ * @param deltau Grid spacing in u direction (lambda units)
+ * @param deltav Grid spacing in v direction (lambda units)
+ * @param M Grid size in v direction (rows)
+ * @param N Grid size in u direction (columns)
+ * @param ckernel Convolution kernel for gridding
+ * @param gridding Number of OpenMP threads for parallel gridding
+ */
 __host__ void do_gridding(std::vector<Field>& fields,
                           MSData* data,
                           double deltau,
@@ -1325,44 +1531,62 @@ __host__ void do_gridding(std::vector<Field>& fields,
                           int N,
                           CKernel* ckernel,
                           int gridding) {
-  std::vector<float> g_weights(M * N);
-  std::vector<float> g_weights_aux(M * N);
-  std::vector<cufftComplex> g_Vo(M * N);
-  std::vector<double3> g_uvw(M * N);
+  // ========================================================================
+  // Initialize grid arrays (reused for each frequency/stokes combination)
+  // ========================================================================
+  std::vector<float> g_weights(M * N);           // Accumulated weights
+  std::vector<float> g_weights_aux(M * N);      // Sum of weight^2 (for effective weight calc)
+  std::vector<cufftComplex> g_Vo(M * N);         // Gridded visibilities
+  std::vector<double3> g_uvw(M * N);             // Grid UVW coordinates in meters
+  
+  // Zero-initialization constants
   cufftComplex complex_zero = floatComplexZero();
+  double3 double3_zero = {0.0, 0.0, 0.0};
 
-  double3 double3_zero;
-  double3_zero.x = 0.0;
-  double3_zero.y = 0.0;
-  double3_zero.z = 0.0;
-
+  // Track maximum number of visibilities across all channels/stokes
   int local_max = 0;
   int max = 0;
-  float pow2_factor, S2, w_avg;
 
-  /*
-     Private variables - parallel for loop
-   */
-  int j, k;
-  int grid_pos_x, grid_pos_y;
-  double3 uvw;
-  float w;
-  cufftComplex Vo;
-  int herm_j, herm_k;
-  int shifted_j, shifted_k;
-  int kernel_i, kernel_j;
-  int visCounterPerFreq = 0;
-  float ckernel_result = 1.0;
+  // ========================================================================
+  // Private variables for parallel gridding loop
+  // ========================================================================
+  double j_fp, k_fp;              // Floating-point grid coordinates
+  int j, k;                        // Integer grid pixel indices
+  double grid_pos_x, grid_pos_y;  // Grid positions in lambda units
+  double3 uvw;                     // UVW coordinates
+  float w;                         // Visibility weight
+  cufftComplex Vo;                 // Visibility value
+  int shifted_j, shifted_k;         // Shifted grid indices (for kernel convolution)
+  int kernel_i, kernel_j;          // Kernel array indices
+  int visCounterPerFreq = 0;       // Counter for visibilities per frequency
+  float ckernel_result = 1.0;     // Kernel value at current position
+  // ========================================================================
+  // Main loop: Process each field, frequency, and stokes parameter
+  // ========================================================================
+  // Pre-calculate constants that don't change per frequency/stokes
+  double center_j = floor(N / 2.0);
+  double center_k = floor(M / 2.0);
+  int support_x = ckernel->getSupportX();
+  int support_y = ckernel->getSupportY();
+  
   for (int f = 0; f < data->nfields; f++) {
     for (int i = 0; i < data->total_frequencies; i++) {
       visCounterPerFreq = 0;
+      
+      // Pre-calculate frequency-dependent constants (same for all stokes)
+      float freq = fields[f].nu[i];
+      float lambda = freq_to_wavelength(freq);
+      
       for (int s = 0; s < data->nstokes; s++) {
-        fields[f].backup_visibilities[i][s].uvw.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].backup_visibilities[i][s].Vo.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].backup_visibilities[i][s].weight.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+        // ====================================================================
+        // Step 1: Backup original visibility data before gridding
+        // ====================================================================
+        int num_visibilities = fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+        fields[f].backup_visibilities[i][s].uvw.resize(num_visibilities);
+        fields[f].backup_visibilities[i][s].Vo.resize(num_visibilities);
+        fields[f].backup_visibilities[i][s].weight.resize(num_visibilities);
+        
+        // Copy original data to backup
         fields[f].backup_visibilities[i][s].uvw.assign(
             fields[f].visibilities[i][s].uvw.begin(),
             fields[f].visibilities[i][s].uvw.end());
@@ -1372,178 +1596,246 @@ __host__ void do_gridding(std::vector<Field>& fields,
         fields[f].backup_visibilities[i][s].Vo.assign(
             fields[f].visibilities[i][s].Vo.begin(),
             fields[f].visibilities[i][s].Vo.end());
-#pragma omp parallel for schedule(static, 1) num_threads(gridding)          \
-    shared(g_weights, g_weights_aux, g_Vo) private(                         \
-            j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, shifted_j, shifted_k, \
-                kernel_i, kernel_j, herm_j, herm_k, ckernel_result) ordered
-        for (int z = 0; z < 2 * fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-             z++) {
-          // Loop here is done twice since dataset only has half of the data
-          int index = z;
-          if (z >= fields[f].numVisibilitiesPerFreqPerStoke[i][s])
-            index = z - fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+        
+        // ====================================================================
+        // Step 2: Grid visibilities using convolution kernel
+        // ====================================================================
+        // Process each visibility twice: once as-is, once as Hermitian symmetric
+        // (Measurement sets only contain half the data due to symmetry)
+#pragma omp parallel for schedule(static) num_threads(gridding) \
+    shared(g_weights, g_weights_aux, g_Vo, freq, center_j, center_k, \
+           support_x, support_y) private( \
+            j_fp, k_fp, j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, \
+            shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result)
+        for (int z = 0; z < 2 * num_visibilities; z++) {
+          // Determine which visibility to use (first half: original, second half: Hermitian)
+          int vis_index = (z < num_visibilities) ? z : (z - num_visibilities);
+          
+          // Load visibility data
+          uvw = fields[f].visibilities[i][s].uvw[vis_index];
+          w = fields[f].visibilities[i][s].weight[vis_index];
+          Vo = fields[f].visibilities[i][s].Vo[vis_index];
 
-          uvw = fields[f].visibilities[i][s].uvw[index];
-          w = fields[f].visibilities[i][s].weight[index];
-          Vo = fields[f].visibilities[i][s].Vo[index];
-
-          // The second half of the data must be the Hermitian symmetric
-          // visibilities
-          if (z >= fields[f].numVisibilitiesPerFreqPerStoke[i][s]) {
-            uvw.x *= -1.0;
-            uvw.y *= -1.0;
-            uvw.z *= -1.0;
-            Vo.y *= -1.0f;
+          // ================================================================
+          // Step 2a: Create Hermitian symmetric visibility for second half
+          // ================================================================
+          // For V(u,v): V*(-u,-v) = V*(u,v) where * denotes complex conjugate
+          if (z >= num_visibilities) {
+            uvw.x *= -1.0;  // Negate u coordinate
+            uvw.y *= -1.0;  // Negate v coordinate
+            uvw.z *= -1.0;  // Negate w coordinate
+            Vo.y *= -1.0f;  // Negate imaginary part (complex conjugate)
           }
 
-          // Visibilities from metres to klambda
-          uvw.x = metres_to_lambda(uvw.x, fields[f].nu[i]);
-          uvw.y = metres_to_lambda(uvw.y, fields[f].nu[i]);
-          uvw.z = metres_to_lambda(uvw.z, fields[f].nu[i]);
+          // ================================================================
+          // Step 2b: Convert UVW coordinates from meters to lambda units
+          // ================================================================
+          uvw.x = metres_to_lambda(uvw.x, freq);
+          uvw.y = metres_to_lambda(uvw.y, freq);
+          uvw.z = metres_to_lambda(uvw.z, freq);
 
-          grid_pos_x = uvw.x / deltau;
-          grid_pos_y = uvw.y / deltav;
-          j = grid_pos_x + int(floor(N / 2)) + 0.5;
-          k = grid_pos_y + int(floor(M / 2)) + 0.5;
+          // ================================================================
+          // Step 2c: Calculate grid pixel coordinates
+          // ================================================================
+          grid_pos_x = uvw.x / deltau;  // Grid position in u direction
+          grid_pos_y = uvw.y / deltav;  // Grid position in v direction
+          
+          // Center the grid: center pixel is at floor(N/2) for both even and odd N
+          // The +0.5 ensures proper rounding when converting to integer pixel index
+          j_fp = grid_pos_x + center_j + 0.5;
+          k_fp = grid_pos_y + center_k + 0.5;
+          j = int(j_fp);  // Column index in grid
+          k = int(k_fp);  // Row index in grid
 
-          for (int m = -ckernel->getSupportY(); m <= ckernel->getSupportY();
-               m++) {
-            for (int n = -ckernel->getSupportX(); n <= ckernel->getSupportX();
-                 n++) {
+          // ================================================================
+          // Step 2d: Apply convolution kernel to grid this visibility
+          // ================================================================
+          // The kernel spreads each visibility over neighboring grid pixels
+          for (int m = -support_y; m <= support_y; m++) {
+            for (int n = -support_x; n <= support_x; n++) {
+              // Calculate shifted grid position
               shifted_j = j + n;
               shifted_k = k + m;
-              kernel_j = n + ckernel->getSupportX();
-              kernel_i = m + ckernel->getSupportY();
-#pragma omp ordered
-              {
+              
+              // Calculate kernel array indices (kernel is centered at support)
+              kernel_j = n + support_x;
+              kernel_i = m + support_y;
+              
+              // Check bounds: grid must be valid AND kernel indices must be valid
+              if (shifted_k >= 0 && shifted_k < M && 
+                  shifted_j >= 0 && shifted_j < N && 
+                  kernel_i >= 0 && kernel_i < ckernel->getm() && 
+                  kernel_j >= 0 && kernel_j < ckernel->getn()) {
+                
+                // Get kernel value at this position
+                ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
+                
+                // Cache squared kernel value to avoid recomputation
+                float ckernel_result_sq = ckernel_result * ckernel_result;
+                
+                int grid_idx = N * shifted_k + shifted_j;
+                
+                // Use atomic operations for simple weight accumulations (faster than critical)
+#pragma omp atomic
+                g_weights[grid_idx] += w * ckernel_result;
+                
+#pragma omp atomic
+                g_weights_aux[grid_idx] += w * ckernel_result_sq;
+                
+                // Critical section only for complex number updates (g_Vo)
+                // Complex numbers require synchronized updates of both real and imaginary parts
 #pragma omp critical
                 {
-                  if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 &&
-                      shifted_j < N) {
-                    ckernel_result =
-                        ckernel->getKernelValue(kernel_i, kernel_j);
-                    g_Vo[N * shifted_k + shifted_j].x +=
-                        w * Vo.x * ckernel_result;
-                    g_Vo[N * shifted_k + shifted_j].y +=
-                        w * Vo.y * ckernel_result;
-                    g_weights[N * shifted_k + shifted_j] += w * ckernel_result;
-                    g_weights_aux[N * shifted_k + shifted_j] +=
-                        w * ckernel_result * ckernel_result;
-                  }
+                  g_Vo[grid_idx].x += w * Vo.x * ckernel_result;
+                  g_Vo[grid_idx].y += w * Vo.y * ckernel_result;
                 }
               }
             }
           }
         }
 
-// fitsOutputCufftComplex(g_Vo.data(), mod_in, "gridfft_beforedividing.fits",
-// "./", 0, 1.0, M, N, 0, false); OFITS(g_weights.data(), mod_in, "./",
-// "weights_grid_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
-// OFITS(g_weights_aux.data(), mod_in, "./",
-// "weights_grid_aux_beforedividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N, false);
-//  Normalize visibilities and weights
-#pragma omp parallel for schedule(static, 1) \
-    shared(g_weights, g_weights_aux, g_Vo, g_uvw)
-        for (int k = 0; k < M; k++) {
-          for (int j = 0; j < N; j++) {
-            double u_lambdas = (j - int(floor(N / 2))) * deltau;
-            double v_lambdas = (k - int(floor(M / 2))) * deltav;
-
-            double u_meters = u_lambdas * freq_to_wavelength(data->max_freq);
-            double v_meters = v_lambdas * freq_to_wavelength(data->max_freq);
-
-            g_uvw[N * k + j].x = u_meters;
-            g_uvw[N * k + j].y = v_meters;
-            float ws = g_weights[N * k + j];
-            float aux_ws = g_weights_aux[N * k + j];
-            float weight;
+        // ====================================================================
+        // Step 3: Normalize gridded visibilities and calculate effective weights
+        // ====================================================================
+        // Convert grid coordinates from lambda back to meters and normalize
+#pragma omp parallel for schedule(static) \
+    shared(g_weights, g_weights_aux, g_Vo, g_uvw, lambda, center_j, center_k)
+        for (int grid_k = 0; grid_k < M; grid_k++) {
+          for (int grid_j = 0; grid_j < N; grid_j++) {
+            int grid_idx = N * grid_k + grid_j;
+            
+            // ================================================================
+            // Step 3a: Calculate UVW coordinates in meters for this grid cell
+            // ================================================================
+            // Use same centering formula as forward calculation
+            double u_lambdas = (grid_j - center_j) * deltau;
+            double v_lambdas = (grid_k - center_k) * deltav;
+            
+            // Convert from lambda units back to meters using the frequency for this channel
+            double u_meters = u_lambdas * lambda;
+            double v_meters = v_lambdas * lambda;
+            
+            g_uvw[grid_idx].x = u_meters;
+            g_uvw[grid_idx].y = v_meters;
+            
+            // ================================================================
+            // Step 3b: Normalize visibilities and calculate effective weights
+            // ================================================================
+            float ws = g_weights[grid_idx];           // Sum of weights: Σ(w * kernel)
+            float aux_ws = g_weights_aux[grid_idx];   // Sum of weight^2: Σ(w * kernel^2)
+            
             if (aux_ws != 0.0f && ws != 0.0f) {
-              weight = ws * ws / aux_ws;
-              g_Vo[N * k + j].x /= ws;
-              g_Vo[N * k + j].y /= ws;
-              g_weights[N * k + j] = weight;
+              // Effective weight accounts for kernel convolution:
+              //   weight_eff = (Σ w_i * k_i)^2 / Σ (w_i * k_i)^2
+              // This gives the equivalent weight if all visibilities were at the same point
+              float weight_eff = ws * ws / aux_ws;
+              
+              // Normalize visibility: divide by accumulated weight sum
+              // This gives the weighted average visibility at this grid point
+              g_Vo[grid_idx].x /= ws;
+              g_Vo[grid_idx].y /= ws;
+              
+              // Store effective weight
+              g_weights[grid_idx] = weight_eff;
             } else {
-              g_weights[N * k + j] = 0.0f;
+              // No valid data at this grid point (no visibilities contributed)
+              g_weights[grid_idx] = 0.0f;
+              g_Vo[grid_idx].x = 0.0f;
+              g_Vo[grid_idx].y = 0.0f;
             }
           }
         }
 
-        // The following lines are to create images with the resulting (u,v)
-        // grid and weights
-        // fitsOutputCufftComplex(g_Vo.data(), mod_in,
-        // "gridfft_afterdividing.fits", "./", 0, 1.0, M, N, 0, false);
-        // OFITS(g_weights.data(), mod_in, "./",
-        // "weights_grid_afterdividing.fits", "JY/PIXEL", 0, 0, 1.0f, M, N,
-        // false);
-
-        // We already know that in quadrants < N/2 there are only zeros
-        // Therefore, we start j from N/2
+        // ====================================================================
+        // Step 4: Extract non-zero gridded visibilities back to sparse format
+        // ====================================================================
+        // Count how many grid cells have valid (non-zero) visibilities
         int visCounter = 0;
-#pragma omp parallel for shared(g_weights) reduction(+ : visCounter)
-        for (int k = 0; k < M; k++) {
-          for (int j = 0; j < N; j++) {
-            float weight = g_weights[N * k + j];
-            if (weight > 0.0f) {
+#pragma omp parallel for schedule(static) shared(g_weights) reduction(+ : visCounter)
+        for (int grid_k = 0; grid_k < M; grid_k++) {
+          for (int grid_j = 0; grid_j < N; grid_j++) {
+            int grid_idx = N * grid_k + grid_j;
+            if (g_weights[grid_idx] > 0.0f) {
               visCounter++;
             }
           }
         }
 
+        // Resize output arrays to hold only non-zero visibilities
         fields[f].visibilities[i][s].uvw.resize(visCounter);
         fields[f].visibilities[i][s].Vo.resize(visCounter);
-
         fields[f].visibilities[i][s].Vm.resize(visCounter);
-        memset(&fields[f].visibilities[i][s].Vm[0], 0,
-               fields[f].visibilities[i][s].Vm.size() * sizeof(cufftComplex));
-
         fields[f].visibilities[i][s].weight.resize(visCounter);
+        
+        // Initialize Vm (model visibilities) to zero
+        if (visCounter > 0) {
+          memset(&fields[f].visibilities[i][s].Vm[0], 0,
+                 visCounter * sizeof(cufftComplex));
+        }
 
-        int l = 0;
-        float weight;
-        for (int k = 0; k < M; k++) {
-          for (int j = 0; j < N; j++) {
-            weight = g_weights[N * k + j];
+        // Copy non-zero gridded visibilities to output arrays
+        int output_idx = 0;
+        for (int grid_k = 0; grid_k < M; grid_k++) {
+          for (int grid_j = 0; grid_j < N; grid_j++) {
+            int grid_idx = N * grid_k + grid_j;
+            float weight = g_weights[grid_idx];
+            
             if (weight > 0.0f) {
-              fields[f].visibilities[i][s].uvw[l].x = g_uvw[N * k + j].x;
-              fields[f].visibilities[i][s].uvw[l].y = g_uvw[N * k + j].y;
-              fields[f].visibilities[i][s].uvw[l].z = 0.0;
-              fields[f].visibilities[i][s].Vo[l] =
-                  make_cuFloatComplex(g_Vo[N * k + j].x, g_Vo[N * k + j].y);
-              fields[f].visibilities[i][s].weight[l] = g_weights[N * k + j];
-              l++;
+              // Copy UVW coordinates (w is set to 0 for gridded data)
+              fields[f].visibilities[i][s].uvw[output_idx].x = g_uvw[grid_idx].x;
+              fields[f].visibilities[i][s].uvw[output_idx].y = g_uvw[grid_idx].y;
+              fields[f].visibilities[i][s].uvw[output_idx].z = 0.0;
+              
+              // Copy normalized visibility
+              fields[f].visibilities[i][s].Vo[output_idx] =
+                  make_cuFloatComplex(g_Vo[grid_idx].x, g_Vo[grid_idx].y);
+              
+              // Copy effective weight
+              fields[f].visibilities[i][s].weight[output_idx] = weight;
+              
+              output_idx++;
             }
           }
         }
 
+        // ====================================================================
+        // Step 5: Update visibility counts and backup
+        // ====================================================================
+        // Backup old count before updating
         fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s] =
             fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-
-        if (fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-          fields[f].numVisibilitiesPerFreqPerStoke[i][s] = visCounter;
+        
+        // Update to actual gridded visibility count
+        fields[f].numVisibilitiesPerFreqPerStoke[i][s] = visCounter;
+        if (visCounter > 0) {
           visCounterPerFreq += visCounter;
-        } else {
-          fields[f].numVisibilitiesPerFreqPerStoke[i][s] = 0;
         }
 
+        // ====================================================================
+        // Step 6: Clear grid arrays for next stokes parameter
+        // ====================================================================
         std::fill_n(g_weights_aux.begin(), M * N, 0.0f);
         std::fill_n(g_weights.begin(), M * N, 0.0f);
         std::fill_n(g_uvw.begin(), M * N, double3_zero);
         std::fill_n(g_Vo.begin(), M * N, complex_zero);
-      }
+      }  // End stokes loop
 
-      local_max =
-          *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
-                            fields[f].numVisibilitiesPerFreqPerStoke[i].end());
+      // Track maximum number of visibilities across all stokes for this frequency
+      local_max = *std::max_element(
+          fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
+          fields[f].numVisibilitiesPerFreqPerStoke[i].end());
       if (local_max > max) {
         max = local_max;
       }
 
+      // Update total visibilities per frequency
       fields[f].backup_numVisibilitiesPerFreq[i] =
           fields[f].numVisibilitiesPerFreq[i];
       fields[f].numVisibilitiesPerFreq[i] = visCounterPerFreq;
-    }
-  }
+    }  // End frequency loop
+  }  // End field loop
 
+  // Store global maximum across all fields/frequencies/stokes
   data->max_number_visibilities_in_channel_and_stokes = max;
 }
 
@@ -1554,17 +1846,27 @@ __host__ void calc_sBeam(std::vector<double3> uvw,
                          double* s_vv,
                          double* s_uv) {
   double u_lambda, v_lambda;
-#pragma omp parallel for shared(uvw, weight) private(u_lambda, v_lambda)
+  double local_s_uu = 0.0;
+  double local_s_vv = 0.0;
+  double local_s_uv = 0.0;
+  
+  // Use reduction for efficient parallel accumulation
+#pragma omp parallel for shared(uvw, weight) private(u_lambda, v_lambda) \
+    reduction(+ : local_s_uu, local_s_vv, local_s_uv)
   for (int i = 0; i < uvw.size(); i++) {
     u_lambda = metres_to_lambda(uvw[i].x, nu);
     v_lambda = metres_to_lambda(uvw[i].y, nu);
-#pragma omp critical
-    {
-      *s_uu += u_lambda * u_lambda * weight[i];
-      *s_vv += v_lambda * v_lambda * weight[i];
-      *s_uv += u_lambda * v_lambda * weight[i];
-    }
+    
+    // Accumulate into reduction variables (no synchronization needed)
+    local_s_uu += u_lambda * u_lambda * weight[i];
+    local_s_vv += v_lambda * v_lambda * weight[i];
+    local_s_uv += u_lambda * v_lambda * weight[i];
   }
+  
+  // Update output pointers after parallel reduction
+  *s_uu += local_s_uu;
+  *s_vv += local_s_vv;
+  *s_uv += local_s_uv;
 }
 
 __host__ double3 calc_beamSize(double s_uu, double s_vv, double s_uv) {
@@ -1715,24 +2017,57 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
 
   std::fill_n(Vm_gridded.begin(), M * N, complex_zero);
 
+  double center_j = floor(N / 2.0);
+  double center_k = floor(M / 2.0);
+  
+  // Parallelize the loop with protection against race conditions
+  // In theory, each visibility maps to a unique grid cell, but floating-point
+  // rounding could cause collisions, so we protect the write with a critical section
   int j, k;
-  int grid_pos_x, grid_pos_y;
+  double grid_pos_x, grid_pos_y;
+#pragma omp parallel for schedule(static) \
+    shared(Vm_gridded, uvw_gridded_sp, Vm_gridded_sp, deltau_meters, deltav_meters, \
+          center_j, center_k, M, N) \
+    private(j, k, grid_pos_x, grid_pos_y)
   for (int i = 0; i < numvis; i++) {
     grid_pos_x = uvw_gridded_sp[i].x / deltau_meters;
     grid_pos_y = uvw_gridded_sp[i].y / deltav_meters;
-    j = grid_pos_x + int(floor(N / 2));
-    k = grid_pos_y + int(floor(M / 2));
-    Vm_gridded[N * k + j] = Vm_gridded_sp[i];
+    // Match the gridding coordinate calculation exactly:
+    // j_fp = grid_pos_x + center_j + 0.5; j = int(j_fp)
+    j = int(grid_pos_x + center_j + 0.5);
+    k = int(grid_pos_y + center_k + 0.5);
+    if (j >= 0 && j < N && k >= 0 && k < M) {
+      // Critical section protects against potential collisions (should be rare)
+      // Each visibility should map to a unique grid cell after gridding
+#pragma omp critical
+      {
+        Vm_gridded[N * k + j] = Vm_gridded_sp[i];
+      }
+    }
   }
 }
 
-__host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
-                                          MSData data,
-                                          int num_gpus,
-                                          int firstgpu,
-                                          int blockSizeV) {
-  int local_max = 0;
-  int max = 0;
+__host__ void degridding(std::vector<Field>& fields,
+                         MSData data,
+                         double deltau,
+                         double deltav,
+                         int num_gpus,
+                         int firstgpu,
+                         int blockSizeV,
+                         long M,
+                         long N,
+                         CKernel* ckernel,
+                         float* I,
+                         VirtualImageProcessor* ip,
+                         MSDataset& dataset) {
+  long UVpow2;
+  bool fft_shift = true; // fft_shift=false (DC at corner 0,0)
+
+  // Instead of using sparse gridded model visibilities (computed with bilinear
+  // interpolation), we recompute the FFT of the final image for each
+  // frequency/channel and use the full grid directly. This is more accurate than
+  // reconstructing from sparse samples.
+
   for (int f = 0; f < data.nfields; f++) {
 #pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
     for (int i = 0; i < data.total_frequencies; i++) {
@@ -1743,9 +2078,21 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
       int gpu_id = -1;
       cudaGetDevice(&gpu_id);
 
-      for (int s = 0; s < data.nstokes; s++) {
-        // Now the number of visibilities will be the original one.
+      // Compute visibility grid from image using common pipeline
+      // Use shift=true to move DC component to center, matching the gridding
+      // coordinate system which uses center_j = floor(N/2.0)
+      if (dataset.antennas.size() > 0) {
+        computeImageToVisibilityGrid(
+            I, ip, vars_gpu, gpu_idx, M, N, fields[f].nu[i],
+            fields[f].ref_xobs_pix, fields[f].ref_yobs_pix,
+            fields[f].phs_xobs_pix, fields[f].phs_yobs_pix,
+            dataset.antennas[0].antenna_diameter, dataset.antennas[0].pb_factor,
+            dataset.antennas[0].pb_cutoff, dataset.antennas[0].primary_beam,
+            1.0f, ckernel, fft_shift);
+      }
 
+      for (int s = 0; s < data.nstokes; s++) {
+        // Now the number of visibilities will be the original one (restore from backup)
         fields[f].numVisibilitiesPerFreqPerStoke[i][s] =
             fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
 
@@ -1754,7 +2101,7 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
         fields[f].visibilities[i][s].weight.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].visibilities[i][s].Vm.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s], floatComplexZero());
+            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
         fields[f].visibilities[i][s].Vo.resize(
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
@@ -1791,163 +2138,8 @@ __host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
             fields[f].backup_visibilities[i][s].Vo.begin(),
             fields[f].backup_visibilities[i][s].Vo.end());
 
-        // Copy original (u,v) positions and weights to host and device
-
-        fields[f].visibilities[i][s].uvw.assign(
-            fields[f].backup_visibilities[i][s].uvw.begin(),
-            fields[f].backup_visibilities[i][s].uvw.end());
-
-        fields[f].visibilities[i][s].weight.assign(
-            fields[f].backup_visibilities[i][s].weight.begin(),
-            fields[f].backup_visibilities[i][s].weight.end());
-
-        checkCudaErrors(cudaMemcpy(
-            fields[f].device_visibilities[i][s].uvw,
-            fields[f].visibilities[i][s].uvw.data(),
-            sizeof(double3) * fields[f].visibilities[i][s].uvw.size(),
-            cudaMemcpyHostToDevice));
-        checkCudaErrors(cudaMemcpy(
-            fields[f].device_visibilities[i][s].Vo,
-            fields[f].visibilities[i][s].Vo.data(),
-            sizeof(cufftComplex) * fields[f].visibilities[i][s].Vo.size(),
-            cudaMemcpyHostToDevice));
-        checkCudaErrors(cudaMemcpy(
-            fields[f].device_visibilities[i][s].weight,
-            fields[f].visibilities[i][s].weight.data(),
-            sizeof(float) * fields[f].visibilities[i][s].weight.size(),
-            cudaMemcpyHostToDevice));
-
-        long UVpow2 =
-            NearestPowerOf2(fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        if (blockSizeV == -1) {
-          int threads1D, blocks1D;
-          int threadsV, blocksV;
-          threads1D = 512;
-          blocks1D = iDivUp(UVpow2, threads1D);
-          getNumBlocksAndThreads(UVpow2, blocks1D, threads1D, blocksV, threadsV,
-                                 false);
-          fields[f].device_visibilities[i][s].threadsPerBlockUV = threadsV;
-          fields[f].device_visibilities[i][s].numBlocksUV = blocksV;
-        } else {
-          fields[f].device_visibilities[i][s].threadsPerBlockUV = blockSizeV;
-          fields[f].device_visibilities[i][s].numBlocksUV =
-              iDivUp(UVpow2, blockSizeV);
-        }
-
-        hermitianSymmetry<<<
-            fields[f].device_visibilities[i][s].numBlocksUV,
-            fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
-            fields[f].device_visibilities[i][s].uvw,
-            fields[f].device_visibilities[i][s].Vo, fields[f].nu[i],
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        checkCudaErrors(cudaDeviceSynchronize());
-      }
-    }
-  }
-
-  for (int f = 0; f < data.nfields; f++) {
-    for (int i = 0; i < data.total_frequencies; i++) {
-      local_max =
-          *std::max_element(fields[f].numVisibilitiesPerFreqPerStoke[i].begin(),
-                            fields[f].numVisibilitiesPerFreqPerStoke[i].end());
-      if (local_max > max) {
-        max = local_max;
-      }
-    }
-  }
-
-  data.max_number_visibilities_in_channel_and_stokes = max;
-  max_number_vis = max;
-
-  for (int g = 0; g < num_gpus; g++) {
-    cudaSetDevice((g % num_gpus) + firstgpu);
-    checkCudaErrors(
-        cudaMalloc(&vars_gpu[g].device_chi2, sizeof(float) * max_number_vis));
-    checkCudaErrors(
-        cudaMemset(vars_gpu[g].device_chi2, 0, sizeof(float) * max_number_vis));
-  }
-
-  cudaSetDevice(firstgpu);
-}
-
-__host__ void degridding(std::vector<Field>& fields,
-                         MSData data,
-                         double deltau,
-                         double deltav,
-                         int num_gpus,
-                         int firstgpu,
-                         int blockSizeV,
-                         long M,
-                         long N,
-                         CKernel* ckernel) {
-  long UVpow2;
-
-  modelToHost(fields, data, num_gpus, firstgpu);
-
-  std::vector<std::vector<cufftComplex>> gridded_visibilities(
-      num_gpus, std::vector<cufftComplex>(M * N));
-
-  for (int f = 0; f < data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
-    for (int i = 0; i < data.total_frequencies; i++) {
-      unsigned int j = omp_get_thread_num();
-      unsigned int num_cpu_threads = omp_get_num_threads();
-      int gpu_idx = i % num_gpus;
-      cudaSetDevice(gpu_idx + firstgpu);
-      int gpu_id = -1;
-      cudaGetDevice(&gpu_id);
-
-      for (int s = 0; s < data.nstokes; s++) {
-        // Put gridded visibilities in a M*N grid
-        griddedTogrid(
-            gridded_visibilities[gpu_idx], fields[f].visibilities[i][s].Vm,
-            fields[f].visibilities[i][s].uvw, deltau, deltav, fields[f].nu[i],
-            M, N, fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        /*
-        Model visibilities and original (u,v) positions to GPU.
-        */
-        // Now the number of visibilities will be the original one.
-        fields[f].numVisibilitiesPerFreqPerStoke[i][s] =
-            fields[f].backup_numVisibilitiesPerFreqPerStoke[i][s];
-
-        fields[f].visibilities[i][s].uvw.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].visibilities[i][s].weight.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].visibilities[i][s].Vm.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        fields[f].visibilities[i][s].Vo.resize(
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-
-        checkCudaErrors(
-            cudaMalloc(&fields[f].device_visibilities[i][s].Vm,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(
-            cudaMemset(fields[f].device_visibilities[i][s].Vm, 0,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-
-        checkCudaErrors(cudaMalloc(
-            &fields[f].device_visibilities[i][s].uvw,
-            sizeof(double3) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(
-            cudaMalloc(&fields[f].device_visibilities[i][s].Vo,
-                       sizeof(cufftComplex) *
-                           fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        checkCudaErrors(cudaMalloc(
-            &fields[f].device_visibilities[i][s].weight,
-            sizeof(float) * fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-
-        // Copy original Vo visibilities to host
-        fields[f].visibilities[i][s].Vo.assign(
-            fields[f].backup_visibilities[i][s].Vo.begin(),
-            fields[f].backup_visibilities[i][s].Vo.end());
-
-        // Copy gridded model visibilities to device
-        checkCudaErrors(cudaMemcpy(
-            vars_gpu[gpu_idx].device_V, gridded_visibilities[gpu_idx].data(),
-            sizeof(cufftComplex) * M * N, cudaMemcpyHostToDevice));
+        // Note: vars_gpu[gpu_idx].device_V already contains the full FFT grid
+        // (computed above), so we don't need to copy from gridded_visibilities
 
         // Copy original (u,v) positions and weights to host and device
 
@@ -1993,31 +2185,30 @@ __host__ void degridding(std::vector<Field>& fields,
               blockSizeV);
         }
 
-        /*hermitianSymmetry<<<
-            fields[f].device_visibilities[i][s].numBlocksUV,
-            fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
+        // Convert UVW coordinates from meters to lambda units (required for degriddingGPU)
+        // We use a simple conversion that doesn't apply Hermitian symmetry because:
+        // 1. We want to sample at original coordinates (from backup)
+        // 2. degriddingGPU handles Hermitian symmetry when accessing the grid
+        // 3. MSFITSIO will handle conjugation when writing (if u > 0)
+        convertUVWToLambda<<<fields[f].device_visibilities[i][s].numBlocksUV,
+                             fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
             fields[f].device_visibilities[i][s].uvw,
-            fields[f].device_visibilities[i][s].Vo, fields[f].nu[i],
+            fields[f].nu[i],
             fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-        checkCudaErrors(cudaDeviceSynchronize());*/
+        checkCudaErrors(cudaDeviceSynchronize());
 
-        // Interpolation / Degridding
-        vis_mod2<<<fields[f].device_visibilities[i][s].numBlocksUV,
-                   fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
-            fields[f].device_visibilities[i][s].Vm, vars_gpu[gpu_idx].device_V,
+        // Degridding: Use proper convolution kernel degridding (works for both
+        // 1x1 PillBox and larger kernels). For 1x1 PillBox, support=0 so it
+        // reduces to nearest neighbor, matching the gridding procedure exactly.
+        degriddingGPU<<<fields[f].device_visibilities[i][s].numBlocksUV,
+                        fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
             fields[f].device_visibilities[i][s].uvw,
-            fields[f].device_visibilities[i][s].weight, deltau, deltav,
-            fields[f].numVisibilitiesPerFreqPerStoke[i][s], N,
-            (float)(N / 2.0));
-        // degriddingGPU<<< fields[f].device_visibilities[i][s].numBlocksUV,
-        //             fields[f].device_visibilities[i][s].threadsPerBlockUV
-        //             >>>(fields[f].device_visibilities[i][s].uvw,
-        //             fields[f].device_visibilities[i][s].Vm,
-        //             vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
-        //             deltau, deltav,
-        //             fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N,
-        //             ckernel->getm(), ckernel->getn(), ckernel->getSupportX(),
-        //             ckernel->getSupportY());
+            fields[f].device_visibilities[i][s].Vm,
+            vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
+            deltau, deltav,
+            fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N,
+            ckernel->getm(), ckernel->getn(), ckernel->getSupportX(),
+            ckernel->getSupportY());
         checkCudaErrors(cudaDeviceSynchronize());
       }
     }
@@ -2035,6 +2226,54 @@ __host__ void initFFT(varsPerGPU* vars_gpu,
   }
 }
 
+// Helper function to compute visibility grid from image (common pipeline)
+// This encapsulates the repeated pattern: calculateInu -> apply_beam -> apply_GCF -> FFT2D -> phase_rotate
+__host__ void computeImageToVisibilityGrid(
+    float* I,
+    VirtualImageProcessor* ip,
+    varsPerGPU* vars_gpu,
+    int gpu_idx,
+    long M,
+    long N,
+    float nu,
+    float ref_xobs_pix,
+    float ref_yobs_pix,
+    float phs_xobs_pix,
+    float phs_yobs_pix,
+    float antenna_diameter,
+    float pb_factor,
+    float pb_cutoff,
+    int primary_beam,
+    float fg_scale,
+    CKernel* ckernel,
+    bool fft_shift) {
+  // Recompute FFT of final image for this frequency/channel
+  ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I, nu);
+
+  // Apply primary beam
+  ip->apply_beam(vars_gpu[gpu_idx].device_I_nu, antenna_diameter, pb_factor,
+                 pb_cutoff, ref_xobs_pix, ref_yobs_pix, nu, primary_beam,
+                 fg_scale);
+
+  // Apply Gridding Correction Function (GCF) if using convolution kernel
+  if (ckernel != NULL && ckernel->getGCFGPU() != NULL) {
+    apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
+        vars_gpu[gpu_idx].device_I_nu, ckernel->getGCFGPU(), N);
+    checkCudaErrors(cudaDeviceSynchronize());
+  }
+
+  // FFT 2D: Transform image to visibility grid
+  FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
+        vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, fft_shift);
+
+  // Phase rotate to correct phase center
+  // Pass fft_shift as dc_at_center since they match (fft_shift=true means DC at center)
+  // Pass crpix1 and crpix2 from FITS header (already declared as extern)
+  phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
+      vars_gpu[gpu_idx].device_V, M, N, phs_xobs_pix, phs_yobs_pix, crpix1, crpix2, fft_shift);
+  checkCudaErrors(cudaDeviceSynchronize());
+}
+
 __host__ void FFT2D(cufftComplex* output_data,
                     cufftComplex* input_data,
                     cufftHandle plan,
@@ -2043,7 +2282,11 @@ __host__ void FFT2D(cufftComplex* output_data,
                     int direction,
                     bool shift) {
   if (shift) {
-    fftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(input_data, M, N);
+    // Before FFT/IFFT: use ifftshift to move DC from center to (0,0)
+    // cuFFT expects DC component at (0,0) for proper FFT computation
+    // This is the same for both CUFFT_FORWARD and CUFFT_INVERSE
+    // In-place operation on input_data
+    ifftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(input_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
   }
 
@@ -2055,6 +2298,10 @@ __host__ void FFT2D(cufftComplex* output_data,
   // after FFT2D calls in the calling code.
 
   if (shift) {
+    // After FFT/IFFT: use fftshift to move DC from (0,0) to center
+    // cuFFT always outputs with DC at (0,0) regardless of direction (FORWARD/INVERSE)
+    // We restore DC to center to match our gridding coordinate system (center_j = floor(N/2.0))
+    // In-place operation on output_data
     fftshift_2D<<<numBlocksNN, threadsPerBlockNN>>>(output_data, M, N);
     checkCudaErrors(cudaDeviceSynchronize());
   }
@@ -2076,13 +2323,23 @@ __global__ void do_griddingGPU(float3* uvw,
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int k, j;
   if (i < visibilities) {
-    j = uvw[i].x / deltau + int(floorf(M / 2)) + 0.5;
-    k = uvw[i].y / deltav + int(floorf(N / 2)) + 0.5;
+    // Precompute center values once
+    const double center_j = floor(M / 2.0);
+    const double center_k = floor(N / 2.0);
+    
+    // Use __ldg for read-only cached access to input data
+    const float3 uvw_val = uvw[i];  // float3 is 12 bytes, __ldg doesn't apply but compiler may optimize
+    const cufftComplex Vo_val = __ldg(&Vo[i]);
+    const float w_val = __ldg(&w[i]);
+    
+    j = (int)(uvw_val.x / deltau + center_j + 0.5);
+    k = (int)(uvw_val.y / deltav + center_k + 0.5);
 
     if (k < M && j < N) {
-      atomicAdd(&Vo_g[N * k + j].x, w[i] * Vo[i].x);
-      atomicAdd(&Vo_g[N * k + j].y, w[i] * Vo[i].y);
-      atomicAdd(&w_g[N * k + j], w[i]);
+      const int grid_idx = N * k + j;
+      atomicAdd(&Vo_g[grid_idx].x, w_val * Vo_val.x);
+      atomicAdd(&Vo_g[grid_idx].y, w_val * Vo_val.y);
+      atomicAdd(&w_g[grid_idx], w_val);
     }
   }
 }
@@ -2109,8 +2366,15 @@ __global__ void degriddingGPU(double3* uvw,
   float ckernel_result;
 
   if (i < visibilities) {
-    j = uvw[i].x / deltau + int(floorf(N / 2)) + 0.5;
-    k = uvw[i].y / deltav + int(floorf(M / 2)) + 0.5;
+    // Match gridding coordinate calculation exactly:
+    // grid_pos = uvw / deltau, j = int(grid_pos + center + 0.5)
+    // Use double precision for center calculation to match gridding
+    double center_j = floor(N / 2.0);
+    double center_k = floor(M / 2.0);
+    double grid_pos_x = uvw[i].x / deltau;
+    double grid_pos_y = uvw[i].y / deltav;
+    j = int(grid_pos_x + center_j + 0.5);
+    k = int(grid_pos_y + center_k + 0.5);
 
     for (int m = -supportY; m <= supportY; m++) {
       for (int n = -supportX; n <= supportX; n++) {
@@ -2118,17 +2382,28 @@ __global__ void degriddingGPU(double3* uvw,
         shifted_k = k + m;
         kernel_j = n + supportX;
         kernel_i = m + supportY;
-        if (shifted_k >= 0 && shifted_k < M && shifted_j >= 0 &&
-            shifted_j < N) {
-          ckernel_result = kernel[kernel_n * kernel_i + kernel_j];
-          if (shifted_j >= N / 2) {
-            degrid_val.x += ckernel_result * Vm_g[N * shifted_k + shifted_j].x;
-            degrid_val.y += ckernel_result * Vm_g[N * shifted_k + shifted_j].y;
+        // Check bounds: grid must be valid AND kernel indices must be valid
+        if (shifted_k >= 0 && shifted_k < M && 
+            shifted_j >= 0 && shifted_j < N &&
+            kernel_i >= 0 && kernel_i < kernel_m &&
+            kernel_j >= 0 && kernel_j < kernel_n) {
+          // Use __ldg for read-only cached access to kernel (read-only)
+          ckernel_result = __ldg(&kernel[kernel_n * kernel_i + kernel_j]);
+          // Determine if we're on positive u side (j >= center) or negative u side (j < center)
+          // Use center_j comparison for consistency with gridding
+          if (shifted_j >= (int)center_j) {
+            // Positive u side (or center): access grid directly with __ldg (read-only)
+            const cufftComplex grid_val = __ldg(&Vm_g[N * shifted_k + shifted_j]);
+            degrid_val.x += ckernel_result * grid_val.x;
+            degrid_val.y += ckernel_result * grid_val.y;
           } else {
+            // Negative u side: use Hermitian symmetry
+            // Access grid at symmetric position (N-shifted_j, M-shifted_k) and conjugate
             herm_j = N - shifted_j;
             herm_k = M - shifted_k;
-            degrid_val.x += ckernel_result * Vm_g[N * herm_k + herm_j].x;
-            degrid_val.y -= ckernel_result * Vm_g[N * herm_k + herm_j].y;
+            const cufftComplex grid_val = __ldg(&Vm_g[N * herm_k + herm_j]);
+            degrid_val.x += ckernel_result * grid_val.x;
+            degrid_val.y -= ckernel_result * grid_val.y;
           }
         }
       }
@@ -2138,19 +2413,32 @@ __global__ void degriddingGPU(double3* uvw,
   }
 }
 
-__global__ void hermitianSymmetry(double3* UVW,
-                                  cufftComplex* Vo,
-                                  float freq,
-                                  int numVisibilities) {
+
+// Apply Hermitian symmetry only (flip u,v,w and conjugate visibility when u > 0)
+// Hermitian symmetry: V(u,v,w) = V*(-u,-v,-w)* where * denotes complex conjugate
+// Does NOT convert to lambda units - use convertUVWToLambda separately
+__global__ void applyHermitianSymmetry(double3* UVW,
+                                       cufftComplex* Vo,
+                                       int numVisibilities) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
     if (UVW[i].x > 0.0) {
-      UVW[i].x *= -1.0;
-      UVW[i].y *= -1.0;
-      // UVW[i].z *= -1.0;
-      Vo[i].y *= -1.0f;
+      UVW[i].x *= -1.0;  // Negate u coordinate
+      UVW[i].y *= -1.0;  // Negate v coordinate
+      UVW[i].z *= -1.0;  // Negate w coordinate (for consistency with gridding)
+      Vo[i].y *= -1.0f;  // Conjugate: flip imaginary part
     }
+  }
+}
+
+// Convert UVW coordinates from meters to lambda units without applying Hermitian symmetry
+__global__ void convertUVWToLambda(double3* UVW,
+                                   float freq,
+                                   int numVisibilities) {
+  const int i = threadIdx.x + blockDim.x * blockIdx.x;
+
+  if (i < numVisibilities) {
     UVW[i].x = metres_to_lambda(UVW[i].x, freq);
     UVW[i].y = metres_to_lambda(UVW[i].y, freq);
     UVW[i].z = metres_to_lambda(UVW[i].z, freq);
@@ -2361,184 +2649,270 @@ __global__ void apply_GCF(cufftComplex* __restrict__ image,
 }
 
 /*--------------------------------------------------------------------
+ * Device functions for phase rotation
+ *--------------------------------------------------------------------*/
+
+// Compute frequencies and relative phase coordinates for DC at center case
+__device__ void computeFrequenciesAndPhaseCenter(int j, int k, long M, long N,
+                                                  double xphs, double yphs,
+                                                  double crpix1, double crpix2,
+                                                  double& u_freq, double& v_freq,
+                                                  double& xphs_relative, double& yphs_relative) {
+  // DC at center: frequencies are centered after fftshift
+  // Frequencies: [-N/2, ..., -1, 0, 1, ..., N/2-1] / N
+  // Use actual center pixel from FITS header (crpix1, crpix2)
+  // FITS uses 1-indexed coordinates, so subtract 1 to get 0-indexed
+  const double center_j = crpix1 - 1.0;  // Column center (u direction, width N)
+  const double center_k = crpix2 - 1.0;  // Row center (v direction, height M)
+  
+  // u frequencies (column direction, width N) - u maps to j (columns)
+  u_freq = ((double)j - center_j) / (double)N;
+  
+  // v frequencies (row direction, height M) - v maps to k (rows)
+  v_freq = ((double)k - center_k) / (double)M;
+  
+  // FFT grid center is at (crpix1-1, crpix2-1), so convert from absolute to relative to center
+  xphs_relative = xphs - center_j;  // Convert to cartesian (relative to FFT grid center)
+  yphs_relative = yphs - center_k;
+}
+
+// Compute frequencies and relative phase coordinates for DC at corner case
+__device__ void computeFrequenciesAndPhaseCorner(int j, int k, long M, long N,
+                                                  double xphs, double yphs,
+                                                  double& u_freq, double& v_freq,
+                                                  double& xphs_relative, double& yphs_relative) {
+  // DC at corner: frequencies go from 0 to N-1 (standard fftfreq)
+  // u frequencies (column direction)
+  if (j < (N + 1) / 2) {
+    u_freq = (double)j / (double)N;  // Positive frequencies
+  } else {
+    u_freq = ((double)j - (double)N) / (double)N;  // Negative frequencies
+  }
+  
+  // v frequencies (row direction)
+  if (k < (M + 1) / 2) {
+    v_freq = (double)k / (double)M;  // Positive frequencies
+  } else {
+    v_freq = ((double)k - (double)M) / (double)M;  // Negative frequencies
+  }
+  
+  // FFT grid corner is at (0, 0), so coordinates are already relative to corner
+  xphs_relative = xphs;  // Already relative to corner (0,0)
+  yphs_relative = yphs;
+}
+
+/*--------------------------------------------------------------------
  * Phase rotate the visibility data in "image" to refer phase to point
  * (x,y) instead of (0,0).
- * Multiply pixel V(i,j) by exp(2 pi i (x/ni + y/nj))
+ * Multiply pixel V(i,j) by exp(-2 pi i (x/ni + y/nj))
  *--------------------------------------------------------------------*/
 __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
-                             double yphs) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+                             double yphs,
+                             double crpix1,
+                             double crpix2,
+                             bool dc_at_center) {
+  // cuFFT uses row-major layout: data[N * row + column]
+  // Match gridding convention: j = column (u direction), k = row (v direction)
+  // Array indexing: V[N * row + column] = V[N * k + j]
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;  // Column index (u direction)
+  const int k = threadIdx.y + blockDim.y * blockIdx.y;  // Row index (v direction)
 
-  float u, v, phase, c, s;
-  double upix = xphs / (double)M;
-  double vpix = yphs / (double)N;
-  cufftComplex exp_phase;
-
-  if (j < M / 2) {
-    u = upix * j;
-  } else {
-    u = upix * (j - M);
-  }
-
-  if (i < N / 2) {
-    v = vpix * i;
-  } else {
-    v = vpix * (i - N);
-  }
-
-  phase = -2.0f * (u + v);
-#if (__CUDA_ARCH__ >= 300)
-  sincospif(phase, &s, &c);
-#else
-  c = cospif(phase);
-  s = sinpif(phase);
-#endif
-  exp_phase = make_cuFloatComplex(c, s);  // Create the complex cos + i sin
-  data[N * i + j] =
-      cuCmulf(data[N * i + j], exp_phase);  // Complex multiplication
-}
-
-__global__ void getGriddedVisFromPix(cufftComplex* Vm,
-                                     cufftComplex* V,
-                                     double3* UVW,
-                                     float* weight,
-                                     double deltau,
-                                     double deltav,
-                                     long numVisibilities,
-                                     long N) {
-  const int i = threadIdx.x + blockDim.x * blockIdx.x;
-  int i1, j1;
-  double du, dv;
-  double2 uv;
-
-  if (i < numVisibilities) {
-    uv.x = UVW[i].x / deltau;
-    uv.y = UVW[i].y / deltav;
-
-    if (uv.x < 0.0)
-      uv.x += N;
-
-    if (uv.y < 0.0)
-      uv.y += N;
-
-    j1 = uv.x;
-    i1 = uv.y;
-
-    if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N)
-      Vm[i] = V[N * i1 + j1];
-    else
-      weight[i] = 0.0f;
-  }
-}
-
-/*
- * Interpolate in the visibility array to find the visibility at (u,v);
- * Optimized version using regular global memory with __ldg()
- */
-__global__ void vis_mod(cufftComplex* __restrict__ Vm,
-                        const cufftComplex* __restrict__ V,
-                        const double3* __restrict__ UVW,
-                        float* __restrict__ weight,
-                        const double deltau,
-                        const double deltav,
-                        const long numVisibilities,
-                        const long N) {
-  const int i = threadIdx.x + blockDim.x * blockIdx.x;
-
-  if (i < numVisibilities) {
-    // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
-    const double3 uvw = UVW[i];
-    double uv_x = uvw.x / deltau;
-    double uv_y = uvw.y / deltav;
-
-    // Handle negative coordinates
-    if (uv_x < 0.0)
-      uv_x += N;
-    if (uv_y < 0.0)
-      uv_y += N;
-
-    const int i1 = __double2int_rd(uv_x);
-    const int i2 = (i1 + 1) % N;
-    const double du = uv_x - i1;
-
-    const int j1 = __double2int_rd(uv_y);
-    const int j2 = (j1 + 1) % N;
-    const double dv = uv_y - j1;
-
-    // Optimized boundary check (i2 and j2 are always valid due to modulo)
-    if (i1 >= 0 && i1 < N && j1 >= 0 && j1 < N) {
-      // Use regular global memory with __ldg for read-only cached access
-      const cufftComplex v11 = __ldg(&V[N * j1 + i1]);
-      const cufftComplex v12 = __ldg(&V[N * j2 + i1]);
-      const cufftComplex v21 = __ldg(&V[N * j1 + i2]);
-      const cufftComplex v22 = __ldg(&V[N * j2 + i2]);
-
-      // Optimized bilinear interpolation (factor out common terms)
-      const float w11 = (1.0f - du) * (1.0f - dv);
-      const float w12 = (1.0f - du) * dv;
-      const float w21 = du * (1.0f - dv);
-      const float w22 = du * dv;
-
-      const float Zreal = w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
-      const float Zimag = w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
-
-      Vm[i] = make_cuFloatComplex(Zreal, Zimag);
+  if (j < N && k < M) {
+    double u_freq, v_freq;
+    double xphs_relative, yphs_relative;
+    
+    if (dc_at_center) {
+      computeFrequenciesAndPhaseCenter(j, k, M, N, xphs, yphs, crpix1, crpix2,
+                                       u_freq, v_freq, xphs_relative, yphs_relative);
     } else {
-      weight[i] = 0.0f;
+      computeFrequenciesAndPhaseCorner(j, k, M, N, xphs, yphs,
+                                      u_freq, v_freq, xphs_relative, yphs_relative);
     }
+    
+    double phase = -2.0 * CUDART_PI * (u_freq * xphs_relative + v_freq * yphs_relative);
+    
+    float c, s;
+#if (__CUDA_ARCH__ >= 300)
+    sincosf((float)phase, &s, &c);
+#else
+    c = cosf((float)phase);
+    s = sinf((float)phase);
+#endif
+    cufftComplex exp_phase = make_cuFloatComplex(c, s);  // e^(-2πi*(u*x0 + v*y0))
+    // Array indexing matches cuFFT and gridding: V[N * row + column] = V[N * k + j]
+    data[N * k + j] = cuCmulf(data[N * k + j], exp_phase);  // Complex multiplication
   }
 }
 
+/*--------------------------------------------------------------------
+ * Device functions for bilinear interpolation
+ *--------------------------------------------------------------------*/
+
+// Bilinear interpolation for DC at center case
+__device__ bool interpolateVisibilityCenter(
+    const double3& uvw,
+    const double deltau,
+    const double deltav,
+    const long M,
+    const long N,
+    const cufftComplex* __restrict__ V,
+    cufftComplex& result) {
+  // DC at center: standard bilinear interpolation
+  // Use floor(N/2.0) and floor(M/2.0) to match gridding coordinate system
+  // IMPORTANT: Match gridding convention: j = column (u), k = row (v)
+  const double center_j = floor(N / 2.0);  // Column center (u direction, width N)
+  const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
+  
+  // Standard bilinear interpolation: continuous coordinate without +0.5
+  // The +0.5 is only for rounding to nearest pixel (used in gridding), not for interpolation
+  // Match Python implementation: u_pix = u/deltau + center (no +0.5 for bilinear)
+  // Match gridding: j = column (u), k = row (v)
+  double grid_pos_x = uvw.x / deltau;  // u -> j (column)
+  double grid_pos_y = uvw.y / deltav;  // v -> k (row)
+  
+  // Continuous coordinate in grid space (centered) - NO +0.5 for bilinear interpolation
+  // Gridding uses +0.5 for rounding to nearest pixel center, but for bilinear interpolation
+  // we need to interpolate between pixel centers (at integer positions), so we use floor
+  double j_cont = grid_pos_x + center_j;  // Column (u direction) - continuous coordinate
+  double k_cont = grid_pos_y + center_k;  // Row (v direction) - continuous coordinate
+  
+  // Get integer parts using floor (standard bilinear interpolation)
+  // Note: floor gives us the lower-left corner of the interpolation cell
+  int j1 = __double2int_rd(j_cont);  // Column index (u) - floor
+  int j2 = j1 + 1;
+  double du = j_cont - j1;  // Fractional part for interpolation
+
+  int i1 = __double2int_rd(k_cont);  // Row index (v) - using i1 for row to match array indexing
+  int i2 = i1 + 1;
+  double dv = k_cont - i1;  // Fractional part for interpolation
+
+  // Check all boundaries explicitly (no wrapping)
+  // Note: j1, j2 are column indices (u), i1, i2 are row indices (v)
+  // Array indexing must match gridding: V[N * row + column] = V[N * k + j] = V[N * i + j]
+  // where i = row (v direction), j = column (u direction)
+  // For bilinear interpolation, we need all four corners to be valid
+  // Allow i1, j1 to be -1 (for coordinates just below 0 after centering)
+  // but ensure i2, j2 are within bounds
+  if (j1 >= -1 && j1 < N && i1 >= -1 && i1 < M && j2 >= 0 && j2 < N &&
+      i2 >= 0 && i2 < M) {
+    // Clamp negative indices to 0 for array access
+    int j1_safe = (j1 < 0) ? 0 : j1;
+    int i1_safe = (i1 < 0) ? 0 : i1;
+    // Use regular global memory with __ldg for read-only cached access
+    // Array layout matches gridding: V[N * row + column] = V[N * i + j]
+    // where i = row index (v), j = column index (u)
+    // Use safe indices to handle edge cases where i1 or j1 might be -1
+    const cufftComplex v11 = __ldg(&V[N * i1_safe + j1_safe]);  // (i1, j1) = (row, column)
+    const cufftComplex v12 = __ldg(&V[N * i1_safe + j2]);  // (i1, j2)
+    const cufftComplex v21 = __ldg(&V[N * i2 + j1_safe]);  // (i2, j1)
+    const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
+
+    // Optimized bilinear interpolation weights
+    const float w11 = (1.0f - du) * (1.0f - dv);
+    const float w12 = du * (1.0f - dv);
+    const float w21 = (1.0f - du) * dv;
+    const float w22 = du * dv;
+
+    result = make_cuFloatComplex(
+        w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
+        w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
+    return true;
+  }
+  return false;
+}
+
+// Bilinear interpolation for DC at corner case
+__device__ bool interpolateVisibilityCorner(
+    const double3& uvw,
+    const double deltau,
+    const double deltav,
+    const long M,
+    const long N,
+    const cufftComplex* __restrict__ V,
+    cufftComplex& result) {
+  // DC at corner: handle negative coordinates with wrapping
+  // Match gridding convention: j = column (u), k = row (v)
+  double grid_pos_x = uvw.x / deltau;  // u -> j (column)
+  double grid_pos_y = uvw.y / deltav;  // v -> k (row)
+
+  // Handle negative coordinates by wrapping
+  if (grid_pos_x < 0.0)
+    grid_pos_x += N;  // Wrap u (columns, width N)
+  if (grid_pos_y < 0.0)
+    grid_pos_y += M;  // Wrap v (rows, height M)
+
+  // Get integer parts (floor)
+  int j1 = __double2int_rd(grid_pos_x);  // Column index (u)
+  int j2 = (j1 + 1) % N;  // Wrap around for columns
+  double du = grid_pos_x - j1;  // Fractional part
+
+  int i1 = __double2int_rd(grid_pos_y);  // Row index (v) - using i1 for row
+  int i2 = (i1 + 1) % M;  // Wrap around for rows (height M)
+  double dv = grid_pos_y - i1;  // Fractional part
+
+  // Boundary check: j1, j2 are columns (u), i1, i2 are rows (v)
+  // Array indexing must match gridding: V[N * row + column] = V[N * i + j]
+  // where i = row (v direction, height M), j = column (u direction, width N)
+  if (j1 >= 0 && j1 < N && i1 >= 0 && i1 < M) {
+    // Use regular global memory with __ldg for read-only cached access
+    // Note: i2 and j2 are wrapped, so they're always in range due to modulo
+    const cufftComplex v11 = __ldg(&V[N * i1 + j1]);  // (i1, j1) = (row, column)
+    const cufftComplex v12 = __ldg(&V[N * i1 + j2]);  // (i1, j2)
+    const cufftComplex v21 = __ldg(&V[N * i2 + j1]);  // (i2, j1)
+    const cufftComplex v22 = __ldg(&V[N * i2 + j2]);  // (i2, j2)
+
+    // Optimized bilinear interpolation weights (same as dc_at_center path)
+    const float w11 = (1.0f - du) * (1.0f - dv);  // Weight for (i1, j1) = lower-left
+    const float w12 = du * (1.0f - dv);           // Weight for (i1, j2) = lower-right
+    const float w21 = (1.0f - du) * dv;           // Weight for (i2, j1) = upper-left
+    const float w22 = du * dv;                     // Weight for (i2, j2) = upper-right
+
+    const float Zreal =
+        w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x;
+    const float Zimag =
+        w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y;
+
+    result = make_cuFloatComplex(Zreal, Zimag);
+    return true;
+  }
+  return false;
+}
+
 /*
- * Interpolate in the visibility array to find the visibility at (u,v);
- * Optimized version using regular global memory with __ldg()
+ * Bilinear interpolation of visibilities from gridded visibility plane
+ * dc_at_center: true if DC component is at center (N/2, M/2), false if at corner (0,0)
+ * This unified function replaces vis_mod (DC at corner) and vis_mod2 (DC at center)
  */
-__global__ void vis_mod2(cufftComplex* __restrict__ Vm,
-                         const cufftComplex* __restrict__ V,
-                         const double3* __restrict__ UVW,
-                         float* __restrict__ weight,
-                         const double deltau,
-                         const double deltav,
-                         const long numVisibilities,
-                         const long N,
-                         const float N_half) {  // Precomputed N/2
+__global__ void bilinearInterpolateVisibility(
+    cufftComplex* __restrict__ Vm,
+    const cufftComplex* __restrict__ V,
+    const double3* __restrict__ UVW,
+    float* __restrict__ weight,
+    const double deltau,
+    const double deltav,
+    const long numVisibilities,
+    const long M,
+    const long N,
+    const bool dc_at_center) {
   const int i = threadIdx.x + blockDim.x * blockIdx.x;
 
   if (i < numVisibilities) {
     // Load UVW once (double3 is 64-bit, so __ldg doesn't apply)
     const double3 uvw = UVW[i];
-    double f_j = uvw.x / deltau + N_half;
-    double f_k = uvw.y / deltav + N_half;
+    cufftComplex result;
+    bool success;
 
-    const int j1 = __double2int_rd(f_j);
-    const int j2 = j1 + 1;
-    f_j = f_j - j1;
+    if (dc_at_center) {
+      success = interpolateVisibilityCenter(uvw, deltau, deltav, M, N, V, result);
+    } else {
+      success = interpolateVisibilityCorner(uvw, deltau, deltav, M, N, V, result);
+    }
 
-    const int k1 = __double2int_rd(f_k);
-    const int k2 = k1 + 1;
-    f_k = f_k - k1;
-
-    if (j1 >= 0 && j1 < N && k1 >= 0 && k1 < N && j2 >= 0 && j2 < N &&
-        k2 >= 0 && k2 < N) {
-      // Use regular global memory with __ldg for read-only cached access
-      const cufftComplex v11 = __ldg(&V[N * k1 + j1]);
-      const cufftComplex v12 = __ldg(&V[N * k1 + j2]);
-      const cufftComplex v21 = __ldg(&V[N * k2 + j1]);
-      const cufftComplex v22 = __ldg(&V[N * k2 + j2]);
-
-      // Optimized bilinear interpolation weights
-      const float w11 = (1.0f - f_j) * (1.0f - f_k);
-      const float w12 = f_j * (1.0f - f_k);
-      const float w21 = (1.0f - f_j) * f_k;
-      const float w22 = f_j * f_k;
-
-      Vm[i] = make_cuFloatComplex(
-          w11 * v11.x + w12 * v12.x + w21 * v21.x + w22 * v22.x,
-          w11 * v11.y + w12 * v12.y + w21 * v21.y + w22 * v22.y);
+    if (success) {
+      Vm[i] = result;
     } else {
       weight[i] = 0.0f;
     }
@@ -4077,141 +4451,38 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
 }
 
 __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
-  cudaSetDevice(firstgpu);
-
-  float resultchi2 = 0.0f;
-
-  ip->clipWNoise(I);
-
-  for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) \
-    reduction(+ : resultchi2)
-      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-        float result = 0.0;
-        unsigned int j = omp_get_thread_num();
-        unsigned int num_cpu_threads = omp_get_num_threads();
-        int gpu_idx = i % num_gpus;
-        cudaSetDevice(gpu_idx + firstgpu);
-        int gpu_id = -1;
-        cudaGetDevice(&gpu_id);
-
-        ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I,
-                         datasets[d].fields[f].nu[i]);
-
-        ip->apply_beam(vars_gpu[gpu_idx].device_I_nu,
-                       datasets[d].antennas[0].antenna_diameter,
-                       datasets[d].antennas[0].pb_factor,
-                       datasets[d].antennas[0].pb_cutoff,
-                       datasets[d].fields[f].ref_xobs_pix,
-                       datasets[d].fields[f].ref_yobs_pix,
-                       datasets[d].fields[f].nu[i],
-                       datasets[d].antennas[0].primary_beam, fg_scale);
-
-        if (NULL != ip->getCKernel()) {
-          apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
-              vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
-          checkCudaErrors(cudaDeviceSynchronize());
-        }
-        // FFT 2D
-        FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
-              vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, false);
-
-        // PHASE_ROTATE
-        phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-            vars_gpu[gpu_idx].device_V, M, N,
-            datasets[d].fields[f].phs_xobs_pix,
-            datasets[d].fields[f].phs_yobs_pix);
-        checkCudaErrors(cudaDeviceSynchronize());
-
-        // Texture memory removed - using regular global memory with __ldg()
-        // instead
-
-        for (int s = 0; s < datasets[d].data.nstokes; s++) {
-          if (datasets[d].data.corr_type[s] == LL ||
-              datasets[d].data.corr_type[s] == RR ||
-              datasets[d].data.corr_type[s] == XX ||
-              datasets[d].data.corr_type[s] == YY) {
-            if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] >
-                0) {
-              checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
-                                         sizeof(float) * max_number_vis));
-
-              // TODO: Here we could just use vis_mod and see what happens
-              // Use always bilinear interpolation since we don't have
-              // degridding yet
-              vis_mod<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  vars_gpu[gpu_idx].device_V,
-                  datasets[d].fields[f].device_visibilities[i][s].uvw,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  deltau, deltav,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  N);
-              checkCudaErrors(cudaDeviceSynchronize());
-
-              // RESIDUAL CALCULATION
-              residual<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vr,
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  datasets[d].fields[f].device_visibilities[i][s].Vo,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-              checkCudaErrors(cudaDeviceSynchronize());
-
-              ////chi2 VECTOR
-              chi2Vector<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  vars_gpu[gpu_idx].device_chi2,
-                  datasets[d].fields[f].device_visibilities[i][s].Vr,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-              checkCudaErrors(cudaDeviceSynchronize());
-
-              result = deviceReduce<float>(
-                  vars_gpu[gpu_idx].device_chi2,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV);
-              // REDUCTIONS
-              // chi2
-              resultchi2 +=
-                  result /
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-            }
-          }
-        }
-      }
-    }
-  }
-
-  cudaSetDevice(firstgpu);
-
-  return 0.5f * resultchi2;
-};
+  // simulate is equivalent to chi2 with normalize=true
+  return chi2(I, ip, true, fg_scale);
+}
 
 __host__ float chi2(float* I,
                     VirtualImageProcessor* ip,
                     bool normalize,
                     float fg_scale) {
+
+  bool fft_shift = true; // fft_shift=false (DC at corner 0,0)
   cudaSetDevice(firstgpu);
 
   float reduced_chi2 = 0.0f;
+
+  // Create static 1x1 PillBox kernel for degridding when gridding is enabled
+  // This kernel is used to sample the model visibility grid at original visibility locations
+  // We use 1x1 PillBox (nearest neighbor) instead of the gridding kernel to avoid
+  // double-applying the convolution kernel
+  static PillBox2D* degrid_kernel = NULL;
+  static bool degrid_kernel_initialized = false;
+  
+  // Check if gridding is enabled and initialize degrid kernel if needed
+  CKernel* ckernel = ip->getCKernel();
+  bool use_gridding = (ckernel != NULL && ckernel->getGPUKernel() != NULL);
+  
+  if (use_gridding && !degrid_kernel_initialized) {
+    degrid_kernel = new PillBox2D(1, 1);  // 1x1 PillBox for nearest neighbor sampling
+    degrid_kernel->setGPUID(firstgpu);  // Set GPU ID to ensure kernel is created on correct device
+    degrid_kernel->setSigmas(fabs(deltau), fabs(deltav));  // Set sigmas (not critical for 1x1)
+    degrid_kernel->buildKernel();  // Build and normalize the 1x1 kernel (value = 1.0)
+    degrid_kernel_initialized = true;
+  }
 
   ip->clipWNoise(I);
 
@@ -4228,33 +4499,19 @@ __host__ float chi2(float* I,
         int gpu_id = -1;
         cudaGetDevice(&gpu_id);
 
-        ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I,
-                         datasets[d].fields[f].nu[i]);
-
-        ip->apply_beam(vars_gpu[gpu_idx].device_I_nu,
-                       datasets[d].antennas[0].antenna_diameter,
-                       datasets[d].antennas[0].pb_factor,
-                       datasets[d].antennas[0].pb_cutoff,
-                       datasets[d].fields[f].ref_xobs_pix,
-                       datasets[d].fields[f].ref_yobs_pix,
-                       datasets[d].fields[f].nu[i],
-                       datasets[d].antennas[0].primary_beam, fg_scale);
-
-        if (NULL != ip->getCKernel()) {
-          apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(
-              vars_gpu[gpu_idx].device_I_nu, ip->getCKernel()->getGCFGPU(), N);
-          checkCudaErrors(cudaDeviceSynchronize());
-        }
-        // FFT 2D
-        FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
-              vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, false);
-
-        // PHASE_ROTATE
-        phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-            vars_gpu[gpu_idx].device_V, M, N,
+        // Compute visibility grid from image using common pipeline
+        // Use fft_shift=false (DC at corner 0,0) for testing
+        computeImageToVisibilityGrid(
+            I, ip, vars_gpu, gpu_idx, M, N, datasets[d].fields[f].nu[i],
+            datasets[d].fields[f].ref_xobs_pix,
+            datasets[d].fields[f].ref_yobs_pix,
             datasets[d].fields[f].phs_xobs_pix,
-            datasets[d].fields[f].phs_yobs_pix);
-        checkCudaErrors(cudaDeviceSynchronize());
+            datasets[d].fields[f].phs_yobs_pix,
+            datasets[d].antennas[0].antenna_diameter,
+            datasets[d].antennas[0].pb_factor,
+            datasets[d].antennas[0].pb_cutoff,
+            datasets[d].antennas[0].primary_beam, fg_scale,
+            ip->getCKernel(), fft_shift);  // fft_shift=false (DC at corner 0,0)
 
         // Texture memory removed - using regular global memory with __ldg()
         // instead
@@ -4269,22 +4526,43 @@ __host__ float chi2(float* I,
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                          sizeof(float) * max_number_vis));
 
-              // Use always bilinear interpolation since we don't have
-              // degridding yet
-              vis_mod<<<
-                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                  datasets[d]
-                      .fields[f]
-                      .device_visibilities[i][s]
-                      .threadsPerBlockUV>>>(
-                  datasets[d].fields[f].device_visibilities[i][s].Vm,
-                  vars_gpu[gpu_idx].device_V,
-                  datasets[d].fields[f].device_visibilities[i][s].uvw,
-                  datasets[d].fields[f].device_visibilities[i][s].weight,
-                  deltau, deltav,
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                  N);
-              checkCudaErrors(cudaDeviceSynchronize());
+              if (use_gridding) {
+                // Gridding enabled: use degridding with 1x1 PillBox kernel
+                // We use 1x1 PillBox (nearest neighbor) instead of the gridding kernel
+                // because the gridding kernel was already applied during gridding.
+                // For chi2, we just need to sample the model grid at original visibility locations.
+
+                // Degridding: Use 1x1 PillBox kernel for nearest neighbor sampling
+                degriddingGPU<<<datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                               datasets[d]
+                                   .fields[f]
+                                   .device_visibilities[i][s]
+                                   .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V, degrid_kernel->getGPUKernel(),
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s], M, N,
+                    degrid_kernel->getm(), degrid_kernel->getn(), 
+                    degrid_kernel->getSupportX(), degrid_kernel->getSupportY());
+                checkCudaErrors(cudaDeviceSynchronize());
+              } else {
+                // Gridding disabled: use bilinear interpolation
+                bilinearInterpolateVisibility<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    datasets[d].fields[f].device_visibilities[i][s].Vm,
+                    vars_gpu[gpu_idx].device_V,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    deltau, deltav,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    M, N, fft_shift);  // dc_at_center=false (DC at corner 0,0, matching fft_shift=false)
+                checkCudaErrors(cudaDeviceSynchronize());
+              }
 
               // RESIDUAL CALCULATION
               residual<<<

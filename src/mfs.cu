@@ -828,7 +828,8 @@ void MFS::setDevice() {
 
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-            hermitianSymmetry<<<
+            // Step 1: Apply Hermitian symmetry (flip u,v and conjugate visibility when u > 0)
+            applyHermitianSymmetry<<<
                 datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                 datasets[d]
                     .fields[f]
@@ -836,6 +837,17 @@ void MFS::setDevice() {
                     .threadsPerBlockUV>>>(
                 datasets[d].fields[f].device_visibilities[i][s].uvw,
                 datasets[d].fields[f].device_visibilities[i][s].Vo,
+                datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+            checkCudaErrors(cudaDeviceSynchronize());
+            
+            // Step 2: Convert UVW coordinates from meters to lambda units
+            convertUVWToLambda<<<
+                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                datasets[d]
+                    .fields[f]
+                    .device_visibilities[i][s]
+                    .threadsPerBlockUV>>>(
+                datasets[d].fields[f].device_visibilities[i][s].uvw,
                 datasets[d].fields[f].nu[i],
                 datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
             checkCudaErrors(cudaDeviceSynchronize());
@@ -1127,21 +1139,40 @@ void MFS::writeResiduals() {
         "Visibilities are gridded, we will need to de-grid to save them in a "
         "Measurement Set File\n");
     // In the de-gridding procedure weights are also restored to the original
-    for (int d = 0; d < nMeasurementSets; d++) {
-      /*degridding(datasets[d].fields, datasets[d].data, deltau, deltav,
-         num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel);*/
-      getOriginalVisibilitiesBack(datasets[d].fields, datasets[d].data,
-                                  num_gpus, firstgpu, variables.blockSizeV);
+    // Create ImageProcessor for degridding (needed to recompute FFT from final image)
+    ImageProcessor* ip = new ImageProcessor();
+    ip->configure(image_count);
+    if (this->ckernel != NULL) {
+      ip->setCKernel(this->ckernel);
     }
+    
+    for (int d = 0; d < nMeasurementSets; d++) {
+      // Use new degridding function that recomputes FFT from final image
+      // This is more accurate than bilinear interpolation
+      degridding(datasets[d].fields, datasets[d].data, deltau, deltav,
+                 num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel,
+                 image->getImage(), ip, datasets[d]);
+    }
+    
+    // Clean up ImageProcessor
+    delete ip;
+    
     Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
     float res = chi2->calcFi(image->getImage());
     printf(
-        "Non-gridded chi2 after de-gridding using bilinear interpolation %f\n",
+        "Non-gridded chi2 after de-gridding using convolution kernel %f\n",
         res);
   }
 
-  for (int d = 0; d < nMeasurementSets; d++)
-    modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu);
+  for (int d = 0; d < nMeasurementSets; d++) {
+    // When using degridding (gridding=true), degriddingGPU handles Hermitian symmetry
+    // internally, so we don't need to conjugate in modelToHost
+    // When using getOriginalVisibilitiesBack (old path), hermitianSymmetry kernel
+    // was applied, so we need to conjugate when u > 0
+    bool apply_conjugation = !this->gridding;  // Only conjugate if NOT using new degridding
+    modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu,
+                apply_conjugation);
+  }
 
   printf("Saving residuals and model to MS...\n");
   for (int d = 0; d < nMeasurementSets; d++) {

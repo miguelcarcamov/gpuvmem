@@ -96,11 +96,6 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
                             long M,
                             long N,
                             int numvis);
-__host__ void getOriginalVisibilitiesBack(std::vector<Field>& fields,
-                                          MSData data,
-                                          int num_gpus,
-                                          int firstgpu,
-                                          int blockSizeV);
 __host__ void degridding(std::vector<Field>& fields,
                          MSData data,
                          double deltau,
@@ -110,7 +105,10 @@ __host__ void degridding(std::vector<Field>& fields,
                          int blockSizeV,
                          long M,
                          long N,
-                         CKernel* ckernel);
+                         CKernel* ckernel,
+                         float* I,
+                         VirtualImageProcessor* ip,
+                         MSDataset& dataset);
 __host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets,
                                      int* total_visibilities,
                                      int blockSizeV,
@@ -130,6 +128,27 @@ __host__ void initFFT(varsPerGPU* vars_gpu,
                       long N,
                       int firstgpu,
                       int num_gpus);
+// Helper function to compute visibility grid from image (common pipeline)
+// This encapsulates the repeated pattern: calculateInu -> apply_beam -> apply_GCF -> FFT2D -> phase_rotate
+__host__ void computeImageToVisibilityGrid(
+    float* I,
+    VirtualImageProcessor* ip,
+    varsPerGPU* vars_gpu,
+    int gpu_idx,
+    long M,
+    long N,
+    float nu,
+    float ref_xobs_pix,
+    float ref_yobs_pix,
+    float phs_xobs_pix,
+    float phs_yobs_pix,
+    float antenna_diameter,
+    float pb_factor,
+    float pb_cutoff,
+    int primary_beam,
+    float fg_scale,
+    CKernel* ckernel,
+    bool fft_shift);
 __host__ void FFT2D(cufftComplex* output_data,
                     cufftComplex* input_data,
                     cufftHandle plan,
@@ -356,10 +375,12 @@ __global__ void newPNoPositivity(cufftComplex* p,
                                  float xmin,
                                  long N);
 __global__ void clip(cufftComplex* I, long N, float MINPIX);
-__global__ void hermitianSymmetry(double3* UVW,
-                                  cufftComplex* Vo,
-                                  float freq,
-                                  int numVisibilities);
+__global__ void applyHermitianSymmetry(double3* UVW,
+                                       cufftComplex* Vo,
+                                       int numVisibilities);
+__global__ void convertUVWToLambda(double3* UVW,
+                                   float freq,
+                                   int numVisibilities);
 __global__ void distance_image(float* distance_image,
                                float xobs,
                                float yobs,
@@ -388,26 +409,25 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long M,
                              long N,
                              double xphs,
-                             double yphs);
+                             double yphs,
+                             double crpix1,
+                             double crpix2,
+                             bool dc_at_center);
 // Optimized bilinear interpolation kernels using regular global memory with
 // __ldg()
-__global__ void vis_mod(cufftComplex* __restrict__ Vm,
-                        const cufftComplex* __restrict__ V,
-                        const double3* __restrict__ UVW,
-                        float* __restrict__ weight,
-                        const double deltau,
-                        const double deltav,
-                        const long numVisibilities,
-                        const long N);
-__global__ void vis_mod2(cufftComplex* __restrict__ Vm,
-                         const cufftComplex* __restrict__ V,
-                         const double3* __restrict__ UVW,
-                         float* __restrict__ weight,
-                         const double deltau,
-                         const double deltav,
-                         const long numVisibilities,
-                         const long N,
-                         const float N_half);
+// Bilinear interpolation of visibilities from gridded visibility plane
+// dc_at_center: true if DC component is at center (N/2, M/2), false if at corner (0,0)
+__global__ void bilinearInterpolateVisibility(
+    cufftComplex* __restrict__ Vm,
+    const cufftComplex* __restrict__ V,
+    const double3* __restrict__ UVW,
+    float* __restrict__ weight,
+    const double deltau,
+    const double deltav,
+    const long numVisibilities,
+    const long M,
+    const long N,
+    const bool dc_at_center);
 __global__ void residual(cufftComplex* __restrict__ Vr,
                          const cufftComplex* __restrict__ Vm,
                          const cufftComplex* __restrict__ Vo,
@@ -633,6 +653,7 @@ __global__ void CGGradCondition(float* temp,
                                 int image);
 __global__ void searchDirection_LBFGS(float* xi, long N, long M, int image);
 __global__ void fftshift_2D(cufftComplex* data, int N1, int N2);
+__global__ void ifftshift_2D(cufftComplex* data, int N1, int N2);
 __global__ void do_griddingGPU(float3* uvw,
                                cufftComplex* Vo,
                                cufftComplex* Vo_g,
@@ -657,5 +678,8 @@ __global__ void degriddingGPU(double3* uvw,
                               int kernel_n,
                               int supportX,
                               int supportY);
+__global__ void apply_GCF(cufftComplex* __restrict__ image,
+                          const float* __restrict__ gcf,
+                          long N);
 
 #endif

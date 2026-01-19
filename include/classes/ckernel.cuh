@@ -548,5 +548,33 @@ class CKernel {
                                sizeof(float) * this->m_times_n,
                                cudaMemcpyHostToDevice));
   };
+
+  /**
+   * Normalize kernel so that sum of all values equals 1.
+   * This ensures proper energy conservation for gridding/degridding operations.
+   * For convolution gridding: grid[i] = Σ(kernel * vis)
+   * For degridding: vis = Σ(kernel * grid[i])
+   * Normalization ensures these operations are properly matched.
+   */
+  __host__ void normalizeKernel() {
+    float kernel_sum = 0.0f;
+    
+    // Compute sum of all kernel values
+    for (int i = 0; i < this->m; i++) {
+      for (int j = 0; j < this->n; j++) {
+        kernel_sum += this->kernel[this->n * i + j];
+      }
+    }
+    
+    // Normalize kernel so sum = 1
+    if (kernel_sum > 0.0f) {
+      float norm_factor = 1.0f / kernel_sum;
+      for (int i = 0; i < this->m; i++) {
+        for (int j = 0; j < this->n; j++) {
+          this->kernel[this->n * i + j] *= norm_factor;
+        }
+      }
+    }
+  };
 };
 #endif  // CKERNEL_CUH

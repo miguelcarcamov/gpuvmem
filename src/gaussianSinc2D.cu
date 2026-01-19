@@ -161,6 +161,8 @@ __host__ void GaussianSinc2D::buildKernel(float amp,
           amp, x, y, x0, y0, sigma_x, sigma_y, this->w, this->w2, this->alpha);
     }
   }
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
   this->copyKerneltoGPU();
 };
 
@@ -169,13 +171,15 @@ __host__ void GaussianSinc2D::buildKernel() {
   float x, y;
   for (int i = 0; i < this->m; i++) {
     for (int j = 0; j < this->n; j++) {
-      y = (i - this->support_y) * sigma_y;
-      x = (j - this->support_x) * sigma_x;
+      y = (i - this->support_y) * this->sigma_y;
+      x = (j - this->support_x) * this->sigma_x;
       this->kernel[this->n * i + j] =
           gaussianSinc2D(this->amp, x, y, this->x0, this->y0, this->sigma_x,
                          this->sigma_y, this->w, this->w2, this->alpha);
     }
   }
+  // Normalize kernel (ensures proper gridding/degridding consistency)
+  this->normalizeKernel();
   this->copyKerneltoGPU();
 };
 
