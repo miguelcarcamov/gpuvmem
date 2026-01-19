@@ -3138,7 +3138,7 @@ __host__ __device__ float approxAbs(float val, float epsilon) {
   return sqrtf(val * val + epsilon);
 }
 
-__device__ float calculateL1norm(float* I,
+__device__ float calculateL1norm(const float* __restrict__ I,
                                  float epsilon,
                                  float noise,
                                  float noise_cut,
@@ -3147,20 +3147,19 @@ __device__ float calculateL1norm(float* I,
                                  int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float c = I[N * M * index + N * i + j];
-
+  
   float l1 = 0.0f;
-
   if (noise < noise_cut) {
+    const float c = I[N * M * index + N * i + j];
     l1 = approxAbs(c, epsilon);
   }
 
   return l1;
 }
 
-__global__ void L1Vector(float* L1,
-                         float* noise,
-                         float* I,
+__global__ void L1Vector(float* __restrict__ L1,
+                         const float* __restrict__ noise,
+                         const float* __restrict__ I,
                          long N,
                          long M,
                          float epsilon,
@@ -3169,11 +3168,12 @@ __global__ void L1Vector(float* L1,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  const float noise_val = noise[N * i + j];
   L1[N * i + j] =
-      calculateL1norm(I, epsilon, noise[N * i + j], noise_cut, index, M, N);
+      calculateL1norm(I, epsilon, noise_val, noise_cut, index, M, N);
 }
 
-__device__ float calculateDNormL1(float* I,
+__device__ float calculateDNormL1(const float* __restrict__ I,
                                   float lambda,
                                   float noise,
                                   float epsilon,
@@ -3183,20 +3183,20 @@ __device__ float calculateDNormL1(float* I,
                                   int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float den;
+  
   float dL1 = 0.0f;
-  float c = I[N * M * index + N * i + j];
-
-  if (noise < noise_cut)
+  if (noise < noise_cut) {
+    const float c = I[N * M * index + N * i + j];
     dL1 = c / approxAbs(c, epsilon);
+  }
 
   dL1 *= lambda;
   return dL1;
 }
 
-__global__ void DL1NormK(float* dL1,
-                         float* I,
-                         float* noise,
+__global__ void DL1NormK(float* __restrict__ dL1,
+                         const float* __restrict__ I,
+                         const float* __restrict__ noise,
                          float epsilon,
                          float noise_cut,
                          float lambda,
@@ -3206,11 +3206,12 @@ __global__ void DL1NormK(float* dL1,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  dL1[N * i + j] = calculateDNormL1(I, lambda, noise[N * i + j], epsilon,
+  const float noise_val = noise[N * i + j];
+  dL1[N * i + j] = calculateDNormL1(I, lambda, noise_val, epsilon,
                                     noise_cut, index, M, N);
 }
 
-__device__ float calculateGL1norm(float* I,
+__device__ float calculateGL1norm(const float* __restrict__ I,
                                   float prior,
                                   float epsilon_a,
                                   float epsilon_b,
@@ -3221,21 +3222,20 @@ __device__ float calculateGL1norm(float* I,
                                   int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float c = I[N * M * index + N * i + j];
-
+  
   float l1 = 0.0f;
-
   if (noise < noise_cut) {
+    const float c = I[N * M * index + N * i + j];
     l1 = approxAbs(c, epsilon_a) / (approxAbs(prior, epsilon_a) + epsilon_b);
   }
 
   return l1;
 }
 
-__global__ void GL1Vector(float* L1,
-                          float* noise,
-                          float* I,
-                          float* prior,
+__global__ void GL1Vector(float* __restrict__ L1,
+                          const float* __restrict__ noise,
+                          const float* __restrict__ I,
+                          const float* __restrict__ prior,
                           long N,
                           long M,
                           float epsilon_a,
@@ -3245,11 +3245,13 @@ __global__ void GL1Vector(float* L1,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  L1[N * i + j] = calculateGL1norm(I, prior[N * i + j], epsilon_a, epsilon_b,
-                                   noise[N * i + j], noise_cut, index, M, N);
+  const float noise_val = noise[N * i + j];
+  const float prior_val = prior[N * i + j];
+  L1[N * i + j] = calculateGL1norm(I, prior_val, epsilon_a, epsilon_b,
+                                   noise_val, noise_cut, index, M, N);
 }
 
-__device__ float calculateDGNormL1(float* I,
+__device__ float calculateDGNormL1(const float* __restrict__ I,
                                    float prior,
                                    float lambda,
                                    float noise,
@@ -3261,22 +3263,22 @@ __device__ float calculateDGNormL1(float* I,
                                    int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float den;
+  
   float dL1 = 0.0f;
-  float c = I[N * M * index + N * i + j];
-
-  if (noise < noise_cut)
-    dL1 = c /
-          (approxAbs(c, epsilon_a) * (approxAbs(prior, epsilon_a) + epsilon_b));
+  if (noise < noise_cut) {
+    const float c = I[N * M * index + N * i + j];
+    const float prior_abs = approxAbs(prior, epsilon_a);
+    dL1 = c / (approxAbs(c, epsilon_a) * (prior_abs + epsilon_b));
+  }
 
   dL1 *= lambda;
   return dL1;
 }
 
-__global__ void DGL1NormK(float* dL1,
-                          float* I,
-                          float* prior,
-                          float* noise,
+__global__ void DGL1NormK(float* __restrict__ dL1,
+                          const float* __restrict__ I,
+                          const float* __restrict__ prior,
+                          const float* __restrict__ noise,
                           float epsilon_a,
                           float epsilon_b,
                           float noise_cut,
@@ -3287,12 +3289,14 @@ __global__ void DGL1NormK(float* dL1,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  const float noise_val = noise[N * i + j];
+  const float prior_val = prior[N * i + j];
   dL1[N * i + j] =
-      calculateDGNormL1(I, prior[N * i + j], lambda, noise[N * i + j],
+      calculateDGNormL1(I, prior_val, lambda, noise_val,
                         epsilon_a, epsilon_b, noise_cut, index, M, N);
 }
 
-__device__ float calculateS(float* I,
+__device__ float calculateS(const float* __restrict__ I,
                             float G,
                             float eta,
                             float noise,
@@ -3302,18 +3306,17 @@ __device__ float calculateS(float* I,
                             int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float c = I[N * M * index + N * i + j];
-
+  
   float S = 0.0f;
-
   if (noise < noise_cut) {
+    const float c = I[N * M * index + N * i + j];
     S = c * logf((c / G) + (eta + 1.0f));
   }
 
   return S;
 }
 
-__device__ float calculateDS(float* I,
+__device__ float calculateDS(const float* __restrict__ I,
                              float G,
                              float eta,
                              float lambda,
@@ -3326,11 +3329,10 @@ __device__ float calculateDS(float* I,
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
   float dS = 0.0f;
-
-  float c = I[N * M * index + N * i + j];
   if (noise < noise_cut) {
-    dS =
-        logf((c / G) + (eta + 1.0f)) + 1.0f / (1.0f + (((eta + 1.0f) * G) / c));
+    const float c = I[N * M * index + N * i + j];
+    const float c_over_G_plus_eta = (c / G) + (eta + 1.0f);
+    dS = logf(c_over_G_plus_eta) + 1.0f / (1.0f + (((eta + 1.0f) * G) / c));
   }
 
   dS *= lambda;
@@ -3349,8 +3351,9 @@ __global__ void SVector(float* __restrict__ S,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  const float noise_val = noise[N * i + j];
   S[N * i + j] =
-      calculateS(I, prior_value, eta, noise[N * i + j], noise_cut, index, M, N);
+      calculateS(I, prior_value, eta, noise_val, noise_cut, index, M, N);
 }
 
 __global__ void DS(float* __restrict__ dS,
@@ -3366,32 +3369,35 @@ __global__ void DS(float* __restrict__ dS,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  dS[N * i + j] = calculateDS(I, prior_value, eta, lambda, noise[N * i + j],
+  const float noise_val = noise[N * i + j];
+  dS[N * i + j] = calculateDS(I, prior_value, eta, lambda, noise_val,
                               noise_cut, index, M, N);
 }
 
-__global__ void SGVector(float* S,
-                         float* noise,
-                         float* I,
+__global__ void SGVector(float* __restrict__ S,
+                         const float* __restrict__ noise,
+                         const float* __restrict__ I,
                          long N,
                          long M,
                          float noise_cut,
-                         float* prior,
+                         const float* __restrict__ prior,
                          float eta,
                          int index) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  S[N * i + j] = calculateS(I, prior[N * i + j], eta, noise[N * i + j],
+  const float noise_val = noise[N * i + j];
+  const float prior_val = prior[N * i + j];
+  S[N * i + j] = calculateS(I, prior_val, eta, noise_val,
                             noise_cut, index, M, N);
 }
 
-__global__ void DSG(float* dS,
-                    float* I,
-                    float* noise,
+__global__ void DSG(float* __restrict__ dS,
+                    const float* __restrict__ I,
+                    const float* __restrict__ noise,
                     float noise_cut,
                     float lambda,
-                    float* prior,
+                    const float* __restrict__ prior,
                     float eta,
                     long N,
                     long M,
@@ -3399,11 +3405,13 @@ __global__ void DSG(float* dS,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  dS[N * i + j] = calculateDS(I, prior[N * i + j], eta, lambda,
-                              noise[N * i + j], noise_cut, index, M, N);
+  const float noise_val = noise[N * i + j];
+  const float prior_val = prior[N * i + j];
+  dS[N * i + j] = calculateDS(I, prior_val, eta, lambda,
+                              noise_val, noise_cut, index, M, N);
 }
 
-__device__ float calculateQP(float* I,
+__device__ float calculateQP(const float* __restrict__ I,
                              float noise,
                              float noise_cut,
                              int index,
@@ -3411,31 +3419,29 @@ __device__ float calculateQP(float* I,
                              int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float c, l, r, d, u;
-
+  
   float qp = 0.0f;
-
-  c = I[N * M * index + N * i + j];
   if (noise < noise_cut) {
-    if ((i > 0 && i < N - 1) && (j > 0 && j < N - 1)) {
-      l = I[N * M * index + N * i + (j - 1)];
-      r = I[N * M * index + N * i + (j + 1)];
-      d = I[N * M * index + N * (i + 1) + j];
-      u = I[N * M * index + N * (i - 1) + j];
+    if ((i > 0 && i < M - 1) && (j > 0 && j < N - 1)) {
+      const float c = I[N * M * index + N * i + j];
+      const float l = I[N * M * index + N * i + (j - 1)];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float d = I[N * M * index + N * (i + 1) + j];
+      const float u = I[N * M * index + N * (i - 1) + j];
 
       qp = (c - l) * (c - l) + (c - r) * (c - r) + (c - u) * (c - u) +
            (c - d) * (c - d);
-      qp /= 2.0f;
+      qp *= 0.5f;  // Use multiply instead of divide
     } else {
-      qp = c;
+      qp = I[N * M * index + N * i + j];
     }
   }
 
   return qp;
 }
-__global__ void QPVector(float* Q,
-                         float* noise,
-                         float* I,
+__global__ void QPVector(float* __restrict__ Q,
+                         const float* __restrict__ noise,
+                         const float* __restrict__ I,
                          long N,
                          long M,
                          float noise_cut,
@@ -3443,10 +3449,11 @@ __global__ void QPVector(float* Q,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  Q[N * i + j] = calculateQP(I, noise[N * i + j], noise_cut, index, M, N);
+  const float noise_val = noise[N * i + j];
+  Q[N * i + j] = calculateQP(I, noise_val, noise_cut, index, M, N);
 }
 
-__device__ float calculateDQ(float* I,
+__device__ float calculateDQ(const float* __restrict__ I,
                              float lambda,
                              float noise,
                              float noise_cut,
@@ -3457,31 +3464,27 @@ __device__ float calculateDQ(float* I,
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
   float dQ = 0.0f;
-  float c, d, u, r, l;
-
-  c = I[N * M * index + N * i + j];
-
   if (noise < noise_cut) {
-    if ((i > 0 && i < N - 1) && (j > 0 && j < N - 1)) {
-      d = I[N * M * index + N * (i + 1) + j];
-      u = I[N * M * index + N * (i - 1) + j];
-      r = I[N * M * index + N * i + (j + 1)];
-      l = I[N * M * index + N * i + (j - 1)];
+    if ((i > 0 && i < M - 1) && (j > 0 && j < N - 1)) {
+      const float c = I[N * M * index + N * i + j];
+      const float d = I[N * M * index + N * (i + 1) + j];
+      const float u = I[N * M * index + N * (i - 1) + j];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float l = I[N * M * index + N * i + (j - 1)];
 
       dQ = 2.0f * (4.0f * c - d + u + r + l);
     } else {
-      dQ = c;
+      dQ = I[N * M * index + N * i + j];
     }
   }
 
   dQ *= lambda;
-
   return dQ;
 }
 
-__global__ void DQ(float* dQ,
-                   float* I,
-                   float* noise,
+__global__ void DQ(float* __restrict__ dQ,
+                   const float* __restrict__ I,
+                   const float* __restrict__ noise,
                    float noise_cut,
                    float lambda,
                    long N,
@@ -3490,11 +3493,12 @@ __global__ void DQ(float* dQ,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  const float noise_val = noise[N * i + j];
   dQ[N * i + j] =
-      calculateDQ(I, lambda, noise[N * i + j], noise_cut, index, M, N);
+      calculateDQ(I, lambda, noise_val, noise_cut, index, M, N);
 }
 
-__device__ float calculateTV(float* I,
+__device__ float calculateTV(const float* __restrict__ I,
                              float epsilon,
                              float noise,
                              float noise_cut,
@@ -3504,30 +3508,27 @@ __device__ float calculateTV(float* I,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  float c, r, d;
   float tv = 0.0f;
-  float dxy0, dxy1;
-
-  c = I[N * M * index + N * i + j];
   if (noise < noise_cut) {
-    if (i < N - 1 && j < N - 1) {
-      r = I[N * M * index + N * i + (j + 1)];
-      d = I[N * M * index + N * (i + 1) + j];
+    if (i < M - 1 && j < N - 1) {
+      const float c = I[N * M * index + N * i + j];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float d = I[N * M * index + N * (i + 1) + j];
 
-      dxy0 = (r - c) * (r - c);
-      dxy1 = (d - c) * (d - c);
+      const float dxy0 = (r - c) * (r - c);
+      const float dxy1 = (d - c) * (d - c);
       tv = sqrtf(dxy0 + dxy1 + epsilon);
     } else {
-      tv = c;
+      tv = I[N * M * index + N * i + j];
     }
   }
 
   return tv;
 }
 
-__global__ void TVVector(float* TV,
-                         float* noise,
-                         float* I,
+__global__ void TVVector(float* __restrict__ TV,
+                         const float* __restrict__ noise,
+                         const float* __restrict__ I,
                          float epsilon,
                          long N,
                          long M,
@@ -3536,11 +3537,12 @@ __global__ void TVVector(float* TV,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  const float noise_val = noise[N * i + j];
   TV[N * i + j] =
-      calculateTV(I, epsilon, noise[N * i + j], noise_cut, index, M, N);
+      calculateTV(I, epsilon, noise_val, noise_cut, index, M, N);
 }
 
-__device__ float calculateDTV(float* I,
+__device__ float calculateDTV(const float* __restrict__ I,
                               float epsilon,
                               float lambda,
                               float noise,
@@ -3550,52 +3552,42 @@ __device__ float calculateDTV(float* I,
                               int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float c, d, u, r, l, dl_corner, ru_corner;
-
-  float num0, num1, num2;
-  float den0, den1, den2;
-  float den_arg0, den_arg1, den_arg2;
+  
   float dtv = 0.0f;
-
-  c = I[N * M * index + N * i + j];
   if (noise < noise_cut) {
-    if ((i > 0 && i < N - 1) && (j > 0 && j < N - 1)) {
-      d = I[N * M * index + N * (i + 1) + j];
-      u = I[N * M * index + N * (i - 1) + j];
-      r = I[N * M * index + N * i + (j + 1)];
-      l = I[N * M * index + N * i + (j - 1)];
-      dl_corner = I[N * M * index + N * (i + 1) + (j - 1)];
-      ru_corner = I[N * M * index + N * (i - 1) + (j + 1)];
+    if ((i > 0 && i < M - 1) && (j > 0 && j < N - 1)) {
+      const float c = I[N * M * index + N * i + j];
+      const float d = I[N * M * index + N * (i + 1) + j];
+      const float u = I[N * M * index + N * (i - 1) + j];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float l = I[N * M * index + N * i + (j - 1)];
+      const float dl_corner = I[N * M * index + N * (i + 1) + (j - 1)];
+      const float ru_corner = I[N * M * index + N * (i - 1) + (j + 1)];
 
-      num0 = 2.0f * c - r - d;
-      num1 = c - l;
-      num2 = c - u;
+      const float num0 = 2.0f * c - r - d;
+      const float num1 = c - l;
+      const float num2 = c - u;
 
-      den_arg0 = (c - r) * (c - r) + (c - d) * (c - d) + epsilon;
+      const float den_arg0 = (c - r) * (c - r) + (c - d) * (c - d) + epsilon;
+      const float den_arg1 = (l - c) * (l - c) + (l - dl_corner) * (l - dl_corner) + epsilon;
+      const float den_arg2 = (u - ru_corner) * (u - ru_corner) + (u - c) * (u - c) + epsilon;
 
-      den_arg1 =
-          (l - c) * (l - c) + (l - dl_corner) * (l - dl_corner) + epsilon;
-
-      den_arg2 =
-          (u - ru_corner) * (u - ru_corner) + (u - c) * (u - c) + epsilon;
-
-      den0 = sqrtf(den_arg0);
-      den1 = sqrtf(den_arg1);
-      den2 = sqrtf(den_arg2);
+      const float den0 = sqrtf(den_arg0);
+      const float den1 = sqrtf(den_arg1);
+      const float den2 = sqrtf(den_arg2);
 
       dtv = num0 / den0 + num1 / den1 + num2 / den2;
     } else {
-      dtv = c;
+      dtv = I[N * M * index + N * i + j];
     }
   }
 
   dtv *= lambda;
-
   return dtv;
 }
-__global__ void DTV(float* dTV,
-                    float* I,
-                    float* noise,
+__global__ void DTV(float* __restrict__ dTV,
+                    const float* __restrict__ I,
+                    const float* __restrict__ noise,
                     float epsilon,
                     float noise_cut,
                     float lambda,
@@ -3605,11 +3597,12 @@ __global__ void DTV(float* dTV,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  dTV[N * i + j] = calculateDTV(I, epsilon, lambda, noise[N * i + j], noise_cut,
+  const float noise_val = noise[N * i + j];
+  dTV[N * i + j] = calculateDTV(I, epsilon, lambda, noise_val, noise_cut,
                                 index, M, N);
 }
 
-__device__ float calculateTSV(float* I,
+__device__ float calculateTSV(const float* __restrict__ I,
                               float noise,
                               float noise_cut,
                               int index,
@@ -3618,29 +3611,27 @@ __device__ float calculateTSV(float* I,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  float c, r, d;
   float tv = 0.0f;
-
-  c = I[N * M * index + N * i + j];
   if (noise < noise_cut) {
-    if (i < N - 1 && j < N - 1) {
-      r = I[N * M * index + N * i + (j + 1)];
-      d = I[N * M * index + N * (i + 1) + j];
+    if (i < M - 1 && j < N - 1) {
+      const float c = I[N * M * index + N * i + j];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float d = I[N * M * index + N * (i + 1) + j];
 
-      float dx = c - r;
-      float dy = c - d;
+      const float dx = c - r;
+      const float dy = c - d;
       tv = dx * dx + dy * dy;
     } else {
-      tv = c;
+      tv = I[N * M * index + N * i + j];
     }
   }
 
   return tv;
 }
 
-__global__ void TSVVector(float* STV,
-                          float* noise,
-                          float* I,
+__global__ void TSVVector(float* __restrict__ STV,
+                          const float* __restrict__ noise,
+                          const float* __restrict__ I,
                           long N,
                           long M,
                           float noise_cut,
@@ -3648,10 +3639,11 @@ __global__ void TSVVector(float* STV,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  STV[N * i + j] = calculateTSV(I, noise[N * i + j], noise_cut, index, M, N);
+  const float noise_val = noise[N * i + j];
+  STV[N * i + j] = calculateTSV(I, noise_val, noise_cut, index, M, N);
 }
 
-__device__ float calculateDTSV(float* I,
+__device__ float calculateDTSV(const float* __restrict__ I,
                                float lambda,
                                float noise,
                                float noise_cut,
@@ -3660,32 +3652,29 @@ __device__ float calculateDTSV(float* I,
                                int N) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float c, d, u, r, l, dl_corner, ru_corner;
-
+  
   float dstv = 0.0f;
-
-  c = I[N * M * index + N * i + j];
   if (noise < noise_cut) {
-    if ((i > 0 && i < N - 1) && (j > 0 && j < N - 1)) {
-      d = I[N * M * index + N * (i + 1) + j];
-      u = I[N * M * index + N * (i - 1) + j];
-      r = I[N * M * index + N * i + (j + 1)];
-      l = I[N * M * index + N * i + (j - 1)];
+    if ((i > 0 && i < M - 1) && (j > 0 && j < N - 1)) {
+      const float c = I[N * M * index + N * i + j];
+      const float d = I[N * M * index + N * (i + 1) + j];
+      const float u = I[N * M * index + N * (i - 1) + j];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float l = I[N * M * index + N * i + (j - 1)];
 
       dstv = 8.0f * c - 2.0f * (u + l + d + r);
     } else {
-      dstv = c;
+      dstv = I[N * M * index + N * i + j];
     }
   }
 
   dstv *= lambda;
-
   return dstv;
 }
 
-__global__ void DTSV(float* dSTV,
-                     float* I,
-                     float* noise,
+__global__ void DTSV(float* __restrict__ dSTV,
+                     const float* __restrict__ I,
+                     const float* __restrict__ noise,
                      float noise_cut,
                      float lambda,
                      long N,
@@ -3693,10 +3682,10 @@ __global__ void DTSV(float* dSTV,
                      int index) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
-  float center, down, up, right, left, dl_corner, ru_corner;
 
+  const float noise_val = noise[N * i + j];
   dSTV[N * i + j] =
-      calculateDTSV(I, lambda, noise[N * i + j], noise_cut, index, M, N);
+      calculateDTSV(I, lambda, noise_val, noise_cut, index, M, N);
 }
 
 __device__ float calculateL(float* I,
@@ -3714,7 +3703,7 @@ __device__ float calculateL(float* I,
 
   c = I[N * M * index + N * i + j];
   if (noise < noise_cut) {
-    if ((i > 0 && i < N - 1) && (j > 0 && j < N - 1)) {
+    if ((i > 0 && i < M - 1) && (j > 0 && j < N - 1)) {
       l = I[N * M * index + N * i + (j - 1)];
       r = I[N * M * index + N * i + (j + 1)];
       d = I[N * M * index + N * (i + 1) + j];
@@ -3762,7 +3751,7 @@ __device__ float calculateDL(float* I,
   c = I[N * M * index + N * i + j];
 
   if (noise < noise_cut) {
-    if ((i > 1 && i < N - 2) && (j > 1 && j < N - 2)) {
+    if ((i > 1 && i < M - 2) && (j > 1 && j < N - 2)) {
       d = I[N * M * index + N * (i + 1) + j];
       u = I[N * M * index + N * (i - 1) + j];
       r = I[N * M * index + N * i + (j + 1)];
