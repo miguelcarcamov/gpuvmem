@@ -828,19 +828,11 @@ void MFS::setDevice() {
 
         for (int s = 0; s < datasets[d].data.nstokes; s++) {
           if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-            // Step 1: Apply Hermitian symmetry (flip u,v and conjugate visibility when u > 0)
-            applyHermitianSymmetry<<<
-                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                datasets[d]
-                    .fields[f]
-                    .device_visibilities[i][s]
-                    .threadsPerBlockUV>>>(
-                datasets[d].fields[f].device_visibilities[i][s].uvw,
-                datasets[d].fields[f].device_visibilities[i][s].Vo,
-                datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-            checkCudaErrors(cudaDeviceSynchronize());
-            
-            // Step 2: Convert UVW coordinates from meters to lambda units
+            // Convert UVW coordinates from meters to lambda units
+            // Note: We do NOT apply Hermitian symmetry here because:
+            // 1. We use ifft2 (complex-to-complex), not irfft2
+            // 2. The FFT of a real image naturally has Hermitian symmetry
+            // 3. We can sample the grid at any (u,v) position directly
             convertUVWToLambda<<<
                 datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                 datasets[d]
@@ -1165,13 +1157,10 @@ void MFS::writeResiduals() {
   }
 
   for (int d = 0; d < nMeasurementSets; d++) {
-    // When using degridding (gridding=true), degriddingGPU handles Hermitian symmetry
-    // internally, so we don't need to conjugate in modelToHost
-    // When using getOriginalVisibilitiesBack (old path), hermitianSymmetry kernel
-    // was applied, so we need to conjugate when u > 0
-    bool apply_conjugation = !this->gridding;  // Only conjugate if NOT using new degridding
+    // No Hermitian conjugation needed - we no longer apply Hermitian symmetry
+    // to the input visibilities, so model visibilities are already correct
     modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu,
-                apply_conjugation);
+                false);
   }
 
   printf("Saving residuals and model to MS...\n");

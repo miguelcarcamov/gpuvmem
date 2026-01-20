@@ -1508,11 +1508,15 @@ __global__ void DFT2D(cufftComplex* Vm,
  * Grids irregular visibilities from a measurement set onto a regular grid.
  * 
  * This function performs convolution gridding of visibility data:
- * 1. Creates Hermitian symmetric visibilities (MS only contains half the data)
+ * 1. Creates Hermitian symmetric visibilities (MS only contains half the UV plane)
  * 2. Converts UVW coordinates from meters to lambda units
- * 3. Grids visibilities using a convolution kernel
+ * 3. Grids visibilities using a convolution kernel (with 0.5 weight factor)
  * 4. Normalizes gridded visibilities and calculates effective weights
  * 5. Extracts non-zero gridded visibilities back to sparse format
+ * 
+ * Note: Measurement sets store only half the UV plane data. We process each
+ * visibility twice (original + Hermitian conjugate) to fill the full grid,
+ * with weights multiplied by 0.5 to account for the duplication.
  * 
  * @param fields Vector of Field structures containing visibility data
  * @param data MSData structure with measurement set metadata
@@ -1600,94 +1604,75 @@ __host__ void do_gridding(std::vector<Field>& fields,
         // ====================================================================
         // Step 2: Grid visibilities using convolution kernel
         // ====================================================================
-        // Process each visibility twice: once as-is, once as Hermitian symmetric
-        // (Measurement sets only contain half the data due to symmetry)
+        // For each visibility, grid both V(u,v) and its Hermitian conjugate V(-u,-v) = V*(u,v)
+        // Measurement sets only contain half the UV plane data, so we need both to fill the full grid.
+        // We multiply weights by 0.5 to account for each visibility being gridded at two positions.
 #pragma omp parallel for schedule(static) num_threads(gridding) \
     shared(g_weights, g_weights_aux, g_Vo, freq, center_j, center_k, \
            support_x, support_y) private( \
             j_fp, k_fp, j, k, grid_pos_x, grid_pos_y, uvw, w, Vo, \
             shifted_j, shifted_k, kernel_i, kernel_j, ckernel_result)
-        for (int z = 0; z < 2 * num_visibilities; z++) {
-          // Determine which visibility to use (first half: original, second half: Hermitian)
-          int vis_index = (z < num_visibilities) ? z : (z - num_visibilities);
-          
-          // Load visibility data
-          uvw = fields[f].visibilities[i][s].uvw[vis_index];
-          w = fields[f].visibilities[i][s].weight[vis_index];
-          Vo = fields[f].visibilities[i][s].Vo[vis_index];
+        for (int z = 0; z < num_visibilities; z++) {
+          // Load visibility data once (cache-friendly)
+          uvw = fields[f].visibilities[i][s].uvw[z];
+          w = fields[f].visibilities[i][s].weight[z] * 0.5f;  // Half weight since gridded at two positions
+          Vo = fields[f].visibilities[i][s].Vo[z];
 
           // ================================================================
-          // Step 2a: Create Hermitian symmetric visibility for second half
+          // Step 2a: Convert UVW coordinates from meters to lambda units
           // ================================================================
-          // For V(u,v): V*(-u,-v) = V*(u,v) where * denotes complex conjugate
-          if (z >= num_visibilities) {
-            uvw.x *= -1.0;  // Negate u coordinate
-            uvw.y *= -1.0;  // Negate v coordinate
-            uvw.z *= -1.0;  // Negate w coordinate
-            Vo.y *= -1.0f;  // Negate imaginary part (complex conjugate)
-          }
+          double u_lambda = metres_to_lambda(uvw.x, freq);
+          double v_lambda = metres_to_lambda(uvw.y, freq);
 
           // ================================================================
-          // Step 2b: Convert UVW coordinates from meters to lambda units
+          // Step 2b: Grid both the original visibility and its Hermitian conjugate
           // ================================================================
-          uvw.x = metres_to_lambda(uvw.x, freq);
-          uvw.y = metres_to_lambda(uvw.y, freq);
-          uvw.z = metres_to_lambda(uvw.z, freq);
+          // Loop over both: h=0 for original V(u,v), h=1 for Hermitian V(-u,-v)=V*(u,v)
+          for (int h = 0; h < 2; h++) {
+            double u_pos = (h == 0) ? u_lambda : -u_lambda;
+            double v_pos = (h == 0) ? v_lambda : -v_lambda;
+            float Vo_imag = (h == 0) ? Vo.y : -Vo.y;  // Conjugate for Hermitian
 
-          // ================================================================
-          // Step 2c: Calculate grid pixel coordinates
-          // ================================================================
-          grid_pos_x = uvw.x / deltau;  // Grid position in u direction
-          grid_pos_y = uvw.y / deltav;  // Grid position in v direction
-          
-          // Center the grid: center pixel is at floor(N/2) for both even and odd N
-          // The +0.5 ensures proper rounding when converting to integer pixel index
-          j_fp = grid_pos_x + center_j + 0.5;
-          k_fp = grid_pos_y + center_k + 0.5;
-          j = int(j_fp);  // Column index in grid
-          k = int(k_fp);  // Row index in grid
+            // Calculate grid pixel coordinates
+            grid_pos_x = u_pos / deltau;
+            grid_pos_y = v_pos / deltav;
+            
+            // Center the grid: center pixel is at floor(N/2) for both even and odd N
+            j_fp = grid_pos_x + center_j + 0.5;
+            k_fp = grid_pos_y + center_k + 0.5;
+            j = int(j_fp);
+            k = int(k_fp);
 
-          // ================================================================
-          // Step 2d: Apply convolution kernel to grid this visibility
-          // ================================================================
-          // The kernel spreads each visibility over neighboring grid pixels
-          for (int m = -support_y; m <= support_y; m++) {
-            for (int n = -support_x; n <= support_x; n++) {
-              // Calculate shifted grid position
-              shifted_j = j + n;
-              shifted_k = k + m;
-              
-              // Calculate kernel array indices (kernel is centered at support)
-              kernel_j = n + support_x;
-              kernel_i = m + support_y;
-              
-              // Check bounds: grid must be valid AND kernel indices must be valid
-              if (shifted_k >= 0 && shifted_k < M && 
-                  shifted_j >= 0 && shifted_j < N && 
-                  kernel_i >= 0 && kernel_i < ckernel->getm() && 
-                  kernel_j >= 0 && kernel_j < ckernel->getn()) {
+            // ================================================================
+            // Step 2c: Apply convolution kernel to grid this visibility
+            // ================================================================
+            for (int m = -support_y; m <= support_y; m++) {
+              for (int n = -support_x; n <= support_x; n++) {
+                shifted_j = j + n;
+                shifted_k = k + m;
+                kernel_j = n + support_x;
+                kernel_i = m + support_y;
                 
-                // Get kernel value at this position
-                ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
-                
-                // Cache squared kernel value to avoid recomputation
-                float ckernel_result_sq = ckernel_result * ckernel_result;
-                
-                int grid_idx = N * shifted_k + shifted_j;
-                
-                // Use atomic operations for simple weight accumulations (faster than critical)
+                if (shifted_k >= 0 && shifted_k < M && 
+                    shifted_j >= 0 && shifted_j < N && 
+                    kernel_i >= 0 && kernel_i < ckernel->getm() && 
+                    kernel_j >= 0 && kernel_j < ckernel->getn()) {
+                  
+                  ckernel_result = ckernel->getKernelValue(kernel_i, kernel_j);
+                  float ckernel_result_sq = ckernel_result * ckernel_result;
+                  int grid_idx = N * shifted_k + shifted_j;
+                  
 #pragma omp atomic
-                g_weights[grid_idx] += w * ckernel_result;
-                
+                  g_weights[grid_idx] += w * ckernel_result;
+                  
 #pragma omp atomic
-                g_weights_aux[grid_idx] += w * ckernel_result_sq;
-                
-                // Critical section only for complex number updates (g_Vo)
-                // Complex numbers require synchronized updates of both real and imaginary parts
+                  g_weights_aux[grid_idx] += w * ckernel_result_sq;
+                  
 #pragma omp critical
-                {
-                  g_Vo[grid_idx].x += w * Vo.x * ckernel_result;
-                  g_Vo[grid_idx].y += w * Vo.y * ckernel_result;
+                  {
+                    g_Vo[grid_idx].x += w * Vo.x * ckernel_result;
+                    g_Vo[grid_idx].y += w * Vo_imag * ckernel_result;
+                  }
                 }
               }
             }
@@ -2186,10 +2171,8 @@ __host__ void degridding(std::vector<Field>& fields,
         }
 
         // Convert UVW coordinates from meters to lambda units (required for degriddingGPU)
-        // We use a simple conversion that doesn't apply Hermitian symmetry because:
-        // 1. We want to sample at original coordinates (from backup)
-        // 2. degriddingGPU handles Hermitian symmetry when accessing the grid
-        // 3. MSFITSIO will handle conjugation when writing (if u > 0)
+        // We sample at original (u,v) coordinates - no Hermitian symmetry manipulation needed
+        // since the FFT grid from ifft2 has full complex values at all positions
         convertUVWToLambda<<<fields[f].device_visibilities[i][s].numBlocksUV,
                              fields[f].device_visibilities[i][s].threadsPerBlockUV>>>(
             fields[f].device_visibilities[i][s].uvw,
@@ -2361,7 +2344,6 @@ __global__ void degriddingGPU(double3* uvw,
   int k, j;
   int shifted_k, shifted_j;
   int kernel_i, kernel_j;
-  int herm_j, herm_k;
   cufftComplex degrid_val = floatComplexZero();
   float ckernel_result;
 
@@ -2389,22 +2371,12 @@ __global__ void degriddingGPU(double3* uvw,
             kernel_j >= 0 && kernel_j < kernel_n) {
           // Use __ldg for read-only cached access to kernel (read-only)
           ckernel_result = __ldg(&kernel[kernel_n * kernel_i + kernel_j]);
-          // Determine if we're on positive u side (j >= center) or negative u side (j < center)
-          // Use center_j comparison for consistency with gridding
-          if (shifted_j >= (int)center_j) {
-            // Positive u side (or center): access grid directly with __ldg (read-only)
-            const cufftComplex grid_val = __ldg(&Vm_g[N * shifted_k + shifted_j]);
-            degrid_val.x += ckernel_result * grid_val.x;
-            degrid_val.y += ckernel_result * grid_val.y;
-          } else {
-            // Negative u side: use Hermitian symmetry
-            // Access grid at symmetric position (N-shifted_j, M-shifted_k) and conjugate
-            herm_j = N - shifted_j;
-            herm_k = M - shifted_k;
-            const cufftComplex grid_val = __ldg(&Vm_g[N * herm_k + herm_j]);
-            degrid_val.x += ckernel_result * grid_val.x;
-            degrid_val.y -= ckernel_result * grid_val.y;
-          }
+          // Direct grid access - no Hermitian symmetry handling needed
+          // The FFT grid from ifft2 of a real image already has full complex values
+          // at all positions, so we can sample directly at any (u,v) coordinate
+          const cufftComplex grid_val = __ldg(&Vm_g[N * shifted_k + shifted_j]);
+          degrid_val.x += ckernel_result * grid_val.x;
+          degrid_val.y += ckernel_result * grid_val.y;
         }
       }
     }
