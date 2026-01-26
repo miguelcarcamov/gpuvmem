@@ -3837,7 +3837,7 @@ updateQ(float* d_q, float alpha, float* d_y, int k, int M, int N, int image) {
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
   d_q[M * N * image + N * i + j] +=
-      alpha * d_y[M * N * image + M * N * k + (N * i + j)];
+      alpha * d_y[M * N * image * k + M * N * image + (N * i + j)];
 }
 
 __global__ void getR(float* d_r,

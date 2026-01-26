@@ -238,10 +238,13 @@ __host__ void LBFGS::LBFGS_recursion(float* d_y,
 
   for (int i = 0; i < I->getImageCount(); i++) {
     for (int k = par_M - 1; k >= 0; k--) {
+      // Map logical index k to circular buffer index
+      // Most recent is lbfgs_it, previous is (lbfgs_it-1+K)%K, etc.
+      int hist_idx = (lbfgs_it - (par_M - 1 - k) + this->K) % this->K;
       // Rho_k = 1.0/(y_k's_k);
       // printf("Image %d, Iter :%d\n", i, k);
       getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_s,
-                                                          k, k, M, N, i);
+                                                          hist_idx, hist_idx, M, N, i);
       checkCudaErrors(cudaDeviceSynchronize());
       rho_den = deviceReduce<float>(aux_vector, M * N,
                                     threadsPerBlockNN.x * threadsPerBlockNN.y);
@@ -252,14 +255,14 @@ __host__ void LBFGS::LBFGS_recursion(float* d_y,
       // printf("1. rho %f\n", rho);
       // alpha_k = Rho_k x (s_k' * q);
       getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_s, d_q,
-                                                          k, 0, M, N, i);
+                                                          hist_idx, 0, M, N, i);
       checkCudaErrors(cudaDeviceSynchronize());
       alpha[i][k] =
           rho * deviceReduce<float>(aux_vector, M * N,
                                     threadsPerBlockNN.x * threadsPerBlockNN.y);
       // printf("1. alpha %f\n", alpha[i][k]);
       // q = q - alpha_k * y_k;
-      updateQ<<<numBlocksNN, threadsPerBlockNN>>>(d_q, -alpha[i][k], d_y, k, M,
+      updateQ<<<numBlocksNN, threadsPerBlockNN>>>(d_q, -alpha[i][k], d_y, hist_idx, M,
                                                   N, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
@@ -267,15 +270,17 @@ __host__ void LBFGS::LBFGS_recursion(float* d_y,
 
   // y_0'y_0
   //(s_0'y_0)/(y_0'y_0)
+  // Use oldest iteration in history for scaling factor (standard LBFGS)
+  int oldest_idx = (lbfgs_it - (par_M - 1) + this->K) % this->K;
   for (int i = 0; i < I->getImageCount(); i++) {
     getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(
-        aux_vector, d_y, d_s, lbfgs_it, lbfgs_it, M, N, i);
+        aux_vector, d_y, d_s, oldest_idx, oldest_idx, M, N, i);
     checkCudaErrors(cudaDeviceSynchronize());
     sy = deviceReduce<float>(aux_vector, M * N,
                              threadsPerBlockNN.x * threadsPerBlockNN.y);
 
     getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(
-        aux_vector, d_y, d_y, lbfgs_it, lbfgs_it, M, N, i);
+        aux_vector, d_y, d_y, oldest_idx, oldest_idx, M, N, i);
     checkCudaErrors(cudaDeviceSynchronize());
     yy = deviceReduce<float>(aux_vector, M * N,
                              threadsPerBlockNN.x * threadsPerBlockNN.y);
@@ -294,9 +299,11 @@ __host__ void LBFGS::LBFGS_recursion(float* d_y,
     checkCudaErrors(cudaDeviceSynchronize());
 
     for (int k = 0; k < par_M; k++) {
+      // Map logical index k to circular buffer index
+      int hist_idx = (lbfgs_it - (par_M - 1 - k) + this->K) % this->K;
       // Rho_k = 1.0/(y_k's_k);
       getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_s,
-                                                          k, k, M, N, i);
+                                                          hist_idx, hist_idx, M, N, i);
       checkCudaErrors(cudaDeviceSynchronize());
       // Calculate rho
       rho_den = deviceReduce<float>(aux_vector, M * N,
@@ -307,7 +314,7 @@ __host__ void LBFGS::LBFGS_recursion(float* d_y,
         rho = 0.0f;
       // beta = rho * y_k' * r;
       getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_r,
-                                                          k, 0, M, N, i);
+                                                          hist_idx, 0, M, N, i);
       checkCudaErrors(cudaDeviceSynchronize());
       beta =
           rho * deviceReduce<float>(aux_vector, M * N,
@@ -316,7 +323,7 @@ __host__ void LBFGS::LBFGS_recursion(float* d_y,
       // alpha-beta: %f\n", i, k, rho, alpha[i][k], beta, alpha[i][k]-beta); r =
       // r + s_k * (alpha_k - beta)
       updateQ<<<numBlocksNN, threadsPerBlockNN>>>(d_r, alpha[i][k] - beta, d_s,
-                                                  k, M, N, i);
+                                                  hist_idx, M, N, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
   }
