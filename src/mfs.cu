@@ -996,6 +996,14 @@ void MFS::run() {
       chi2->setCKernel(this->ckernel);
   }
 
+  // Pre-compute effective number of samples before optimization starts
+  // This avoids recalculating N_eff on every iteration
+  bool normalize = (NULL != chi2 && chi2->getNormalize());
+  if (normalize) {
+    printf("Pre-computing effective number of samples...\n");
+    precomputeNeff(true);
+  }
+
   printf("\n\nStarting optimizer\n");
   if (this->Order == NULL) {
     if (imagesChanged) {

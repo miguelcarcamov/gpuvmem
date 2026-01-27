@@ -117,6 +117,8 @@ typedef struct field {
   std::vector<std::vector<HVis>> visibilities;
   std::vector<std::vector<DVis>> device_visibilities;
   std::vector<std::vector<HVis>> backup_visibilities;
+  std::vector<std::vector<float>>
+      N_eff_perFreqPerStoke;  // Pre-computed effective number of samples
 } Field;
 
 typedef struct MSAntenna {

@@ -176,6 +176,7 @@ __host__ void dchi2(float* I,
                     VirtualImageProcessor* ip,
                     bool normalize,
                     float fg_scale);
+__host__ void precomputeNeff(bool normalize);
 __host__ void defaultNewP(float* p, float* xi, float xmin, int image);
 __host__ void particularNewP(float* p, float* xi, float xmin, int image);
 __host__ void defaultEvaluateXt(float* xt,

@@ -4984,41 +4984,16 @@ __host__ void dchi2(float* I,
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_dchi2, 0,
                                          sizeof(float) * M * N));
 
-              // Compute effective number of samples: N_eff = (Σw_k)² / (Σw_k²)
+              // Use pre-computed effective number of samples (calculated once
+              // before optimization)
               float N_eff = 0.0f;
               if (normalize) {
-                float sum_weights = deviceReduce<float>(
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV);
-
-                // Compute sum of squared weights
-                weightsSquaredVector<<<
-                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV>>>(
-                    vars_gpu[gpu_idx]
-                        .device_chi2,  // Reuse device_chi2 as temp storage
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                checkCudaErrors(cudaDeviceSynchronize());
-
-                float sum_weights_squared = deviceReduce<float>(
-                    vars_gpu[gpu_idx].device_chi2,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV);
-
-                // Calculate effective number of samples
-                if (sum_weights_squared > 0.0f && sum_weights > 0.0f) {
-                  N_eff = (sum_weights * sum_weights) / sum_weights_squared;
+                N_eff = datasets[d].fields[f].N_eff_perFreqPerStoke[i][s];
+                if (N_eff <= 0.0f) {
+                  // Fallback to numVisibilities if N_eff was not pre-computed
+                  N_eff = (float)datasets[d]
+                              .fields[f]
+                              .numVisibilitiesPerFreqPerStoke[i][s];
                 }
               }
 
@@ -5660,4 +5635,87 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
   checkCudaErrors(cudaDeviceSynchronize());
 
   image->setErrorImage(errors);
+}
+
+__host__ void precomputeNeff(bool normalize) {
+  if (!normalize) {
+    return;
+  }
+
+  cudaSetDevice(firstgpu);
+
+  // Pre-compute N_eff for all datasets, fields, frequencies, and Stokes
+  // parameters
+  for (int d = 0; d < nMeasurementSets; d++) {
+    for (int f = 0; f < datasets[d].data.nfields; f++) {
+      // Initialize N_eff storage
+      datasets[d].fields[f].N_eff_perFreqPerStoke.resize(
+          datasets[d].data.total_frequencies,
+          std::vector<float>(datasets[d].data.nstokes, 0.0f));
+
+#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
+      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
+        unsigned int j = omp_get_thread_num();
+        unsigned int num_cpu_threads = omp_get_num_threads();
+        int gpu_idx = i % num_gpus;
+        cudaSetDevice(gpu_idx + firstgpu);
+        int gpu_id = -1;
+        cudaGetDevice(&gpu_id);
+
+        for (int s = 0; s < datasets[d].data.nstokes; s++) {
+          if (datasets[d].data.corr_type[s] == LL ||
+              datasets[d].data.corr_type[s] == RR ||
+              datasets[d].data.corr_type[s] == XX ||
+              datasets[d].data.corr_type[s] == YY) {
+            if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] >
+                0) {
+              // Compute sum of weights
+              float sum_weights = deviceReduce<float>(
+                  datasets[d].fields[f].device_visibilities[i][s].weight,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV);
+
+              // Compute sum of squared weights (reuse device_chi2 as temp
+              // storage)
+              weightsSquaredVector<<<
+                  datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV>>>(
+                  vars_gpu[gpu_idx].device_chi2,  // Temp storage
+                  datasets[d].fields[f].device_visibilities[i][s].weight,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+              checkCudaErrors(cudaDeviceSynchronize());
+
+              float sum_weights_squared = deviceReduce<float>(
+                  vars_gpu[gpu_idx].device_chi2,
+                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                  datasets[d]
+                      .fields[f]
+                      .device_visibilities[i][s]
+                      .threadsPerBlockUV);
+
+              // Calculate effective number of samples
+              if (sum_weights_squared > 0.0f && sum_weights > 0.0f) {
+                datasets[d].fields[f].N_eff_perFreqPerStoke[i][s] =
+                    (sum_weights * sum_weights) / sum_weights_squared;
+              } else {
+                // Fallback to numVisibilities if calculation fails
+                datasets[d].fields[f].N_eff_perFreqPerStoke[i][s] =
+                    (float)datasets[d]
+                        .fields[f]
+                        .numVisibilitiesPerFreqPerStoke[i][s];
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  cudaSetDevice(firstgpu);
 }
