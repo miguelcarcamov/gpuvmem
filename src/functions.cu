@@ -4864,48 +4864,16 @@ __host__ float chi2(float* I,
                   datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
               checkCudaErrors(cudaDeviceSynchronize());
 
-              // Compute effective number of samples BEFORE computing chi2
-              // (to avoid overwriting device_chi2)
+              // Use pre-computed effective number of samples (calculated once
+              // before optimization)
               float N_eff = 0.0f;
               if (normalize) {
-                // Normalize by effective number of samples:
-                // N_eff = (Σw_k)² / (Σw_k²)
-                // This accounts for varying weights and represents effective
-                // degrees of freedom. When all weights are equal, N_eff = N.
-                // When weights vary, N_eff < N and properly accounts for the
-                // reduced effective sample size.
-                float sum_weights = deviceReduce<float>(
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV);
-
-                // Compute sum of squared weights (reuse device_chi2 as temp
-                // storage)
-                weightsSquaredVector<<<
-                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV>>>(
-                    vars_gpu[gpu_idx].device_chi2,  // Temp storage
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                checkCudaErrors(cudaDeviceSynchronize());
-
-                float sum_weights_squared = deviceReduce<float>(
-                    vars_gpu[gpu_idx].device_chi2,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    datasets[d]
-                        .fields[f]
-                        .device_visibilities[i][s]
-                        .threadsPerBlockUV);
-
-                // Calculate effective number of samples
-                if (sum_weights_squared > 0.0f && sum_weights > 0.0f) {
-                  N_eff = (sum_weights * sum_weights) / sum_weights_squared;
+                N_eff = datasets[d].fields[f].N_eff_perFreqPerStoke[i][s];
+                if (N_eff <= 0.0f) {
+                  // Fallback to numVisibilities if N_eff was not pre-computed
+                  N_eff = (float)datasets[d]
+                              .fields[f]
+                              .numVisibilitiesPerFreqPerStoke[i][s];
                 }
               }
 
