@@ -1191,6 +1191,34 @@ void MFS::writeResiduals() {
     // Clean up ImageProcessor
     delete ip;
 
+    // After degridding, numVisibilitiesPerFreqPerStoke holds the original
+    // (pre-grid) counts, which can be larger than max_number_vis (which was
+    // set from the gridded max). chi2->calcFi() runs chi2Vector over these
+    // counts and writes to vars_gpu[g].device_chi2; if count > max_number_vis
+    // we get out-of-bounds write -> cudaErrorIllegalAddress. Grow device_chi2
+    // when needed.
+    int max_orig = 0;
+    for (int d = 0; d < nMeasurementSets; d++) {
+      for (int f = 0; f < datasets[d].data.nfields; f++) {
+        for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
+          for (int s = 0; s < datasets[d].data.nstokes; s++) {
+            int n = datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+            if (n > max_orig)
+              max_orig = n;
+          }
+        }
+      }
+    }
+    if (max_orig > max_number_vis) {
+      max_number_vis = max_orig;
+      for (int g = 0; g < num_gpus; g++) {
+        cudaSetDevice(firstgpu + g);
+        cudaFree(vars_gpu[g].device_chi2);
+        checkCudaErrors(cudaMalloc(&vars_gpu[g].device_chi2,
+                                   sizeof(float) * max_number_vis));
+      }
+    }
+
     Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
     float res = chi2->calcFi(image->getImage());
     printf("Non-gridded chi2 after de-gridding using convolution kernel %f\n",
