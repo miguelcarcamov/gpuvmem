@@ -4774,26 +4774,18 @@ __host__ float chi2(float* I,
 
   float reduced_chi2 = 0.0f;
 
-  // Create static 1x1 PillBox kernels for degridding when gridding is enabled:
-  // one per GPU so each device uses a kernel allocated on that device. Using a
-  // single kernel on firstgpu for all devices causes cudaErrorIllegalAddress
-  // when gpu_idx > 0 (cross-device pointer use).
-  static std::vector<PillBox2D*> degrid_kernels;
+  // Create static 1x1 PillBox kernel for degridding when gridding is enabled
+  static PillBox2D* degrid_kernel = NULL;
   static bool degrid_kernel_initialized = false;
 
-  // Check if gridding is enabled and initialize one degrid kernel per GPU
   CKernel* ckernel = ip->getCKernel();
   bool use_gridding = (ckernel != NULL && ckernel->getGPUKernel() != NULL);
 
   if (use_gridding && !degrid_kernel_initialized) {
-    degrid_kernels.resize(num_gpus);
-    for (int g = 0; g < num_gpus; g++) {
-      degrid_kernels[g] =
-          new PillBox2D(1, 1);  // 1x1 PillBox for nearest neighbor sampling
-      degrid_kernels[g]->setGPUID(firstgpu + g);
-      degrid_kernels[g]->setSigmas(fabs(deltau), fabs(deltav));
-      degrid_kernels[g]->buildKernel();
-    }
+    degrid_kernel = new PillBox2D(1, 1);
+    degrid_kernel->setGPUID(firstgpu);
+    degrid_kernel->setSigmas(fabs(deltau), fabs(deltav));
+    degrid_kernel->buildKernel();
     degrid_kernel_initialized = true;
   }
 
@@ -4840,10 +4832,6 @@ __host__ float chi2(float* I,
                                          sizeof(float) * max_number_vis));
 
               if (use_gridding) {
-                // Gridding enabled: use degridding with 1x1 PillBox kernel for
-                // this GPU. Use degrid_kernels[gpu_idx] so the kernel lives on
-                // the same device as device_V (avoids cudaErrorIllegalAddress).
-                PillBox2D* dk = degrid_kernels[gpu_idx];
                 degriddingGPU<<<
                     datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                     datasets[d]
@@ -4852,11 +4840,11 @@ __host__ float chi2(float* I,
                         .threadsPerBlockUV>>>(
                     datasets[d].fields[f].device_visibilities[i][s].uvw,
                     datasets[d].fields[f].device_visibilities[i][s].Vm,
-                    vars_gpu[gpu_idx].device_V, dk->getGPUKernel(), deltau,
-                    deltav,
+                    vars_gpu[gpu_idx].device_V, degrid_kernel->getGPUKernel(),
+                    deltau, deltav,
                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    M, N, dk->getm(), dk->getn(), dk->getSupportX(),
-                    dk->getSupportY());
+                    M, N, degrid_kernel->getm(), degrid_kernel->getn(),
+                    degrid_kernel->getSupportX(), degrid_kernel->getSupportY());
                 checkCudaErrors(cudaDeviceSynchronize());
               } else {
                 // Gridding disabled: use bilinear interpolation
