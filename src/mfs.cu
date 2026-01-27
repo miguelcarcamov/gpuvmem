@@ -1,5 +1,6 @@
 #include "imageProcessor.cuh"
 #include "mfs.cuh"
+#include "secondderivateerror.cuh"
 
 long M, N, numVisibilities;
 
