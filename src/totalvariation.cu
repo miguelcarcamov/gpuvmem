@@ -5,47 +5,93 @@ extern int image_count;
 extern float* penalizators;
 extern int nPenalizators;
 
-TVariation::TVariation() {
-  this->name = "Total Variation";
+IsotropicTVariation::IsotropicTVariation() {
+  this->name = "Isotropic Total Variation";
   this->epsilon = 1E-12;
 };
 
-TVariation::TVariation(float epsilon) {
-  this->name = "Total Variation";
+IsotropicTVariation::IsotropicTVariation(float epsilon) {
+  this->name = "Isotropic Total Variation";
   this->epsilon = epsilon;
 };
 
-float TVariation::getEpsilon() {
+float IsotropicTVariation::getEpsilon() {
   return this->epsilon;
 };
 
-void TVariation::setEpsilon(float epsilon) {
+void IsotropicTVariation::setEpsilon(float epsilon) {
   this->epsilon = epsilon;
 };
 
-float TVariation::calcFi(float* p) {
+float IsotropicTVariation::calcFi(float* p) {
   float result = 0.0f;
-  this->set_fivalue(totalvariation(p, device_S, this->epsilon,
-                                   penalization_factor, mod, order, imageIndex,
-                                   this->iteration));
+  this->set_fivalue(isotropicTV(p, device_S, this->epsilon, penalization_factor,
+                                mod, order, imageIndex, this->iteration));
   result = (penalization_factor) * (this->get_fivalue());
   return result;
 };
 
-void TVariation::calcGi(float* p, float* xi) {
-  DTVariation(p, device_DS, this->epsilon, penalization_factor, mod, order,
-              imageIndex, this->iteration);
+void IsotropicTVariation::calcGi(float* p, float* xi) {
+  DIsotropicTV(p, device_DS, this->epsilon, penalization_factor, mod, order,
+               imageIndex, this->iteration);
 };
 
-void TVariation::restartDGi() {
+void IsotropicTVariation::restartDGi() {
   checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
 };
 
-void TVariation::addToDphi(float* device_dphi) {
+void IsotropicTVariation::addToDphi(float* device_dphi) {
   linkAddToDPhi(device_dphi, device_DS, 0);
 };
 
-void TVariation::setSandDs(float* S, float* Ds) {
+void IsotropicTVariation::setSandDs(float* S, float* Ds) {
+  cudaFree(this->device_S);
+  cudaFree(this->device_DS);
+  this->device_S = S;
+  this->device_DS = Ds;
+};
+
+AnisotropicTVariation::AnisotropicTVariation() {
+  this->name = "Anisotropic Total Variation";
+  this->epsilon = 1E-12;
+};
+
+AnisotropicTVariation::AnisotropicTVariation(float epsilon) {
+  this->name = "Anisotropic Total Variation";
+  this->epsilon = epsilon;
+};
+
+float AnisotropicTVariation::getEpsilon() {
+  return this->epsilon;
+};
+
+void AnisotropicTVariation::setEpsilon(float epsilon) {
+  this->epsilon = epsilon;
+};
+
+float AnisotropicTVariation::calcFi(float* p) {
+  float result = 0.0f;
+  this->set_fivalue(anisotropicTV(p, device_S, this->epsilon,
+                                  penalization_factor, mod, order, imageIndex,
+                                  this->iteration));
+  result = (penalization_factor) * (this->get_fivalue());
+  return result;
+};
+
+void AnisotropicTVariation::calcGi(float* p, float* xi) {
+  DAnisotropicTV(p, device_DS, this->epsilon, penalization_factor, mod, order,
+                 imageIndex, this->iteration);
+};
+
+void AnisotropicTVariation::restartDGi() {
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+};
+
+void AnisotropicTVariation::addToDphi(float* device_dphi) {
+  linkAddToDPhi(device_dphi, device_DS, 0);
+};
+
+void AnisotropicTVariation::setSandDs(float* S, float* Ds) {
   cudaFree(this->device_S);
   cudaFree(this->device_DS);
   this->device_S = S;
@@ -53,11 +99,21 @@ void TVariation::setSandDs(float* S, float* Ds) {
 };
 
 namespace {
-Fi* CreateTVariation() {
-  return new TVariation;
+Fi* CreateIsotropicTVariation() {
+  return new IsotropicTVariation;
 }
 
-const std::string name = "TotalVariation";
-const bool RegisteredTVariation =
-    registerCreationFunction<Fi, std::string>(name, CreateTVariation);
+const std::string name_isotropic = "IsotropicTotalVariation";
+const bool RegisteredIsotropicTVariation =
+    registerCreationFunction<Fi, std::string>(name_isotropic,
+                                              CreateIsotropicTVariation);
+
+Fi* CreateAnisotropicTVariation() {
+  return new AnisotropicTVariation;
+}
+
+const std::string name_anisotropic = "AnisotropicTotalVariation";
+const bool RegisteredAnisotropicTVariation =
+    registerCreationFunction<Fi, std::string>(name_anisotropic,
+                                              CreateAnisotropicTVariation);
 };  // namespace

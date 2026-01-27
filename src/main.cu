@@ -186,6 +186,8 @@ __host__ int main(int argc, char** argv) {
   Fi* l1 = createObject<Fi, std::string>("L1-Norm");
   Fi* tsqv = createObject<Fi, std::string>("TotalSquaredVariation");
   Fi* lap = createObject<Fi, std::string>("Laplacian");
+  Fi* atv = createObject<Fi, std::string>("AnisotropicTotalVariation");
+  Fi* itv = createObject<Fi, std::string>("IsotropicTotalVariation");
 
   chi2->configure(
       -1, 0, 0,
@@ -195,12 +197,16 @@ __host__ int main(int argc, char** argv) {
   l1->configure(1, 0, 0, false);
   tsqv->configure(2, 0, 0, false);
   lap->configure(3, 0, 0, false);
+  atv->configure(4, 0, 0, false);
+  itv->configure(5, 0, 0, false);
   // e->setPenalizationFactor(0.01); // If not used -Z (Fi.configure(-1,x,x))
   of->addFi(chi2);
   of->addFi(e);
   of->addFi(l1);
   of->addFi(tsqv);
   of->addFi(lap);
+  of->addFi(atv);
+  of->addFi(itv);
   // sy->getImage()->getFunctionMapping()[i].evaluateXt = particularEvaluateXt;
   // sy->getImage()->getFunctionMapping()[i].newP = particularNewP;
   // if the nopositivity flag is on  all images will run with no posivity,

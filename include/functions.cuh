@@ -129,26 +129,26 @@ __host__ void initFFT(varsPerGPU* vars_gpu,
                       int firstgpu,
                       int num_gpus);
 // Helper function to compute visibility grid from image (common pipeline)
-// This encapsulates the repeated pattern: calculateInu -> apply_beam -> apply_GCF -> FFT2D -> phase_rotate
-__host__ void computeImageToVisibilityGrid(
-    float* I,
-    VirtualImageProcessor* ip,
-    varsPerGPU* vars_gpu,
-    int gpu_idx,
-    long M,
-    long N,
-    float nu,
-    float ref_xobs_pix,
-    float ref_yobs_pix,
-    float phs_xobs_pix,
-    float phs_yobs_pix,
-    float antenna_diameter,
-    float pb_factor,
-    float pb_cutoff,
-    int primary_beam,
-    float fg_scale,
-    CKernel* ckernel,
-    bool fft_shift);
+// This encapsulates the repeated pattern: calculateInu -> apply_beam ->
+// apply_GCF -> FFT2D -> phase_rotate
+__host__ void computeImageToVisibilityGrid(float* I,
+                                           VirtualImageProcessor* ip,
+                                           varsPerGPU* vars_gpu,
+                                           int gpu_idx,
+                                           long M,
+                                           long N,
+                                           float nu,
+                                           float ref_xobs_pix,
+                                           float ref_yobs_pix,
+                                           float phs_xobs_pix,
+                                           float phs_yobs_pix,
+                                           float antenna_diameter,
+                                           float pb_factor,
+                                           float pb_cutoff,
+                                           int primary_beam,
+                                           float fg_scale,
+                                           CKernel* ckernel,
+                                           bool fft_shift);
 __host__ void FFT2D(cufftComplex* output_data,
                     cufftComplex* input_data,
                     cufftHandle plan,
@@ -238,6 +238,39 @@ __host__ void DGEntropy(float* I,
                         int order,
                         int index,
                         int iter);
+__host__ void DIsotropicTV(float* I,
+                           float* dgi,
+                           float epsilon,
+                           float penalization_factor,
+                           int mod,
+                           int order,
+                           int index,
+                           int iter);
+__host__ float isotropicTV(float* I,
+                           float* ds,
+                           float epsilon,
+                           float penalization_factor,
+                           int mod,
+                           int order,
+                           int index,
+                           int iter);
+__host__ void DAnisotropicTV(float* I,
+                             float* dgi,
+                             float epsilon,
+                             float penalization_factor,
+                             int mod,
+                             int order,
+                             int index,
+                             int iter);
+__host__ float anisotropicTV(float* I,
+                             float* ds,
+                             float epsilon,
+                             float penalization_factor,
+                             int mod,
+                             int order,
+                             int index,
+                             int iter);
+// Legacy function names for backward compatibility
 __host__ void DTVariation(float* I,
                           float* dgi,
                           float epsilon,
@@ -416,7 +449,8 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
 // Optimized bilinear interpolation kernels using regular global memory with
 // __ldg()
 // Bilinear interpolation of visibilities from gridded visibility plane
-// dc_at_center: true if DC component is at center (N/2, M/2), false if at corner (0,0)
+// dc_at_center: true if DC component is at center (N/2, M/2), false if at
+// corner (0,0)
 __global__ void bilinearInterpolateVisibility(
     cufftComplex* __restrict__ Vm,
     const cufftComplex* __restrict__ V,

@@ -3636,6 +3636,111 @@ __global__ void DTV(float* __restrict__ dTV,
       calculateDTV(I, epsilon, lambda, noise_val, noise_cut, index, M, N);
 }
 
+// Anisotropic Total Variation kernels
+__device__ float calculateATV(const float* __restrict__ I,
+                              float epsilon,
+                              float noise,
+                              float noise_cut,
+                              int index,
+                              int M,
+                              int N) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  float atv = 0.0f;
+  if (noise < noise_cut) {
+    if (i < M - 1 && j < N - 1) {
+      const float c = I[N * M * index + N * i + j];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float d = I[N * M * index + N * (i + 1) + j];
+
+      // Anisotropic TV: |dx| + |dy| + epsilon (for numerical stability)
+      const float dx = fabsf(r - c);
+      const float dy = fabsf(d - c);
+      atv = dx + dy + epsilon;
+    } else {
+      atv = I[N * M * index + N * i + j];
+    }
+  }
+
+  return atv;
+}
+
+__global__ void ATVVector(float* __restrict__ ATV,
+                          const float* __restrict__ noise,
+                          const float* __restrict__ I,
+                          float epsilon,
+                          long N,
+                          long M,
+                          float noise_cut,
+                          int index) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  const float noise_val = noise[N * i + j];
+  ATV[N * i + j] = calculateATV(I, epsilon, noise_val, noise_cut, index, M, N);
+}
+
+__device__ float calculateDATV(const float* __restrict__ I,
+                               float epsilon,
+                               float lambda,
+                               float noise,
+                               float noise_cut,
+                               int index,
+                               int M,
+                               int N) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  float datv = 0.0f;
+  if (noise < noise_cut) {
+    if ((i > 0 && i < M - 1) && (j > 0 && j < N - 1)) {
+      const float c = I[N * M * index + N * i + j];
+      const float d = I[N * M * index + N * (i + 1) + j];
+      const float u = I[N * M * index + N * (i - 1) + j];
+      const float r = I[N * M * index + N * i + (j + 1)];
+      const float l = I[N * M * index + N * i + (j - 1)];
+
+      // Anisotropic TV derivative: sign(dx) + sign(dy)
+      // For numerical stability, use smoothed sign: x / (|x| + epsilon)
+      const float dx_right = c - r;
+      const float dx_left = l - c;
+      const float dy_down = c - d;
+      const float dy_up = u - c;
+
+      const float sign_dx_right = dx_right / (fabsf(dx_right) + epsilon);
+      const float sign_dx_left = dx_left / (fabsf(dx_left) + epsilon);
+      const float sign_dy_down = dy_down / (fabsf(dy_down) + epsilon);
+      const float sign_dy_up = dy_up / (fabsf(dy_up) + epsilon);
+
+      // Sum of contributions from all neighbors
+      datv = sign_dx_right + sign_dx_left + sign_dy_down + sign_dy_up;
+    } else {
+      datv = I[N * M * index + N * i + j];
+    }
+  }
+
+  datv *= lambda;
+  return datv;
+}
+
+__global__ void DATV(float* __restrict__ dATV,
+                     const float* __restrict__ I,
+                     const float* __restrict__ noise,
+                     float epsilon,
+                     float noise_cut,
+                     float lambda,
+                     long N,
+                     long M,
+                     int index) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  const float noise_val = noise[N * i + j];
+  dATV[N * i + j] =
+      calculateDATV(I, epsilon, lambda, noise_val, noise_cut, index, M, N);
+}
+
 __device__ float calculateTSV(const float* __restrict__ I,
                               float noise,
                               float noise_cut,
@@ -5081,14 +5186,14 @@ __host__ void DQuadraticP(float* I,
   }
 };
 
-__host__ float totalvariation(float* I,
-                              float* ds,
-                              float epsilon,
-                              float penalization_factor,
-                              int mod,
-                              int order,
-                              int index,
-                              int iter) {
+__host__ float isotropicTV(float* I,
+                           float* ds,
+                           float epsilon,
+                           float penalization_factor,
+                           int mod,
+                           int order,
+                           int index,
+                           int iter) {
   cudaSetDevice(firstgpu);
 
   float resultS = 0.0f;
@@ -5102,14 +5207,14 @@ __host__ float totalvariation(float* I,
   return resultS;
 };
 
-__host__ void DTVariation(float* I,
-                          float* dgi,
-                          float epsilon,
-                          float penalization_factor,
-                          int mod,
-                          int order,
-                          int index,
-                          int iter) {
+__host__ void DIsotropicTV(float* I,
+                           float* dgi,
+                           float epsilon,
+                           float penalization_factor,
+                           int mod,
+                           int order,
+                           int index,
+                           int iter) {
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
@@ -5120,6 +5225,31 @@ __host__ void DTVariation(float* I,
       checkCudaErrors(cudaDeviceSynchronize());
     }
   }
+};
+
+// Legacy function name for backward compatibility
+__host__ float totalvariation(float* I,
+                              float* ds,
+                              float epsilon,
+                              float penalization_factor,
+                              int mod,
+                              int order,
+                              int index,
+                              int iter) {
+  return isotropicTV(I, ds, epsilon, penalization_factor, mod, order, index,
+                     iter);
+};
+
+// Legacy function name for backward compatibility
+__host__ void DTVariation(float* I,
+                          float* dgi,
+                          float epsilon,
+                          float penalization_factor,
+                          int mod,
+                          int order,
+                          int index,
+                          int iter) {
+  DIsotropicTV(I, dgi, epsilon, penalization_factor, mod, order, index, iter);
 };
 
 __host__ float TotalSquaredVariation(float* I,
@@ -5140,6 +5270,47 @@ __host__ float TotalSquaredVariation(float* I,
                                   threadsPerBlockNN.x * threadsPerBlockNN.y);
   }
   return resultS;
+};
+
+__host__ float anisotropicTV(float* I,
+                             float* ds,
+                             float epsilon,
+                             float penalization_factor,
+                             int mod,
+                             int order,
+                             int index,
+                             int iter) {
+  cudaSetDevice(firstgpu);
+
+  float resultS = 0.0f;
+  if (iter > 0 && penalization_factor) {
+    ATVVector<<<numBlocksNN, threadsPerBlockNN>>>(
+        ds, device_noise_image, I, epsilon, N, M, noise_cut, index);
+    checkCudaErrors(cudaDeviceSynchronize());
+    resultS = deviceReduce<float>(ds, M * N,
+                                  threadsPerBlockNN.x * threadsPerBlockNN.y);
+  }
+  return resultS;
+};
+
+__host__ void DAnisotropicTV(float* I,
+                             float* dgi,
+                             float epsilon,
+                             float penalization_factor,
+                             int mod,
+                             int order,
+                             int index,
+                             int iter) {
+  cudaSetDevice(firstgpu);
+
+  if (iter > 0 && penalization_factor) {
+    if (flag_opt % 2 == index) {
+      DATV<<<numBlocksNN, threadsPerBlockNN>>>(
+          dgi, I, device_noise_image, epsilon, noise_cut, penalization_factor,
+          N, M, index);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+  }
 };
 
 __host__ void DTSVariation(float* I,
