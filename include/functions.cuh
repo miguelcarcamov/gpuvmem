@@ -365,7 +365,7 @@ __host__ void DLaplacian(float* I,
                          float order,
                          float index,
                          int iter);
-__host__ void calculateErrors(Image* image);
+__host__ void calculateErrors(Image* image, float fg_scale);
 
 __device__ float AiryDiskBeam(float distance,
                               float lambda,

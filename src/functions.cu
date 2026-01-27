@@ -4372,9 +4372,11 @@ __global__ void DChi2_total_alpha(float* noise,
   alpha = I[N * M + N * i + j];
 
   dI_nu_0 = powf(nudiv, alpha);
-  // dalpha: d(I_nu_actual)/d(alpha) = fg_scale * atten * I_nu_0 *
-  // (nu/nu_0)^alpha * log(nu/nu_0) Since dchi2 already includes fg_scale *
-  // atten (from DChi2 kernel), we don't multiply by fg_scale here
+  // Chain rule derivative for alpha (without fg_scale * atten):
+  // ∂I_ν/∂α = fg_scale · atten · I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
+  // Since dchi2 already includes fg_scale * atten, we only compute:
+  // dalpha = I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
+  // Final gradient: ∂χ²/∂α = dchi2 · dalpha
   dalpha = I_nu_0 * dI_nu_0 * logf(nudiv);
 
   if (noise[N * i + j] < noise_cut) {
@@ -4406,7 +4408,11 @@ __global__ void DChi2_total_I_nu_0(float* noise,
   alpha = I[N * M + N * i + j];
 
   dI_nu_0 = powf(nudiv, alpha);
-  // dalpha = I_nu_0 * dI_nu_0 * fg_scale * logf(nudiv);
+  // Chain rule derivative for I_ν₀ (without fg_scale * atten):
+  // ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α
+  // Since dchi2 already includes fg_scale * atten, we only compute:
+  // dI_nu_0 = (ν/ν₀)^α
+  // Final gradient: ∂χ²/∂I_ν₀ = dchi2 · dI_nu_0
 
   if (noise[N * i + j] < noise_cut)
     dchi2_total[N * i + j] += dchi2[N * i + j] * dI_nu_0;
@@ -4431,9 +4437,19 @@ __global__ void chainRule2I(float* chain,
   alpha = I[N * M + N * i + j];
 
   dI_nu_0 = powf(nudiv, alpha);
-  // dalpha: d(I_nu)/d(alpha) = I_nu_0 * (nu/nu_0)^alpha * log(nu/nu_0)
-  // Note: fg_scale * atten is applied later when multiplying with dchi2
-  // (which already includes fg_scale * atten from DChi2 kernel)
+  // Chain rule derivatives (without fg_scale * atten, which is already in
+  // dchi2): ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α ∂I_ν/∂α = fg_scale · atten
+  // · I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
+  //
+  // Since dchi2 (from DChi2 kernel) already includes fg_scale * atten,
+  // we only store the part without fg_scale * atten here:
+  // chain[I_ν₀] = (ν/ν₀)^α
+  // chain[α] = I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
+  //
+  // Final gradient: ∂χ²/∂I_ν₀ = dchi2 · chain[I_ν₀] = (∂χ²/∂I_ν with
+  // fg_scale*atten) · (ν/ν₀)^α
+  //                 ∂χ²/∂α = dchi2 · chain[α] = (∂χ²/∂I_ν with fg_scale*atten)
+  //                 · I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
   dalpha = I_nu_0 * dI_nu_0 * logf(nudiv);
 
   chain[N * i + j] = dI_nu_0;
@@ -4480,6 +4496,7 @@ __global__ void I_nu_0_Noise(float* noise_I,
                              double DELTAX,
                              double DELTAY,
                              float sum_weights,
+                             float fg_scale,
                              long N,
                              long M,
                              int primary_beam) {
@@ -4495,8 +4512,13 @@ __global__ void I_nu_0_Noise(float* noise_I,
   alpha = images[N * M + N * i + j];
   nudiv_pow_alpha = powf(nudiv, 2.0f * alpha);
 
+  // Variance for I_nu_0: σ²(I_ν₀) ∝ (∂I_ν/∂I_ν₀)² * σ²(visibilities)
+  // Where: ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α
+  // So: σ²(I_ν₀) ∝ fg_scale² · atten² · (ν/ν₀)^(2α) · σ²(visibilities)
   if (noise[N * i + j] < noise_cut) {
-    noise_I[N * i + j] += atten * atten * sum_weights * nudiv_pow_alpha;
+    float fg_scale_sq = fg_scale * fg_scale;
+    noise_I[N * i + j] +=
+        fg_scale_sq * atten * atten * sum_weights * nudiv_pow_alpha;
   } else {
     noise_I[N * i + j] = 0.0f;
   }
@@ -4516,6 +4538,7 @@ __global__ void alpha_Noise(float* noise_I,
                             float pb_factor,
                             float pb_cutoff,
                             float sum_weights,
+                            float fg_scale,
                             long N,
                             long M,
                             int primary_beam) {
@@ -4535,24 +4558,27 @@ __global__ void alpha_Noise(float* noise_I,
   I_nu = I_nu_0 * nudiv_pow_alpha;
   log_nu = logf(nudiv);
 
+  float fg_scale_sq = fg_scale * fg_scale;
+
   // First-order error propagation for alpha:
-  // σ²(alpha) ∝ (∂I_nu/∂alpha)² * σ²(visibilities)
-  // Where: ∂I_nu/∂alpha = I_nu * log(nu/nu_0)
-  // So: σ²(alpha) ∝ I_nu² * log²(nu/nu_0) * σ²(visibilities)
+  // σ²(alpha) ∝ (∂I_ν/∂alpha)² * σ²(visibilities)
+  // Where: ∂I_ν/∂alpha = fg_scale · atten · I_ν · log(ν/ν₀)
+  // So: σ²(alpha) ∝ fg_scale² · atten² · I_ν² · log²(ν/ν₀) · σ²(visibilities)
   float first_order_term =
-      log_nu * log_nu * atten * atten * I_nu * I_nu * sum_weights;
+      fg_scale_sq * log_nu * log_nu * atten * atten * I_nu * I_nu * sum_weights;
 
   // Second-order correction term for variance of alpha:
   // In second-order error propagation, the correction accounts for curvature:
-  // σ²_total = σ²_first_order + (1/2) * ∂²I_nu/∂alpha² * weight_contribution
-  // Where: ∂²I_nu/∂alpha² = I_nu * log²(nu/nu_0)
-  // The second-order correction adds: (1/2) * I_nu * log²(nu/nu_0) * atten² *
-  // sum_weights This is proportional to the curvature of I_nu as a function of
-  // alpha
-  float d2I_nu_dalpha2 = I_nu * log_nu * log_nu;  // ∂²I_nu/∂alpha²
+  // σ²_total = σ²_first_order + (1/2) * ∂²I_ν/∂alpha² * weight_contribution
+  // Where: ∂²I_ν/∂alpha² = fg_scale · atten · I_ν · log²(ν/ν₀)
+  // The second-order correction adds: (1/2) * fg_scale² · atten² · I_ν ·
+  // log²(ν/ν₀) · sum_weights This is proportional to the curvature of I_ν as a
+  // function of alpha
+  float d2I_nu_dalpha2 =
+      I_nu * log_nu * log_nu;  // ∂²I_ν/∂alpha² (without fg_scale · atten)
   float second_order_correction =
-      0.5f * d2I_nu_dalpha2 * atten * atten * sum_weights;
-  // = 0.5 * I_nu * log²(nu/nu_0) * atten² * sum_weights
+      fg_scale_sq * 0.5f * d2I_nu_dalpha2 * atten * atten * sum_weights;
+  // = 0.5 * fg_scale² · I_ν · log²(ν/ν₀) · atten² · sum_weights
 
   if (noise[N * i + j] < noise_cut) {
     // Combine first-order and second-order terms
@@ -4588,6 +4614,7 @@ __global__ void covariance_Noise(float* noise_cov,
                                  float pb_factor,
                                  float pb_cutoff,
                                  float sum_weights,
+                                 float fg_scale,
                                  long N,
                                  long M,
                                  int primary_beam) {
@@ -4607,28 +4634,33 @@ __global__ void covariance_Noise(float* noise_cov,
   I_nu = I_nu_0 * nudiv_pow_alpha;
   log_nu = logf(nudiv);
 
+  float fg_scale_sq = fg_scale * fg_scale;
+
   // First-order covariance contribution:
-  // Cov(I_nu_0, alpha) ∝ (∂I_nu/∂I_nu_0) × (∂I_nu/∂alpha) × σ²(visibilities)
-  // = atten * (nu/nu_0)^alpha * I_nu * log(nu/nu_0) * σ²(visibilities)
-  // = atten * I_nu * log(nu/nu_0) * σ²(visibilities)
-  float first_order_cov = atten * atten * I_nu * log_nu * sum_weights;
+  // Cov(I_ν₀, alpha) ∝ (∂I_ν/∂I_ν₀) × (∂I_ν/∂alpha) × σ²(visibilities)
+  // Where: ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α
+  //        ∂I_ν/∂alpha = fg_scale · atten · I_ν · log(ν/ν₀)
+  // So: Cov(I_ν₀, alpha) ∝ fg_scale² · atten² · I_ν · log(ν/ν₀) ·
+  // σ²(visibilities)
+  float first_order_cov =
+      fg_scale_sq * atten * atten * I_nu * log_nu * sum_weights;
 
   // Second-order correction for covariance:
-  // The mixed second derivative term: ∂²I_nu/∂I_nu_0∂alpha * Cov contribution
-  // Where: ∂²I_nu/∂I_nu_0∂alpha = (nu/nu_0)^alpha * log(nu/nu_0) = I_nu/I_nu_0
-  // * log(nu/nu_0) This correction accounts for how the covariance affects the
-  // total uncertainty The correction is: ∂²I_nu/∂I_nu_0∂alpha * (first-order
-  // covariance) = (I_nu/I_nu_0 * log(nu/nu_0)) * (atten * I_nu * log(nu/nu_0) *
-  // atten * sum_weights) = (I_nu²/I_nu_0) * log²(nu/nu_0) * atten² *
-  // sum_weights
+  // The mixed second derivative term: ∂²I_ν/∂I_ν₀∂alpha * Cov contribution
+  // Where: ∂²I_ν/∂I_ν₀∂alpha = fg_scale · atten · (I_ν/I_ν₀) · log(ν/ν₀)
+  // This correction accounts for how the covariance affects the total
+  // uncertainty The correction is: ∂²I_ν/∂I_ν₀∂alpha * (first-order covariance
+  // contribution) = fg_scale² · atten² · (I_ν²/I_ν₀) · log²(ν/ν₀) · sum_weights
   float second_order_cov_correction = 0.0f;
   if (I_nu_0 != 0.0f && fabsf(I_nu_0) > 1e-10f) {
     float d2I_nu_dI_nu_0_dalpha =
-        (I_nu / I_nu_0) * log_nu;  // ∂²I_nu/∂I_nu_0∂alpha
+        (I_nu / I_nu_0) *
+        log_nu;  // ∂²I_ν/∂I_ν₀∂alpha (without fg_scale · atten)
     // The second-order correction to covariance accumulation
-    second_order_cov_correction = d2I_nu_dI_nu_0_dalpha * first_order_cov;
-    // = (I_nu/I_nu_0 * log_nu) * (atten² * I_nu * log_nu * sum_weights)
-    // = (I_nu²/I_nu_0) * log²(nu/nu_0) * atten² * sum_weights
+    second_order_cov_correction = fg_scale_sq * d2I_nu_dI_nu_0_dalpha * atten *
+                                  atten * I_nu * log_nu * sum_weights;
+    // = fg_scale² · (I_ν/I_ν₀ · log_nu) · atten² · I_ν · log_nu · sum_weights
+    // = fg_scale² · (I_ν²/I_ν₀) · log²(ν/ν₀) · atten² · sum_weights
   }
 
   // Store at index 2: noise_cov[2 * M * N + N * i + j]
@@ -5414,7 +5446,7 @@ __host__ void DTSVariation(float* I,
   }
 };
 
-__host__ void calculateErrors(Image* image) {
+__host__ void calculateErrors(Image* image, float fg_scale) {
   float* errors = image->getErrorImage();
 
   cudaSetDevice(firstgpu);
@@ -5464,7 +5496,8 @@ __host__ void calculateErrors(Image* image) {
                     datasets[d].antennas[0].pb_cutoff,
                     datasets[d].fields[f].ref_xobs_pix,
                     datasets[d].fields[f].ref_yobs_pix, DELTAX, DELTAY,
-                    sum_weights, N, M, datasets[d].antennas[0].primary_beam);
+                    sum_weights, fg_scale, N, M,
+                    datasets[d].antennas[0].primary_beam);
                 checkCudaErrors(cudaDeviceSynchronize());
 
                 // Compute variance for alpha (stored at index 1)
@@ -5475,8 +5508,8 @@ __host__ void calculateErrors(Image* image) {
                     datasets[d].fields[f].ref_yobs_pix,
                     datasets[d].antennas[0].antenna_diameter,
                     datasets[d].antennas[0].pb_factor,
-                    datasets[d].antennas[0].pb_cutoff, sum_weights, N, M,
-                    datasets[d].antennas[0].primary_beam);
+                    datasets[d].antennas[0].pb_cutoff, sum_weights, fg_scale, N,
+                    M, datasets[d].antennas[0].primary_beam);
                 checkCudaErrors(cudaDeviceSynchronize());
 
                 // Compute covariance between I_nu_0 and alpha (stored at index
@@ -5488,8 +5521,8 @@ __host__ void calculateErrors(Image* image) {
                     datasets[d].fields[f].ref_yobs_pix,
                     datasets[d].antennas[0].antenna_diameter,
                     datasets[d].antennas[0].pb_factor,
-                    datasets[d].antennas[0].pb_cutoff, sum_weights, N, M,
-                    datasets[d].antennas[0].primary_beam);
+                    datasets[d].antennas[0].pb_cutoff, sum_weights, fg_scale, N,
+                    M, datasets[d].antennas[0].primary_beam);
                 checkCudaErrors(cudaDeviceSynchronize());
               }
             }

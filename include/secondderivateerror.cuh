@@ -5,8 +5,12 @@
 
 class SecondDerivateError : public Error {
  public:
-  SecondDerivateError(){};
+  SecondDerivateError() : fg_scale(1.0f) {};
   void calculateErrorImage(Image* I, Visibilities* v);
+  void setFgScale(float fg_scale) { this->fg_scale = fg_scale; }
+
+ private:
+  float fg_scale;
 };
 
 #endif
