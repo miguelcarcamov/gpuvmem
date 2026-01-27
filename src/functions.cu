@@ -4535,14 +4535,28 @@ __global__ void alpha_Noise(float* noise_I,
   I_nu = I_nu_0 * nudiv_pow_alpha;
   log_nu = logf(nudiv);
 
-  // Error propagation for alpha:
+  // First-order error propagation for alpha:
   // σ²(alpha) ∝ (∂I_nu/∂alpha)² * σ²(visibilities)
   // Where: ∂I_nu/∂alpha = I_nu * log(nu/nu_0)
   // So: σ²(alpha) ∝ I_nu² * log²(nu/nu_0) * σ²(visibilities)
-  // This matches the pattern used in I_nu_0_Noise
+  float first_order_term =
+      log_nu * log_nu * atten * atten * I_nu * I_nu * sum_weights;
+
+  // Second-order correction term for variance of alpha:
+  // In second-order error propagation, the correction accounts for curvature:
+  // σ²_total = σ²_first_order + (1/2) * ∂²I_nu/∂alpha² * weight_contribution
+  // Where: ∂²I_nu/∂alpha² = I_nu * log²(nu/nu_0)
+  // The second-order correction adds: (1/2) * I_nu * log²(nu/nu_0) * atten² *
+  // sum_weights This is proportional to the curvature of I_nu as a function of
+  // alpha
+  float d2I_nu_dalpha2 = I_nu * log_nu * log_nu;  // ∂²I_nu/∂alpha²
+  float second_order_correction =
+      0.5f * d2I_nu_dalpha2 * atten * atten * sum_weights;
+  // = 0.5 * I_nu * log²(nu/nu_0) * atten² * sum_weights
+
   if (noise[N * i + j] < noise_cut) {
-    noise_I[N * M + N * i + j] +=
-        log_nu * log_nu * atten * atten * I_nu * I_nu * sum_weights;
+    // Combine first-order and second-order terms
+    noise_I[N * M + N * i + j] += first_order_term + second_order_correction;
   } else {
     noise_I[N * M + N * i + j] = 0.0f;
   }
@@ -4593,14 +4607,35 @@ __global__ void covariance_Noise(float* noise_cov,
   I_nu = I_nu_0 * nudiv_pow_alpha;
   log_nu = logf(nudiv);
 
-  // Covariance contribution: (∂I_nu/∂I_nu_0) × (∂I_nu/∂alpha) ×
-  // σ²(visibilities) = atten * (nu/nu_0)^alpha * I_nu * log(nu/nu_0) *
-  // σ²(visibilities) = atten * I_nu * log(nu/nu_0) * σ²(visibilities) Store at
-  // index 2: noise_cov[2 * M * N + N * i + j] Note: The factor of 2 is applied
-  // when computing total uncertainty
+  // First-order covariance contribution:
+  // Cov(I_nu_0, alpha) ∝ (∂I_nu/∂I_nu_0) × (∂I_nu/∂alpha) × σ²(visibilities)
+  // = atten * (nu/nu_0)^alpha * I_nu * log(nu/nu_0) * σ²(visibilities)
+  // = atten * I_nu * log(nu/nu_0) * σ²(visibilities)
+  float first_order_cov = atten * atten * I_nu * log_nu * sum_weights;
+
+  // Second-order correction for covariance:
+  // The mixed second derivative term: ∂²I_nu/∂I_nu_0∂alpha * Cov contribution
+  // Where: ∂²I_nu/∂I_nu_0∂alpha = (nu/nu_0)^alpha * log(nu/nu_0) = I_nu/I_nu_0
+  // * log(nu/nu_0) This correction accounts for how the covariance affects the
+  // total uncertainty The correction is: ∂²I_nu/∂I_nu_0∂alpha * (first-order
+  // covariance) = (I_nu/I_nu_0 * log(nu/nu_0)) * (atten * I_nu * log(nu/nu_0) *
+  // atten * sum_weights) = (I_nu²/I_nu_0) * log²(nu/nu_0) * atten² *
+  // sum_weights
+  float second_order_cov_correction = 0.0f;
+  if (I_nu_0 != 0.0f && fabsf(I_nu_0) > 1e-10f) {
+    float d2I_nu_dI_nu_0_dalpha =
+        (I_nu / I_nu_0) * log_nu;  // ∂²I_nu/∂I_nu_0∂alpha
+    // The second-order correction to covariance accumulation
+    second_order_cov_correction = d2I_nu_dI_nu_0_dalpha * first_order_cov;
+    // = (I_nu/I_nu_0 * log_nu) * (atten² * I_nu * log_nu * sum_weights)
+    // = (I_nu²/I_nu_0) * log²(nu/nu_0) * atten² * sum_weights
+  }
+
+  // Store at index 2: noise_cov[2 * M * N + N * i + j]
+  // Store first-order covariance + second-order correction
   if (noise[N * i + j] < noise_cut) {
     noise_cov[2 * M * N + N * i + j] +=
-        atten * atten * I_nu * log_nu * sum_weights;
+        first_order_cov + second_order_cov_correction;
   } else {
     noise_cov[2 * M * N + N * i + j] = 0.0f;
   }
