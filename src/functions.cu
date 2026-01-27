@@ -4724,11 +4724,17 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
   else
     noise_I[N * i + j] = 0.0f;
 
-  // Index 1: σ(alpha) [unitless]
-  if (noise_I[N * M + N * i + j] > 0.0f)
-    noise_I[N * M + N * i + j] = 1.0f / sqrtf(noise_I[N * M + N * i + j]);
-  else
+  // Index 1: σ(alpha) [unitless]. Clamp to avoid explosion when alpha is
+  // poorly constrained (accumulated Fisher tiny, e.g. when ν≈ν₀ so
+  // log(ν/ν₀)≈0). σ(alpha) > ~10 means effectively unconstrained; cap at 10.0
+  // for display.
+  const float sigma_alpha_max = 10.0f;
+  if (noise_I[N * M + N * i + j] > 0.0f) {
+    float sigma_alpha = 1.0f / sqrtf(noise_I[N * M + N * i + j]);
+    noise_I[N * M + N * i + j] = fminf(sigma_alpha, sigma_alpha_max);
+  } else {
     noise_I[N * M + N * i + j] = 0.0f;
+  }
 
   // Index 2: Cov(I_nu_0, alpha) [code units or Jy/pixel depending on fg_scale]
   // — kept as covariance (not correlation). Correlation: ρ = Cov / (σ(I_nu_0) *

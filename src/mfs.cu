@@ -335,6 +335,19 @@ void MFS::configure(int argc, char** argv) {
     nu_0 = 0.5f * (max_freq + min_freq);
   }
   printf("Reference frequency: %e Hz\n", nu_0);
+  // Alpha error depends on log(ν/ν₀). Print range so users can check leverage.
+  double log_nu_min =
+      log(static_cast<double>(min_freq) / static_cast<double>(nu_0));
+  double log_nu_max =
+      log(static_cast<double>(max_freq) / static_cast<double>(nu_0));
+  printf("Frequency range: [%.5e, %.5e] Hz -> log(ν/ν₀) ∈ [%.4f, %.4f]\n",
+         static_cast<double>(min_freq), static_cast<double>(max_freq),
+         log_nu_min, log_nu_max);
+  if (fabs(log_nu_max - log_nu_min) < 0.01 && image_count > 1) {
+    printf(
+        "WARNING: log(ν/ν₀) range is very narrow; alpha will be poorly "
+        "constrained and alpha errors may be large or capped.\n");
+  }
   double deltau_theo = 2.0 * max_uvmax_wavelength / (M - 1);
   double deltax_theo = 1.0 / (M * deltau_theo) / RPARCSEC;
   printf("The pixel size has to be less or equal to %lf arcsec\n", deltax_theo);
