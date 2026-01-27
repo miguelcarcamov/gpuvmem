@@ -1027,9 +1027,11 @@ void MFS::run() {
   float chi2_final = 0.0f;
   float final_S = 0.0f;
   float lambda_S = 0.0f;
+  bool normalize_enabled = false;
 
   if (NULL != chi2) {
     chi2_final = chi2->get_fivalue();
+    normalize_enabled = chi2->getNormalize();
   }
   Fi* entropy = optimizer->getObjectiveFunction()->getFiByName("Entropy");
   if (NULL != entropy) {
@@ -1044,9 +1046,18 @@ void MFS::run() {
   printf("chi2: %f\n", 2.0f * chi2_final);
   printf("0.5*chi2: %f\n", chi2_final);
   printf("Total visibilities: %d\n", total_visibilities);
-  printf("Reduced-chi2 (Num visibilities): %f\n",
-         chi2_final / total_visibilities);
-  printf("Reduced-chi2 (Weights sum): %f\n", chi2_final / sum_weights);
+
+  if (normalize_enabled) {
+    // chi2_final is already normalized by N_eff (effective number of samples)
+    // This IS the reduced chi-squared using effective number of samples
+    printf("Reduced-chi2 (N_eff normalized): %f\n", chi2_final);
+  } else {
+    // chi2_final is not normalized, so we divide by total_visibilities or
+    // sum_weights
+    printf("Reduced-chi2 (Num visibilities): %f\n",
+           chi2_final / total_visibilities);
+    printf("Reduced-chi2 (Weights sum): %f\n", chi2_final / sum_weights);
+  }
   printf("S: %f\n", final_S);
   if (reg_term != 1) {
     printf("Normalized S: %f\n", final_S / (M * N));
@@ -1070,10 +1081,19 @@ void MFS::run() {
     fprintf(outfile, "chi2: %f\n", 2.0f * chi2_final);
     fprintf(outfile, "0.5*chi2: %f\n", chi2_final);
     fprintf(outfile, "Total visibilities: %d\n", total_visibilities);
-    fprintf(outfile, "Reduced-chi2 (Num visibilities): %f\n",
-            chi2_final / total_visibilities);
-    fprintf(outfile, "Reduced-chi2 (Weights sum): %f\n",
-            chi2_final / sum_weights);
+
+    if (normalize_enabled) {
+      // chi2_final is already normalized by N_eff (effective number of samples)
+      // This IS the reduced chi-squared using effective number of samples
+      fprintf(outfile, "Reduced-chi2 (N_eff normalized): %f\n", chi2_final);
+    } else {
+      // chi2_final is not normalized, so we divide by total_visibilities or
+      // sum_weights
+      fprintf(outfile, "Reduced-chi2 (Num visibilities): %f\n",
+              chi2_final / total_visibilities);
+      fprintf(outfile, "Reduced-chi2 (Weights sum): %f\n",
+              chi2_final / sum_weights);
+    }
     fprintf(outfile, "S: %f\n", final_S);
     if (reg_term != 1) {
       fprintf(outfile, "Normalized S: %f\n", final_S / (M * N));
@@ -1118,12 +1138,17 @@ void MFS::writeImages() {
     this->error->calculateErrorImage(this->image, this->visibilities);
     if (IoOrderError == NULL) {
       if (print_images) {
+        // Error map layout: index 0 = σ(I_nu_0) [Jy/pixel], 1 = σ(alpha)
+        // [unitless], 2 = Cov(I_nu_0, alpha) [Jy/pixel]
         ioImageHandler->printNotNormalizedImage(
             image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL",
             optimizer->getCurrentIteration(), 0, true);
         ioImageHandler->printNotNormalizedImage(
             image->getErrorImage(), "error_alpha_0.fits", "",
             optimizer->getCurrentIteration(), 1, true);
+        ioImageHandler->printNotNormalizedImage(
+            image->getErrorImage(), "error_cov_Inu_0_alpha.fits", "JY/PIXEL",
+            optimizer->getCurrentIteration(), 2, true);
       }
 
     } else {

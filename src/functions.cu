@@ -4710,24 +4710,24 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  // Convert variance to standard deviation (uncertainty) for I_nu_0 (index 0)
+  // Indices 0 and 1: kernels store inverse-variance; convert to σ for output.
+  // Index 0: σ(I_nu_0) [Jy/pixel]
   if (noise_I[N * i + j] > 0.0f)
-    noise_I[N * i + j] = 1.0f / sqrt(noise_I[N * i + j]);
+    noise_I[N * i + j] = 1.0f / sqrtf(noise_I[N * i + j]);
   else
     noise_I[N * i + j] = 0.0f;
 
-  // Convert variance to standard deviation (uncertainty) for alpha (index 1)
+  // Index 1: σ(alpha) [unitless]
   if (noise_I[N * M + N * i + j] > 0.0f)
-    noise_I[N * M + N * i + j] = 1.0f / sqrt(noise_I[N * M + N * i + j]);
+    noise_I[N * M + N * i + j] = 1.0f / sqrtf(noise_I[N * M + N * i + j]);
   else
     noise_I[N * M + N * i + j] = 0.0f;
 
-  // Covariance (index 2) is kept as-is (not converted to correlation
-  // coefficient here) To compute correlation: ρ = Cov / (σ(I_nu_0) * σ(alpha))
-  // To compute total uncertainty in I_nu:
-  // σ²(I_nu) = (∂I_nu/∂I_nu_0)²σ²(I_nu_0) + (∂I_nu/∂alpha)²σ²(alpha)
-  //          + 2(∂I_nu/∂I_nu_0)(∂I_nu/∂alpha)Cov(I_nu_0, alpha)
-  // Note: Covariance can be negative, indicating anti-correlation
+  // Index 2: Cov(I_nu_0, alpha) [Jy/pixel] — kept as covariance (not
+  // correlation). Correlation: ρ = Cov / (σ(I_nu_0) * σ(alpha)). σ²(I_nu) =
+  // (∂I_nu/∂I_nu_0)²σ²(I_nu_0) + (∂I_nu/∂alpha)²σ²(alpha)
+  //          + 2(∂I_nu/∂I_nu_0)(∂I_nu/∂alpha)Cov(I_nu_0, alpha).
+  // Covariance can be negative (anti-correlation).
 }
 
 __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
@@ -5518,8 +5518,13 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
 
   cudaSetDevice(firstgpu);
 
-  // Allocate error array: [I_nu_0 variance, alpha variance, covariance]
-  // For 2 images, we need space for 3 error maps (variances + covariance)
+  // Allocate error array: [I_nu_0, alpha, covariance] — 3 maps for 2 images.
+  // Kernels accumulate inverse-variances (indices 0,1); noise_reduction
+  // converts those to standard deviations. Output units:
+  //   index 0: σ(I_nu_0)  [Jy/pixel] — uncertainty in flux at reference freq
+  //   index 1: σ(alpha)    [unitless] — uncertainty in spectral index
+  //   index 2: Cov(I_nu_0, alpha) [Jy/pixel] — covariance (same units as
+  //   I_nu_0)
   int error_image_count = image->getImageCount() + 1;  // +1 for covariance
   checkCudaErrors(
       cudaMalloc((void**)&errors, sizeof(float) * M * N * error_image_count));
