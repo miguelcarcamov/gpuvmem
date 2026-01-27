@@ -4506,9 +4506,6 @@ __global__ void alpha_Noise(float* noise_I,
                             float* images,
                             float nu,
                             float nu_0,
-                            float* w,
-                            double3* UVW,
-                            cufftComplex* Vr,
                             float* noise,
                             float noise_cut,
                             double DELTAX,
@@ -4518,21 +4515,14 @@ __global__ void alpha_Noise(float* noise_I,
                             float antenna_diameter,
                             float pb_factor,
                             float pb_cutoff,
-                            long numVisibilities,
+                            float sum_weights,
                             long N,
                             long M,
                             int primary_beam) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  float I_nu, I_nu_0, alpha, nudiv, nudiv_pow_alpha, log_nu, Ukv, Vkv, cosk,
-      sink, x, y, dchi2, sum_noise, atten;
-  int x0, y0;
-
-  x0 = xobs;
-  y0 = yobs;
-  x = (j - x0) * DELTAX * RPDEG_D;
-  y = (i - y0) * DELTAY * RPDEG_D;
+  float I_nu, I_nu_0, alpha, nudiv, nudiv_pow_alpha, log_nu, atten;
 
   atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, nu, xobs, yobs,
                       DELTAX, DELTAY, primary_beam);
@@ -4545,26 +4535,74 @@ __global__ void alpha_Noise(float* noise_I,
   I_nu = I_nu_0 * nudiv_pow_alpha;
   log_nu = logf(nudiv);
 
-  sum_noise = 0.0f;
+  // Error propagation for alpha:
+  // σ²(alpha) ∝ (∂I_nu/∂alpha)² * σ²(visibilities)
+  // Where: ∂I_nu/∂alpha = I_nu * log(nu/nu_0)
+  // So: σ²(alpha) ∝ I_nu² * log²(nu/nu_0) * σ²(visibilities)
+  // This matches the pattern used in I_nu_0_Noise
   if (noise[N * i + j] < noise_cut) {
-    for (int v = 0; v < numVisibilities; v++) {
-      Ukv = x * UVW[v].x;
-      Vkv = y * UVW[v].y;
-#if (__CUDA_ARCH__ >= 300)
-      sincospif(2.0 * (Ukv + Vkv), &sink, &cosk);
-#else
-      cosk = cospif(2.0 * (Ukv + Vkv));
-      sink = sinpif(2.0 * (Ukv + Vkv));
-#endif
-      dchi2 = ((Vr[v].x * cosk) - (Vr[v].y * sink));
-      sum_noise += w[v] * (atten * I_nu + dchi2);
-    }
-    if (sum_noise <= 0.0f)
-      noise_I[N * M + N * i + j] += 0.0f;
-    else
-      noise_I[N * M + N * i + j] += log_nu * log_nu * atten * I_nu * sum_noise;
+    noise_I[N * M + N * i + j] +=
+        log_nu * log_nu * atten * atten * I_nu * I_nu * sum_weights;
   } else {
     noise_I[N * M + N * i + j] = 0.0f;
+  }
+}
+
+// Compute covariance term for I_nu_0 and alpha noise correlation
+// This accounts for the correlation between fitted parameters
+// Full error propagation: σ²(I_nu) = (∂I_nu/∂I_nu_0)²σ²(I_nu_0) +
+// (∂I_nu/∂alpha)²σ²(alpha)
+//                         + 2(∂I_nu/∂I_nu_0)(∂I_nu/∂alpha)Cov(I_nu_0, alpha)
+// The covariance term: Cov(I_nu_0, alpha) ∝ (∂I_nu/∂I_nu_0) × (∂I_nu/∂alpha) ×
+// σ²(visibilities) Where: ∂I_nu/∂I_nu_0 = atten * (nu/nu_0)^alpha
+//        ∂I_nu/∂alpha = I_nu * log(nu/nu_0)
+// Note: The covariance is stored at index 2 (after I_nu_0 variance at 0, alpha
+// variance at 1) Can be used to compute:
+// - Correlation coefficient: ρ = Cov(I_nu_0, alpha) / (σ(I_nu_0) * σ(alpha))
+// - Total uncertainty in I_nu when both parameters vary
+__global__ void covariance_Noise(float* noise_cov,
+                                 float* images,
+                                 float nu,
+                                 float nu_0,
+                                 float* noise,
+                                 float noise_cut,
+                                 double DELTAX,
+                                 double DELTAY,
+                                 float xobs,
+                                 float yobs,
+                                 float antenna_diameter,
+                                 float pb_factor,
+                                 float pb_cutoff,
+                                 float sum_weights,
+                                 long N,
+                                 long M,
+                                 int primary_beam) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  float I_nu, I_nu_0, alpha, nudiv, nudiv_pow_alpha, log_nu, atten;
+
+  atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, nu, xobs, yobs,
+                      DELTAX, DELTAY, primary_beam);
+
+  nudiv = nu / nu_0;
+  I_nu_0 = images[N * i + j];
+  alpha = images[N * M + N * i + j];
+  nudiv_pow_alpha = powf(nudiv, alpha);
+
+  I_nu = I_nu_0 * nudiv_pow_alpha;
+  log_nu = logf(nudiv);
+
+  // Covariance contribution: (∂I_nu/∂I_nu_0) × (∂I_nu/∂alpha) ×
+  // σ²(visibilities) = atten * (nu/nu_0)^alpha * I_nu * log(nu/nu_0) *
+  // σ²(visibilities) = atten * I_nu * log(nu/nu_0) * σ²(visibilities) Store at
+  // index 2: noise_cov[2 * M * N + N * i + j] Note: The factor of 2 is applied
+  // when computing total uncertainty
+  if (noise[N * i + j] < noise_cut) {
+    noise_cov[2 * M * N + N * i + j] +=
+        atten * atten * I_nu * log_nu * sum_weights;
+  } else {
+    noise_cov[2 * M * N + N * i + j] = 0.0f;
   }
 }
 
@@ -4572,15 +4610,24 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  // Convert variance to standard deviation (uncertainty) for I_nu_0 (index 0)
   if (noise_I[N * i + j] > 0.0f)
     noise_I[N * i + j] = 1.0f / sqrt(noise_I[N * i + j]);
   else
     noise_I[N * i + j] = 0.0f;
 
+  // Convert variance to standard deviation (uncertainty) for alpha (index 1)
   if (noise_I[N * M + N * i + j] > 0.0f)
     noise_I[N * M + N * i + j] = 1.0f / sqrt(noise_I[N * M + N * i + j]);
   else
     noise_I[N * M + N * i + j] = 0.0f;
+
+  // Covariance (index 2) is kept as-is (not converted to correlation
+  // coefficient here) To compute correlation: ρ = Cov / (σ(I_nu_0) * σ(alpha))
+  // To compute total uncertainty in I_nu:
+  // σ²(I_nu) = (∂I_nu/∂I_nu_0)²σ²(I_nu_0) + (∂I_nu/∂alpha)²σ²(alpha)
+  //          + 2(∂I_nu/∂I_nu_0)(∂I_nu/∂alpha)Cov(I_nu_0, alpha)
+  // Note: Covariance can be negative, indicating anti-correlation
 }
 
 __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
@@ -5337,10 +5384,13 @@ __host__ void calculateErrors(Image* image) {
 
   cudaSetDevice(firstgpu);
 
-  checkCudaErrors(cudaMalloc((void**)&errors,
-                             sizeof(float) * M * N * image->getImageCount()));
+  // Allocate error array: [I_nu_0 variance, alpha variance, covariance]
+  // For 2 images, we need space for 3 error maps (variances + covariance)
+  int error_image_count = image->getImageCount() + 1;  // +1 for covariance
   checkCudaErrors(
-      cudaMemset(errors, 0, sizeof(float) * M * N * image->getImageCount()));
+      cudaMalloc((void**)&errors, sizeof(float) * M * N * error_image_count));
+  checkCudaErrors(
+      cudaMemset(errors, 0, sizeof(float) * M * N * error_image_count));
   float sum_weights;
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
@@ -5369,6 +5419,7 @@ __host__ void calculateErrors(Image* image) {
 
 #pragma omp critical
               {
+                // Compute variance for I_nu_0 (stored at index 0)
                 I_nu_0_Noise<<<numBlocksNN, threadsPerBlockNN>>>(
                     errors, image->getImage(), device_noise_image, noise_cut,
                     datasets[d].fields[f].nu[i], nu_0,
@@ -5380,20 +5431,30 @@ __host__ void calculateErrors(Image* image) {
                     datasets[d].fields[f].ref_yobs_pix, DELTAX, DELTAY,
                     sum_weights, N, M, datasets[d].antennas[0].primary_beam);
                 checkCudaErrors(cudaDeviceSynchronize());
+
+                // Compute variance for alpha (stored at index 1)
                 alpha_Noise<<<numBlocksNN, threadsPerBlockNN>>>(
                     errors, image->getImage(), datasets[d].fields[f].nu[i],
-                    nu_0,
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    datasets[d].fields[f].device_visibilities[i][s].uvw,
-                    datasets[d].fields[f].device_visibilities[i][s].Vr,
-                    device_noise_image, noise_cut, DELTAX, DELTAY,
+                    nu_0, device_noise_image, noise_cut, DELTAX, DELTAY,
                     datasets[d].fields[f].ref_xobs_pix,
                     datasets[d].fields[f].ref_yobs_pix,
                     datasets[d].antennas[0].antenna_diameter,
                     datasets[d].antennas[0].pb_factor,
-                    datasets[d].antennas[0].pb_cutoff,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    N, M, datasets[d].antennas[0].primary_beam);
+                    datasets[d].antennas[0].pb_cutoff, sum_weights, N, M,
+                    datasets[d].antennas[0].primary_beam);
+                checkCudaErrors(cudaDeviceSynchronize());
+
+                // Compute covariance between I_nu_0 and alpha (stored at index
+                // 2)
+                covariance_Noise<<<numBlocksNN, threadsPerBlockNN>>>(
+                    errors, image->getImage(), datasets[d].fields[f].nu[i],
+                    nu_0, device_noise_image, noise_cut, DELTAX, DELTAY,
+                    datasets[d].fields[f].ref_xobs_pix,
+                    datasets[d].fields[f].ref_yobs_pix,
+                    datasets[d].antennas[0].antenna_diameter,
+                    datasets[d].antennas[0].pb_factor,
+                    datasets[d].antennas[0].pb_cutoff, sum_weights, N, M,
+                    datasets[d].antennas[0].primary_beam);
                 checkCudaErrors(cudaDeviceSynchronize());
               }
             }
