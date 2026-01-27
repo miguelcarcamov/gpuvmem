@@ -92,12 +92,12 @@ void optimizationOrder(Optimizer* optimizer, Image* image) {
   optimizer->setImage(image);
   optimizer->setFlag(0);
   optimizer->optimize();
-  /*optimizer->setFlag(1);
-     optimizer->optimize();
-     optimizer->setFlag(2);
-     optimizer->optimize();
-     optimizer->setFlag(3);
-     optimizer->optimize();*/
+  optimizer->setFlag(1);
+  optimizer->optimize();
+  optimizer->setFlag(2);
+  optimizer->optimize();
+  optimizer->setFlag(3);
+  optimizer->optimize();
 }
 
 __host__ int main(int argc, char** argv) {
