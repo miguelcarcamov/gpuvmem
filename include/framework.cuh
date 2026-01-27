@@ -78,6 +78,7 @@ typedef struct variables {
   float nu_0;
   float robust_param;
   float threshold;
+  bool normalize;
 } Vars;
 
 class SynthesizerFactory {

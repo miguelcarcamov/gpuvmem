@@ -35,12 +35,15 @@
 
 #include "directioncosines.cuh"
 #include "fixedpoint.cuh"
+#include "framework.cuh"
 #include "gaussian2D.cuh"
 #include "gaussianSinc2D.cuh"
 #include "pillBox2D.cuh"
 #include "pswf_12D.cuh"
 #include "sinc2D.cuh"
 #include "uvtaper.cuh"
+
+extern Vars variables;
 
 int num_gpus;
 
@@ -189,9 +192,9 @@ __host__ int main(int argc, char** argv) {
   Fi* atv = createObject<Fi, std::string>("AnisotropicTotalVariation");
   Fi* itv = createObject<Fi, std::string>("IsotropicTotalVariation");
 
-  chi2->configure(
-      -1, 0, 0,
-      false);  // (penalizatorIndex, ImageIndex, imageToaddDphi, normalize)
+  chi2->configure(-1, 0, 0,
+                  variables.normalize);  // (penalizatorIndex, ImageIndex,
+                                         // imageToaddDphi, normalize)
   e->configure(0, 0, 0, false);
   e->setPrior(0.001f);
   l1->configure(1, 0, 0, false);

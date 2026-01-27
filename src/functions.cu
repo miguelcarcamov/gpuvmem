@@ -262,6 +262,8 @@ __host__ Vars getOptions(int argc, char** argv) {
   flags.Bool(modify_weights, 'W', "modify-weights",
              "Modify Measurement Set WEIGHT column with gpuvmem weights",
              "Flags");
+  flags.Bool(variables.normalize, 'l', "normalize",
+             "Normalize chi-squared by effective number of samples", "Flags");
   flags.Bool(help, 'h', "help", "Shows this help", "Help");
   flags.Bool(warranty, 'w', "warranty", "Shows warranty details", "Help");
   flags.Bool(copyright, 'c', "copyright", "Shows copyright conditions", "Help");
