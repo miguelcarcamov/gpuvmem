@@ -1095,6 +1095,13 @@ void MFS::writeImages() {
   {
     if (this->error == NULL) {
       this->error = createObject<Error, std::string>("SecondDerivateError");
+      // Set optimizer reference so SecondDerivateError can access Chi2 for
+      // fg_scale
+      SecondDerivateError* sde =
+          dynamic_cast<SecondDerivateError*>(this->error);
+      if (sde != NULL) {
+        sde->setOptimizer(this->optimizer);
+      }
     }
     /* code to calculate error */
     /* make void * params */
@@ -1131,29 +1138,29 @@ void MFS::writeResiduals() {
         "Visibilities are gridded, we will need to de-grid to save them in a "
         "Measurement Set File\n");
     // In the de-gridding procedure weights are also restored to the original
-    // Create ImageProcessor for degridding (needed to recompute FFT from final image)
+    // Create ImageProcessor for degridding (needed to recompute FFT from final
+    // image)
     ImageProcessor* ip = new ImageProcessor();
     ip->configure(image_count);
     if (this->ckernel != NULL) {
       ip->setCKernel(this->ckernel);
     }
-    
+
     for (int d = 0; d < nMeasurementSets; d++) {
       // Use new degridding function that recomputes FFT from final image
       // This is more accurate than bilinear interpolation
-      degridding(datasets[d].fields, datasets[d].data, deltau, deltav,
-                 num_gpus, firstgpu, variables.blockSizeV, M, N, this->ckernel,
+      degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus,
+                 firstgpu, variables.blockSizeV, M, N, this->ckernel,
                  image->getImage(), ip, datasets[d]);
     }
-    
+
     // Clean up ImageProcessor
     delete ip;
-    
+
     Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
     float res = chi2->calcFi(image->getImage());
-    printf(
-        "Non-gridded chi2 after de-gridding using convolution kernel %f\n",
-        res);
+    printf("Non-gridded chi2 after de-gridding using convolution kernel %f\n",
+           res);
   }
 
   for (int d = 0; d < nMeasurementSets; d++) {

@@ -483,6 +483,9 @@ __global__ void chi2Vector(float* __restrict__ chi2,
                            const cufftComplex* __restrict__ Vr,
                            const float* __restrict__ w,
                            long numVisibilities);
+__global__ void weightsSquaredVector(float* __restrict__ w_squared,
+                                     const float* __restrict__ w,
+                                     long numVisibilities);
 __global__ void SVector(float* S,
                         float* noise,
                         cufftComplex* I,
@@ -571,7 +574,8 @@ __global__ void DChi2(float* noise,
                       float pb_cutoff,
                       float freq,
                       int primary_beam,
-                      bool normalize);
+                      bool normalize,
+                      float N_eff);
 __global__ void projection(float* px, float* x, float MINPIX, long N);
 __global__ void substraction(float* x,
                              cufftComplex* xc,

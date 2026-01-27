@@ -3169,6 +3169,17 @@ __global__ void chi2Vector(float* __restrict__ chi2,
   }
 }
 
+// Compute squared weights for effective number of samples calculation
+__global__ void weightsSquaredVector(float* __restrict__ w_squared,
+                                     const float* __restrict__ w,
+                                     long numVisibilities) {
+  const int i = threadIdx.x + blockDim.x * blockIdx.x;
+
+  if (i < numVisibilities) {
+    w_squared[i] = w[i] * w[i];
+  }
+}
+
 __host__ __device__ float approxAbs(float val, float epsilon) {
   return sqrtf(val * val + epsilon);
 }
@@ -4101,7 +4112,8 @@ __global__ void DChi2(float* noise,
                       float pb_cutoff,
                       float freq,
                       int primary_beam,
-                      bool normalize) {
+                      bool normalize,
+                      float N_eff) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -4169,7 +4181,16 @@ __global__ void DChi2(float* noise,
   dchi2 *= scale_factor;
 
   if (normalize) {
-    dchi2 /= numVisibilities;
+    // Normalize by effective number of samples: N_eff = (Σw_k)² / (Σw_k²)
+    // This accounts for varying weights and represents effective degrees of
+    // freedom. When all weights are equal, N_eff = N. When weights vary,
+    // N_eff < N and properly accounts for the reduced effective sample size.
+    if (N_eff > 0.0f) {
+      dchi2 /= N_eff;
+    } else {
+      // Fallback to numVisibilities if N_eff is zero
+      dchi2 /= numVisibilities;
+    }
   }
 
   // Write result
@@ -4197,7 +4218,8 @@ __global__ void DChi2(float* noise,
                       float pb_cutoff,
                       float freq,
                       int primary_beam,
-                      bool normalize) {
+                      bool normalize,
+                      float N_eff) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -4266,7 +4288,16 @@ __global__ void DChi2(float* noise,
   dchi2 *= scale_factor;
 
   if (normalize) {
-    dchi2 /= numVisibilities;
+    // Normalize by effective number of samples: N_eff = (Σw_k)² / (Σw_k²)
+    // This accounts for varying weights and represents effective degrees of
+    // freedom. When all weights are equal, N_eff = N. When weights vary,
+    // N_eff < N and properly accounts for the reduced effective sample size.
+    if (N_eff > 0.0f) {
+      dchi2 /= N_eff;
+    } else {
+      // Fallback to numVisibilities if N_eff is zero
+      dchi2 /= numVisibilities;
+    }
   }
 
   // Write result
@@ -4831,6 +4862,51 @@ __host__ float chi2(float* I,
                   datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
               checkCudaErrors(cudaDeviceSynchronize());
 
+              // Compute effective number of samples BEFORE computing chi2
+              // (to avoid overwriting device_chi2)
+              float N_eff = 0.0f;
+              if (normalize) {
+                // Normalize by effective number of samples:
+                // N_eff = (Σw_k)² / (Σw_k²)
+                // This accounts for varying weights and represents effective
+                // degrees of freedom. When all weights are equal, N_eff = N.
+                // When weights vary, N_eff < N and properly accounts for the
+                // reduced effective sample size.
+                float sum_weights = deviceReduce<float>(
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV);
+
+                // Compute sum of squared weights (reuse device_chi2 as temp
+                // storage)
+                weightsSquaredVector<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    vars_gpu[gpu_idx].device_chi2,  // Temp storage
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                checkCudaErrors(cudaDeviceSynchronize());
+
+                float sum_weights_squared = deviceReduce<float>(
+                    vars_gpu[gpu_idx].device_chi2,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV);
+
+                // Calculate effective number of samples
+                if (sum_weights_squared > 0.0f && sum_weights > 0.0f) {
+                  N_eff = (sum_weights * sum_weights) / sum_weights_squared;
+                }
+              }
+
               ////chi2 VECTOR
               chi2Vector<<<
                   datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
@@ -4853,9 +4929,16 @@ __host__ float chi2(float* I,
                       .threadsPerBlockUV);
               // REDUCTIONS
               // chi2
-              if (normalize)
-                result /=
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
+              if (normalize) {
+                if (N_eff > 0.0f) {
+                  result /= N_eff;
+                } else {
+                  // Fallback to numVisibilities if N_eff calculation fails
+                  result /= datasets[d]
+                                .fields[f]
+                                .numVisibilitiesPerFreqPerStoke[i][s];
+                }
+              }
 
               reduced_chi2 += result;
             }
@@ -4898,6 +4981,45 @@ __host__ void dchi2(float* I,
                 0) {
               checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_dchi2, 0,
                                          sizeof(float) * M * N));
+
+              // Compute effective number of samples: N_eff = (Σw_k)² / (Σw_k²)
+              float N_eff = 0.0f;
+              if (normalize) {
+                float sum_weights = deviceReduce<float>(
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV);
+
+                // Compute sum of squared weights
+                weightsSquaredVector<<<
+                    datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV>>>(
+                    vars_gpu[gpu_idx]
+                        .device_chi2,  // Reuse device_chi2 as temp storage
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                checkCudaErrors(cudaDeviceSynchronize());
+
+                float sum_weights_squared = deviceReduce<float>(
+                    vars_gpu[gpu_idx].device_chi2,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
+                    datasets[d]
+                        .fields[f]
+                        .device_visibilities[i][s]
+                        .threadsPerBlockUV);
+
+                // Calculate effective number of samples
+                if (sum_weights_squared > 0.0f && sum_weights > 0.0f) {
+                  N_eff = (sum_weights * sum_weights) / sum_weights_squared;
+                }
+              }
+
               // size_t shared_memory;
               // shared_memory =
               // 3*fields[f].numVisibilitiesPerFreq[i]*sizeof(float) +
@@ -4918,7 +5040,7 @@ __host__ void dchi2(float* I,
                     datasets[d].antennas[0].pb_factor,
                     datasets[d].antennas[0].pb_cutoff,
                     datasets[d].fields[f].nu[i],
-                    datasets[d].antennas[0].primary_beam, normalize);
+                    datasets[d].antennas[0].primary_beam, normalize, N_eff);
               } else {
                 DChi2<<<numBlocksNN, threadsPerBlockNN>>>(
                     device_noise_image, vars_gpu[gpu_idx].device_dchi2,
@@ -4934,7 +5056,7 @@ __host__ void dchi2(float* I,
                     datasets[d].antennas[0].pb_factor,
                     datasets[d].antennas[0].pb_cutoff,
                     datasets[d].fields[f].nu[i],
-                    datasets[d].antennas[0].primary_beam, normalize);
+                    datasets[d].antennas[0].primary_beam, normalize, N_eff);
               }
               // DChi2<<<numBlocksNN, threadsPerBlockNN,
               // shared_memory>>>(device_noise_image,

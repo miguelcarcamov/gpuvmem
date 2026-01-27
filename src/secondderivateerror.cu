@@ -2,14 +2,13 @@
 #include <secondderivateerror.cuh>
 
 extern long N, M;
-extern Optimizer* optimizer;
 
 void SecondDerivateError::calculateErrorImage(Image* I, Visibilities* v) {
   if (I->getImageCount() > 1) {
     // Get fg_scale from Chi2 if available, otherwise use stored value
     float fg_scale_val = this->fg_scale;
-    if (optimizer != NULL) {
-      ObjectiveFunction* of = optimizer->getObjectiveFunction();
+    if (this->optimizer != NULL) {
+      ObjectiveFunction* of = this->optimizer->getObjectiveFunction();
       if (of != NULL) {
         Fi* chi2 = of->getFiByName("Chi2");
         if (chi2 != NULL) {
