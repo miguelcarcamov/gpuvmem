@@ -4597,6 +4597,11 @@ __global__ void alpha_Noise(float* noise_I,
   // σ²(alpha) ∝ (∂I_ν/∂alpha)² * σ²(visibilities)
   // Where: ∂I_ν/∂alpha = fg_scale · atten · I_ν · log(ν/ν₀)
   // So: σ²(alpha) ∝ fg_scale² · atten² · I_ν² · log²(ν/ν₀) · σ²(visibilities)
+  //
+  // IMPORTANT: When ν = ν₀ (reference frequency), log(ν/ν₀)=0 so the alpha
+  // variance contribution from that channel is zero. You need observation
+  // frequencies away from ν₀ to get non-zero alpha errors. If you have only
+  // one channel or all channels at ν₀, σ(alpha) will be 0.
   float first_order_term =
       fg_scale_sq * log_nu * log_nu * atten * atten * I_nu * I_nu * sum_weights;
 
@@ -4629,6 +4634,8 @@ __global__ void alpha_Noise(float* noise_I,
 // The covariance term: Cov(I_nu_0, alpha) ∝ (∂I_nu/∂I_nu_0) × (∂I_nu/∂alpha) ×
 // σ²(visibilities) Where: ∂I_nu/∂I_nu_0 = atten * (nu/nu_0)^alpha
 //        ∂I_nu/∂alpha = I_nu * log(nu/nu_0)
+// So Cov ∝ (ν/ν₀)^α · I_ν · log(ν/ν₀). When ν = ν₀, log(ν/ν₀)=0 and the
+// covariance contribution from that channel is zero (same as σ(alpha)).
 // Note: The covariance is stored at index 2 (after I_nu_0 variance at 0, alpha
 // variance at 1) Can be used to compute:
 // - Correlation coefficient: ρ = Cov(I_nu_0, alpha) / (σ(I_nu_0) * σ(alpha))
@@ -4767,26 +4774,26 @@ __host__ float chi2(float* I,
 
   float reduced_chi2 = 0.0f;
 
-  // Create static 1x1 PillBox kernel for degridding when gridding is enabled
-  // This kernel is used to sample the model visibility grid at original
-  // visibility locations We use 1x1 PillBox (nearest neighbor) instead of the
-  // gridding kernel to avoid double-applying the convolution kernel
-  static PillBox2D* degrid_kernel = NULL;
+  // Create static 1x1 PillBox kernels for degridding when gridding is enabled:
+  // one per GPU so each device uses a kernel allocated on that device. Using a
+  // single kernel on firstgpu for all devices causes cudaErrorIllegalAddress
+  // when gpu_idx > 0 (cross-device pointer use).
+  static std::vector<PillBox2D*> degrid_kernels;
   static bool degrid_kernel_initialized = false;
 
-  // Check if gridding is enabled and initialize degrid kernel if needed
+  // Check if gridding is enabled and initialize one degrid kernel per GPU
   CKernel* ckernel = ip->getCKernel();
   bool use_gridding = (ckernel != NULL && ckernel->getGPUKernel() != NULL);
 
   if (use_gridding && !degrid_kernel_initialized) {
-    degrid_kernel =
-        new PillBox2D(1, 1);  // 1x1 PillBox for nearest neighbor sampling
-    degrid_kernel->setGPUID(
-        firstgpu);  // Set GPU ID to ensure kernel is created on correct device
-    degrid_kernel->setSigmas(
-        fabs(deltau), fabs(deltav));  // Set sigmas (not critical for 1x1)
-    degrid_kernel
-        ->buildKernel();  // Build and normalize the 1x1 kernel (value = 1.0)
+    degrid_kernels.resize(num_gpus);
+    for (int g = 0; g < num_gpus; g++) {
+      degrid_kernels[g] =
+          new PillBox2D(1, 1);  // 1x1 PillBox for nearest neighbor sampling
+      degrid_kernels[g]->setGPUID(firstgpu + g);
+      degrid_kernels[g]->setSigmas(fabs(deltau), fabs(deltav));
+      degrid_kernels[g]->buildKernel();
+    }
     degrid_kernel_initialized = true;
   }
 
@@ -4833,14 +4840,10 @@ __host__ float chi2(float* I,
                                          sizeof(float) * max_number_vis));
 
               if (use_gridding) {
-                // Gridding enabled: use degridding with 1x1 PillBox kernel
-                // We use 1x1 PillBox (nearest neighbor) instead of the gridding
-                // kernel because the gridding kernel was already applied during
-                // gridding. For chi2, we just need to sample the model grid at
-                // original visibility locations.
-
-                // Degridding: Use 1x1 PillBox kernel for nearest neighbor
-                // sampling
+                // Gridding enabled: use degridding with 1x1 PillBox kernel for
+                // this GPU. Use degrid_kernels[gpu_idx] so the kernel lives on
+                // the same device as device_V (avoids cudaErrorIllegalAddress).
+                PillBox2D* dk = degrid_kernels[gpu_idx];
                 degriddingGPU<<<
                     datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
                     datasets[d]
@@ -4849,11 +4852,11 @@ __host__ float chi2(float* I,
                         .threadsPerBlockUV>>>(
                     datasets[d].fields[f].device_visibilities[i][s].uvw,
                     datasets[d].fields[f].device_visibilities[i][s].Vm,
-                    vars_gpu[gpu_idx].device_V, degrid_kernel->getGPUKernel(),
-                    deltau, deltav,
+                    vars_gpu[gpu_idx].device_V, dk->getGPUKernel(), deltau,
+                    deltav,
                     datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-                    M, N, degrid_kernel->getm(), degrid_kernel->getn(),
-                    degrid_kernel->getSupportX(), degrid_kernel->getSupportY());
+                    M, N, dk->getm(), dk->getn(), dk->getSupportX(),
+                    dk->getSupportY());
                 checkCudaErrors(cudaDeviceSynchronize());
               } else {
                 // Gridding disabled: use bilinear interpolation
