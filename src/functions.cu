@@ -4711,7 +4711,7 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
   // Indices 0 and 1: kernels store inverse-variance; convert to σ for output.
-  // Index 0: σ(I_nu_0) [Jy/pixel]
+  // Index 0: σ(I_nu_0) [code units or Jy/pixel depending on fg_scale]
   if (noise_I[N * i + j] > 0.0f)
     noise_I[N * i + j] = 1.0f / sqrtf(noise_I[N * i + j]);
   else
@@ -4723,11 +4723,34 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
   else
     noise_I[N * M + N * i + j] = 0.0f;
 
-  // Index 2: Cov(I_nu_0, alpha) [Jy/pixel] — kept as covariance (not
-  // correlation). Correlation: ρ = Cov / (σ(I_nu_0) * σ(alpha)). σ²(I_nu) =
-  // (∂I_nu/∂I_nu_0)²σ²(I_nu_0) + (∂I_nu/∂alpha)²σ²(alpha)
+  // Index 2: Cov(I_nu_0, alpha) [code units or Jy/pixel depending on fg_scale]
+  // — kept as covariance (not correlation). Correlation: ρ = Cov / (σ(I_nu_0) *
+  // σ(alpha)). σ²(I_nu) = (∂I_nu/∂I_nu_0)²σ²(I_nu_0) +
+  // (∂I_nu/∂alpha)²σ²(alpha)
   //          + 2(∂I_nu/∂I_nu_0)(∂I_nu/∂alpha)Cov(I_nu_0, alpha).
   // Covariance can be negative (anti-correlation).
+}
+
+// Convert error units from code units to Jy/pixel when normalize=False
+// When normalize=False: fg_scale ≠ 1.0, so I_nu_0 is in code units
+// We multiply error for I_nu_0 (index 0) and covariance (index 2) by fg_scale
+// to convert to Jy/pixel. Alpha error (index 1) is unitless and unchanged.
+__global__ void convertErrorUnits(float* errors,
+                                  float fg_scale,
+                                  long N,
+                                  long M) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  // Index 0: σ(I_nu_0) — convert from code units to Jy/pixel
+  errors[N * i + j] *= fg_scale;
+
+  // Index 1: σ(alpha) — unitless, no conversion needed
+  // (no change)
+
+  // Index 2: Cov(I_nu_0, alpha) — convert from code units to Jy/pixel
+  // (same units as I_nu_0)
+  errors[2 * M * N + N * i + j] *= fg_scale;
 }
 
 __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
@@ -5606,6 +5629,16 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
 
   noise_reduction<<<numBlocksNN, threadsPerBlockNN>>>(errors, N, M);
   checkCudaErrors(cudaDeviceSynchronize());
+
+  // Convert error units: if normalize=False (fg_scale ≠ 1.0), I_nu_0 is in code
+  // units, so we need to multiply error by fg_scale to convert to Jy/pixel. If
+  // normalize=True (fg_scale = 1.0), I_nu_0 is already in Jy/pixel, so no
+  // conversion needed.
+  if (fg_scale != 1.0f) {
+    convertErrorUnits<<<numBlocksNN, threadsPerBlockNN>>>(errors, fg_scale, N,
+                                                          M);
+    checkCudaErrors(cudaDeviceSynchronize());
+  }
 
   image->setErrorImage(errors);
 }
