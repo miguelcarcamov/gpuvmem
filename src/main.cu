@@ -201,6 +201,8 @@ __host__ int main(int argc, char** argv) {
   l1->configure(1, 0, 0, false);
   tsqv->configure(2, 0, 0, false);
   l2cp->configure(3, 1, 0, false);
+  l2cp->setPenalizationFactor(0.01f);
+  l2cp->setPrior(3.0f);
   lap->configure(4, 0, 0, false);
   atv->configure(5, 0, 0, false);
   itv->configure(6, 0, 0, false);
