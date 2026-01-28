@@ -19,7 +19,7 @@ int multigpu, firstgpu, reg_term, total_visibilities, image_count,
     nPenalizators, nMeasurementSets = 0, max_number_vis;
 
 std::string msinput, msoutput, modinput, mempath, out_image, output;
-float nu_0, threshold;
+float nu_0, threshold, alpha_n_sigma;
 extern int num_gpus;
 
 double ra, dec, crpix1, crpix2, DELTAX, DELTAY, deltau, deltav;
@@ -106,6 +106,7 @@ void MFS::configure(int argc, char** argv) {
   nu_0 = variables.nu_0;
   robust_param = variables.robust_param;
   threshold = variables.threshold * 5.0;
+  alpha_n_sigma = variables.alpha_n_sigma;
   ioVisibilitiesHandler->setApplyNoiseInput(apply_noise);
   ioVisibilitiesHandler->setStoreModelVisInput(save_model_input);
   ioImageHandler->setPrintImages(print_images);

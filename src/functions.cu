@@ -53,6 +53,8 @@ extern double beam_bmaj, beam_bmin, beam_bpa;
 extern float *initial_values, *penalizators, robust_param;
 extern double ra, dec, DELTAX, DELTAY, deltau, deltav, crpix1, crpix2;
 extern float threshold;
+extern float alpha_n_sigma;  // N sigma for alpha mask; when > 0 use I_nu_0 >=
+                             // alpha_n_sigma*noise
 extern float nu_0;
 extern int nPenalizators, nMeasurementSets, max_number_vis;
 
@@ -209,6 +211,10 @@ __host__ Vars getOptions(int argc, char** argv) {
   flags.Var(variables.threshold, 'T', "threshold", 0.0f,
             "Threshold to calculate the spectral index image above a certain "
             "number of sigmas in I_nu_0");
+  flags.Var(
+      variables.alpha_n_sigma, 'A', "alpha_sigma_cut", 3.0f,
+      "Mask alpha to 0 where I_nu_0 < alpha_sigma_cut * noise (e.g. 3 or 5). "
+      "When > 0, overrides threshold for alpha masking.");
   flags.Var(variables.path, 'p', "path", std::string("mem/"),
             "Path to save FITS images. With last trail / included. (Example "
             "./../mem/)");
@@ -2996,6 +3002,7 @@ __global__ void clip2IWNoise(float* noise,
                              float alpha_start,
                              float eta,
                              float threshold,
+                             float alpha_n_sigma,
                              int schedule) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
@@ -3008,8 +3015,14 @@ __global__ void clip2IWNoise(float* noise,
     }
     I[N * M + N * i + j] = 0.0f;
   } else {
-    if (I[N * i + j] < threshold && schedule > 0) {
-      I[N * M + N * i + j] = 0.0f;
+    if (schedule > 0) {
+      // Mask alpha to 0 where I_nu_0 is below cut. When alpha_n_sigma > 0 use
+      // N*noise (e.g. 3 or 5 sigma); otherwise use absolute threshold.
+      float cut = (alpha_n_sigma > 0.0f) ? (alpha_n_sigma * noise[N * i + j])
+                                         : threshold;
+      if (I[N * i + j] < cut) {
+        I[N * M + N * i + j] = 0.0f;
+      }
     }
   }
 }
@@ -3542,6 +3555,80 @@ __global__ void DQ(float* __restrict__ dQ,
 
   const float noise_val = noise[N * i + j];
   dQ[N * i + j] = calculateDQ(I, lambda, noise_val, noise_cut, index, M, N);
+}
+
+// L2 constant prior: R = sum_p (I_p - prior)^2. Used e.g. for spectral index
+// (image index 1) to penalize deviation from a constant alpha_prior.
+__device__ float calculateL2ConstantPrior(const float* __restrict__ I,
+                                          float prior,
+                                          float noise,
+                                          float noise_cut,
+                                          int index,
+                                          int M,
+                                          int N) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  float val = 0.0f;
+  if (noise < noise_cut) {
+    float c = I[N * M * index + N * i + j];
+    float d = c - prior;
+    val = d * d;
+  }
+  return val;
+}
+
+__global__ void L2ConstantPriorVector(float* __restrict__ R,
+                                      const float* __restrict__ noise,
+                                      const float* __restrict__ I,
+                                      float prior,
+                                      long N,
+                                      long M,
+                                      float noise_cut,
+                                      int index) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  const float noise_val = noise[N * i + j];
+  R[N * i + j] =
+      calculateL2ConstantPrior(I, prior, noise_val, noise_cut, index, M, N);
+}
+
+__device__ float calculateDL2ConstantPrior(const float* __restrict__ I,
+                                           float prior,
+                                           float lambda,
+                                           float noise,
+                                           float noise_cut,
+                                           int index,
+                                           int M,
+                                           int N) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  float dR = 0.0f;
+  if (noise < noise_cut) {
+    float c = I[N * M * index + N * i + j];
+    dR = 2.0f * (c - prior);
+  }
+  dR *= lambda;
+  return dR;
+}
+
+__global__ void DL2ConstantPriorKernel(float* __restrict__ dR,
+                                       const float* __restrict__ I,
+                                       const float* __restrict__ noise,
+                                       float prior,
+                                       float noise_cut,
+                                       float lambda,
+                                       long N,
+                                       long M,
+                                       int index) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  const float noise_val = noise[N * i + j];
+  dR[N * i + j] = calculateDL2ConstantPrior(I, prior, lambda, noise_val,
+                                            noise_cut, index, M, N);
 }
 
 __device__ float calculateTV(const float* __restrict__ I,
@@ -4393,6 +4480,7 @@ __global__ void DChi2_total_alpha(float* noise,
                                   float noise_cut,
                                   float fg_scale,
                                   float threshold,
+                                  float alpha_n_sigma,
                                   long N,
                                   long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
@@ -4413,7 +4501,9 @@ __global__ void DChi2_total_alpha(float* noise,
   dalpha = I_nu_0 * dI_nu_0 * logf(nudiv);
 
   if (noise[N * i + j] < noise_cut) {
-    if (I_nu_0 > threshold) {
+    float cut =
+        (alpha_n_sigma > 0.0f) ? (alpha_n_sigma * noise[N * i + j]) : threshold;
+    if (I_nu_0 > cut) {
       dchi2_total[N * M + N * i + j] += dchi2[N * i + j] * dalpha;
     } else {
       dchi2_total[N * M + N * i + j] += 0.0f;
@@ -4495,6 +4585,7 @@ __global__ void DChi2_2I(float* noise,
                          float* dchi2,
                          float* dchi2_total,
                          float threshold,
+                         float alpha_n_sigma,
                          float noise_cut,
                          int image,
                          long N,
@@ -4503,7 +4594,9 @@ __global__ void DChi2_2I(float* noise,
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
   if (noise[N * i + j] < noise_cut && image) {
-    if (I[N * i + j] > threshold) {
+    float cut =
+        (alpha_n_sigma > 0.0f) ? (alpha_n_sigma * noise[N * i + j]) : threshold;
+    if (I[N * i + j] > cut) {
       dchi2_total[N * i + j] += dchi2[N * i + j] * chain[N * M + N * i + j];
     } else {
       dchi2_total[N * i + j] += 0.0f;
@@ -5013,7 +5106,7 @@ __host__ void dchi2(float* I,
                       device_noise_image, result_dchi2,
                       vars_gpu[gpu_idx].device_dchi2, I,
                       datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale,
-                      threshold, N, M);
+                      threshold, alpha_n_sigma, N, M);
                 checkCudaErrors(cudaDeviceSynchronize());
               }
             }
@@ -5063,7 +5156,7 @@ __host__ void particularEvaluateXt(float* xt,
 __host__ void linkClipWNoise2I(float* I) {
   clip2IWNoise<<<numBlocksNN, threadsPerBlockNN>>>(
       device_noise_image, I, N, M, noise_cut, initial_values[0],
-      initial_values[1], eta, threshold, flag_opt);
+      initial_values[1], eta, threshold, alpha_n_sigma, flag_opt);
   checkCudaErrors(cudaDeviceSynchronize());
 };
 
@@ -5351,6 +5444,47 @@ __host__ void DQuadraticP(float* I,
     }
   }
 };
+
+__host__ float l2ConstantPrior(float* I,
+                               float* ds,
+                               float prior_value,
+                               float penalization_factor,
+                               int mod,
+                               int order,
+                               int index,
+                               int iter) {
+  cudaSetDevice(firstgpu);
+
+  float resultS = 0.0f;
+  if (iter > 0 && penalization_factor) {
+    L2ConstantPriorVector<<<numBlocksNN, threadsPerBlockNN>>>(
+        ds, device_noise_image, I, prior_value, N, M, noise_cut, index);
+    checkCudaErrors(cudaDeviceSynchronize());
+    resultS = deviceReduce<float>(ds, M * N,
+                                  threadsPerBlockNN.x * threadsPerBlockNN.y);
+  }
+  return resultS;
+}
+
+__host__ void DL2ConstantPrior(float* I,
+                               float* dgi,
+                               float prior_value,
+                               float penalization_factor,
+                               int mod,
+                               int order,
+                               int index,
+                               int iter) {
+  cudaSetDevice(firstgpu);
+
+  if (iter > 0 && penalization_factor) {
+    if (flag_opt % 2 == index) {
+      DL2ConstantPriorKernel<<<numBlocksNN, threadsPerBlockNN>>>(
+          dgi, I, device_noise_image, prior_value, noise_cut,
+          penalization_factor, N, M, index);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+  }
+}
 
 __host__ float isotropicTV(float* I,
                            float* ds,

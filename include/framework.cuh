@@ -78,6 +78,8 @@ typedef struct variables {
   float nu_0;
   float robust_param;
   float threshold;
+  float alpha_n_sigma;  // N sigma for alpha mask: alpha=0 where I_nu_0 <
+                        // alpha_n_sigma*noise (e.g. 3 or 5)
   bool normalize;
 } Vars;
 
