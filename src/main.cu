@@ -92,12 +92,12 @@ void optimizationOrder(Optimizer* optimizer, Image* image) {
   optimizer->setImage(image);
   optimizer->setFlag(0);
   optimizer->optimize();
-  optimizer->setFlag(1);
+  /*optimizer->setFlag(1);
   optimizer->optimize();
   optimizer->setFlag(2);
   optimizer->optimize();
   optimizer->setFlag(3);
-  optimizer->optimize();
+  optimizer->optimize();*/
 }
 
 __host__ int main(int argc, char** argv) {
@@ -200,18 +200,18 @@ __host__ int main(int argc, char** argv) {
   e->setPrior(0.001f);
   l1->configure(1, 0, 0, false);
   tsqv->configure(2, 0, 0, false);
-  l2cp->configure(3, 1, 0, false);
-  l2cp->setPenalizationFactor(0.01f);
-  l2cp->setPrior(3.0f);
-  lap->configure(4, 0, 0, false);
-  atv->configure(5, 0, 0, false);
-  itv->configure(6, 0, 0, false);
+  // l2cp->configure(3, 1, 0, false);
+  // l2cp->setPenalizationFactor(0.01f);
+  // l2cp->setPrior(3.0f);
+  lap->configure(3, 0, 0, false);
+  atv->configure(4, 0, 0, false);
+  itv->configure(5, 0, 0, false);
   // e->setPenalizationFactor(0.01); // If not used -Z (Fi.configure(-1,x,x))
   of->addFi(chi2);
   of->addFi(e);
   of->addFi(l1);
   of->addFi(tsqv);
-  of->addFi(l2cp);
+  // of->addFi(l2cp);
   of->addFi(lap);
   of->addFi(atv);
   of->addFi(itv);
