@@ -4557,6 +4557,16 @@ __global__ void I_nu_0_Noise(float* noise_I,
   }
 }
 
+// σ(alpha) from the linear flux model I_ν = I_ν0·(ν/ν0)^α (no log fit).
+// Fisher information for α in flux space: I_α = Σ_c (∂I_ν/∂α)²/σ²(I_ν,c),
+// with ∂I_ν/∂α = I_ν·ln(ν/ν0). Per-channel flux variance (same convention as
+// I_nu_0_Noise): σ²(I_ν,c) = 1/(fg_scale²·atten²·sum_weights) [since
+// σ²(I_ν)=(ν/ν0)^(2α)·σ²(I_ν0) and inv_var(I_ν0)_c =
+// fg_scale²·atten²·sum_weights·(ν/ν0)^(2α)]. So inv_var(α) = 1/σ²(α) = Σ_c
+// (∂I_ν/∂α)²·σ⁻²(I_ν,c)
+//              = Σ_c I_ν²·ln²(ν/ν0)·fg_scale²·atten²·sum_weights_c.
+// When ν=ν0, ln(ν/ν0)=0 so that channel contributes 0. α and σ(α) are
+// unitless; image and sum_weights must be in consistent units so σ(α) ~ 0.1–2.
 __global__ void alpha_Noise(float* noise_I,
                             float* images,
                             float nu,
@@ -4591,36 +4601,14 @@ __global__ void alpha_Noise(float* noise_I,
   I_nu = I_nu_0 * nudiv_pow_alpha;
   log_nu = logf(nudiv);
 
-  float fg_scale_sq = fg_scale * fg_scale;
-
-  // First-order error propagation for alpha:
-  // σ²(alpha) ∝ (∂I_ν/∂alpha)² * σ²(visibilities)
-  // Where: ∂I_ν/∂alpha = fg_scale · atten · I_ν · log(ν/ν₀)
-  // So: σ²(alpha) ∝ fg_scale² · atten² · I_ν² · log²(ν/ν₀) · σ²(visibilities)
-  //
-  // IMPORTANT: When ν = ν₀ (reference frequency), log(ν/ν₀)=0 so the alpha
-  // variance contribution from that channel is zero. You need observation
-  // frequencies away from ν₀ to get non-zero alpha errors. If you have only
-  // one channel or all channels at ν₀, σ(alpha) will be 0.
-  float first_order_term =
-      fg_scale_sq * log_nu * log_nu * atten * atten * I_nu * I_nu * sum_weights;
-
-  // Second-order correction term for variance of alpha:
-  // In second-order error propagation, the correction accounts for curvature:
-  // σ²_total = σ²_first_order + (1/2) * ∂²I_ν/∂alpha² * weight_contribution
-  // Where: ∂²I_ν/∂alpha² = fg_scale · atten · I_ν · log²(ν/ν₀)
-  // The second-order correction adds: (1/2) * fg_scale² · atten² · I_ν ·
-  // log²(ν/ν₀) · sum_weights This is proportional to the curvature of I_ν as a
-  // function of alpha
-  float d2I_nu_dalpha2 =
-      I_nu * log_nu * log_nu;  // ∂²I_ν/∂alpha² (without fg_scale · atten)
-  float second_order_correction =
-      fg_scale_sq * 0.5f * d2I_nu_dalpha2 * atten * atten * sum_weights;
-  // = 0.5 * fg_scale² · I_ν · log²(ν/ν₀) · atten² · sum_weights
+  // Fisher for α (linear model I_ν = I_ν0·(ν/ν0)^α): (∂I_ν/∂α)²/σ²(I_ν) with
+  // ∂I_ν/∂α = I_ν·ln(ν/ν0). When ν = ν0, ln(ν/ν0)=0 so this channel contributes
+  // 0.
+  float inv_var_alpha_c = fg_scale * fg_scale * atten * atten * I_nu * I_nu *
+                          sum_weights * log_nu * log_nu;
 
   if (noise[N * i + j] < noise_cut) {
-    // Combine first-order and second-order terms
-    noise_I[N * M + N * i + j] += first_order_term + second_order_correction;
+    noise_I[N * M + N * i + j] += inv_var_alpha_c;
   } else {
     noise_I[N * M + N * i + j] = 0.0f;
   }
@@ -4676,38 +4664,16 @@ __global__ void covariance_Noise(float* noise_cov,
 
   float fg_scale_sq = fg_scale * fg_scale;
 
-  // First-order covariance contribution:
-  // Cov(I_ν₀, alpha) ∝ (∂I_ν/∂I_ν₀) × (∂I_ν/∂alpha) × σ²(visibilities)
-  // Where: ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α
-  //        ∂I_ν/∂alpha = fg_scale · atten · I_ν · log(ν/ν₀)
-  // So: Cov(I_ν₀, alpha) ∝ fg_scale² · atten² · I_ν · log(ν/ν₀) ·
-  // σ²(visibilities)
-  float first_order_cov =
-      fg_scale_sq * atten * atten * I_nu * log_nu * sum_weights;
+  // Cov(I_ν₀, α) from Fisher (linear model I_ν = I_ν0·(ν/ν0)^α): use only
+  // first-order. Cov ∝ (∂I_ν/∂I_ν₀)(∂I_ν/∂α)/σ²(I_ν) with ∂I_ν/∂I_ν₀ =
+  // (ν/ν₀)^α, ∂I_ν/∂α = I_ν·ln(ν/ν₀), 1/σ²(I_ν) = fg_scale²·atten²·sum_weights.
+  // So cov_c = (ν/ν₀)^α · I_ν·ln(ν/ν₀) · fg_scale²·atten²·sum_weights. When
+  // ν=ν0, ln(ν/ν₀)=0 so this channel contributes 0 (same as σ(α)).
+  float cov_c = fg_scale_sq * atten * atten * nudiv_pow_alpha * I_nu * log_nu *
+                sum_weights;
 
-  // Second-order correction for covariance:
-  // The mixed second derivative term: ∂²I_ν/∂I_ν₀∂alpha * Cov contribution
-  // Where: ∂²I_ν/∂I_ν₀∂alpha = fg_scale · atten · (I_ν/I_ν₀) · log(ν/ν₀)
-  // This correction accounts for how the covariance affects the total
-  // uncertainty The correction is: ∂²I_ν/∂I_ν₀∂alpha * (first-order covariance
-  // contribution) = fg_scale² · atten² · (I_ν²/I_ν₀) · log²(ν/ν₀) · sum_weights
-  float second_order_cov_correction = 0.0f;
-  if (I_nu_0 != 0.0f && fabsf(I_nu_0) > 1e-10f) {
-    float d2I_nu_dI_nu_0_dalpha =
-        (I_nu / I_nu_0) *
-        log_nu;  // ∂²I_ν/∂I_ν₀∂alpha (without fg_scale · atten)
-    // The second-order correction to covariance accumulation
-    second_order_cov_correction = fg_scale_sq * d2I_nu_dI_nu_0_dalpha * atten *
-                                  atten * I_nu * log_nu * sum_weights;
-    // = fg_scale² · (I_ν/I_ν₀ · log_nu) · atten² · I_ν · log_nu · sum_weights
-    // = fg_scale² · (I_ν²/I_ν₀) · log²(ν/ν₀) · atten² · sum_weights
-  }
-
-  // Store at index 2: noise_cov[2 * M * N + N * i + j]
-  // Store first-order covariance + second-order correction
   if (noise[N * i + j] < noise_cut) {
-    noise_cov[2 * M * N + N * i + j] +=
-        first_order_cov + second_order_cov_correction;
+    noise_cov[2 * M * N + N * i + j] += cov_c;
   } else {
     noise_cov[2 * M * N + N * i + j] = 0.0f;
   }
@@ -4724,11 +4690,10 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
   else
     noise_I[N * i + j] = 0.0f;
 
-  // Index 1: σ(alpha) [unitless]. Clamp to avoid explosion when alpha is
-  // poorly constrained (accumulated Fisher tiny, e.g. when ν≈ν₀ so
-  // log(ν/ν₀)≈0). σ(alpha) > ~10 means effectively unconstrained; cap at 10.0
-  // for display.
-  const float sigma_alpha_max = 10.0f;
+  // Index 1: σ(alpha) [unitless]. With consistent units (image in Jy etc.),
+  // σ(α) should be on the order of α (typically 0.1–2). Cap only guards
+  // against 1/sqrt(tiny) when α is unconstrained (e.g. ν≈ν0 or I_ν≈0).
+  const float sigma_alpha_max = 10000.0f;
   if (noise_I[N * M + N * i + j] > 0.0f) {
     float sigma_alpha = 1.0f / sqrtf(noise_I[N * M + N * i + j]);
     noise_I[N * M + N * i + j] = fminf(sigma_alpha, sigma_alpha_max);
