@@ -144,6 +144,13 @@ class Io {
                                        int iteration,
                                        int index,
                                        bool isInGPU){};
+  virtual void printNormalizedImage(float* I,
+                                    char* name_image,
+                                    char* units,
+                                    int iteration,
+                                    int index,
+                                    float scale,
+                                    bool isInGPU){};
   virtual void printNotPathNotNormalizedImage(float* I,
                                               char* name_image,
                                               char* units,

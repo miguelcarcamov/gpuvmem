@@ -341,6 +341,19 @@ void IoFITS::printNotNormalizedImage(float* I,
             this->equinox, isInGPU);
 };
 
+void IoFITS::printNormalizedImage(float* I,
+                                  char* name_image,
+                                  char* units,
+                                  int iteration,
+                                  int index,
+                                  float scale,
+                                  bool isInGPU) {
+  OCopyFITS(I, getConstCharFromString(this->input),
+            getConstCharFromString(this->path), name_image, units, iteration,
+            index, scale, this->M, this->N, this->ra, this->dec, this->frame,
+            this->equinox, isInGPU);
+};
+
 void IoFITS::printNotPathNotNormalizedImage(float* I,
                                             char* name_image,
                                             char* units,

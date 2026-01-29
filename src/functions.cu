@@ -4788,9 +4788,8 @@ __global__ void I_nu_0_Noise(float* noise_I,
     // Accumulate inverse-variance contribution for this channel
     noise_I[N * i + j] +=
         fg_scale_sq * atten * atten * sum_weights * nudiv_pow_alpha;
-  } else {
-    noise_I[N * i + j] = 0.0f;
   }
+  // else: do nothing — keep accumulation from other channels
 }
 
 // σ(alpha) from the linear flux model I_ν = I_ν0·(ν/ν0)^α (no log fit).
@@ -4850,9 +4849,8 @@ __global__ void alpha_Noise(float* noise_I,
   if (noise[N * i + j] < noise_cut) {
     // Accumulate inverse-variance contribution for this channel
     noise_I[N * M + N * i + j] += inv_var_alpha_c;
-  } else {
-    noise_I[N * M + N * i + j] = 0.0f;
   }
+  // else: do nothing — keep accumulation from other channels
 }
 
 // Compute covariance term for I_nu_0 and alpha noise correlation
@@ -4914,219 +4912,8 @@ __global__ void covariance_Noise(float* noise_cov,
 
   if (noise[N * i + j] < noise_cut) {
     noise_cov[2 * M * N + N * i + j] += cov_c;
-  } else {
-    noise_cov[2 * M * N + N * i + j] = 0.0f;
   }
-}
-
-// Hessian contribution kernels: compute second-derivative terms from residuals
-// The full Hessian is: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ² + Σ (residual × ∂²I_ν/∂θ_i∂θ_j)/σ²
-// The first term is Fisher information (already computed in I_nu_0_Noise, alpha_Noise, covariance_Noise)
-// These kernels compute the second term using residuals
-
-// Hessian contribution for α diagonal: H[1,1] += Σ (residual × ∂²I_ν/∂α²)/σ²
-// Where: ∂²I_ν/∂α² = fg_scale × atten × I_ν_base × log²(ν/ν₀)
-__global__ void hessian_alpha_alpha(float* hessian_contrib,
-                                   float* images,
-                                   float* noise,
-                                   float noise_cut,
-                                   cufftComplex* Vr,
-                                   double3* UVW,
-                                   float* w,
-                                   float nu,
-                                   float nu_0,
-                                   float fg_scale,
-                                   float ref_xobs,
-                                   float ref_yobs,
-                                   float phs_xobs,
-                                   float phs_yobs,
-                                   double DELTAX,
-                                   double DELTAY,
-                                   float antenna_diameter,
-                                   float pb_factor,
-                                   float pb_cutoff,
-                                   float freq,
-                                   int primary_beam,
-                                   bool normalize,
-                                   float N_eff,
-                                   long N,
-                                   long M,
-                                   long numVisibilities) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-  // Early exit: check noise threshold first
-  const float noise_val = noise[N * i + j];
-  if (noise_val >= noise_cut) {
-    return;
-  }
-
-  // Compute pixel coordinates and direction cosines
-  const int x0 = phs_xobs;
-  const int y0 = phs_yobs;
-  const double x = (j - x0) * DELTAX * RPDEG_D;
-  const double y = (i - y0) * DELTAY * RPDEG_D;
-  const double z = sqrt(1.0 - x * x - y * y);
-
-  // Compute attenuation
-  const float atten =
-      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                  ref_yobs, DELTAX, DELTAY, primary_beam);
-
-  // Compute second derivative: ∂²I_ν/∂α² = fg_scale × atten × I_ν_base × log²(ν/ν₀)
-  float I_nu_0 = images[N * i + j];
-  float alpha = images[N * M + N * i + j];
-  float nudiv = nu / nu_0;
-  float nudiv_pow_alpha = powf(nudiv, alpha);
-  float I_nu_base = I_nu_0 * nudiv_pow_alpha;
-  float log_nu = logf(nudiv);
-  float d2I_dalpha2 = fg_scale * atten * I_nu_base * log_nu * log_nu;
-
-  // Accumulate residual-weighted second derivative
-  float hessian_sum = 0.0f;
-  const double z_minus_one = z - 1.0;
-  const double two = 2.0;
-
-#pragma unroll 4
-  for (int v = 0; v < numVisibilities; v++) {
-    const double uvw_x = UVW[v].x;
-    const double uvw_y = UVW[v].y;
-    const double uvw_z = UVW[v].z;
-
-    const double Ukv = x * uvw_x;
-    const double Vkv = y * uvw_y;
-    const double Wkv = z_minus_one * uvw_z;
-    const double phase = two * (Ukv + Vkv + Wkv);
-
-    float cosk, sink;
-#if (__CUDA_ARCH__ >= 300)
-    sincospif(phase, &sink, &cosk);
-#else
-    cosk = cospif(phase);
-    sink = sinpif(phase);
-#endif
-
-    const float weight = __ldg(&w[v]);
-    const float vr_real = __ldg(&Vr[v].x);
-    const float vr_imag = __ldg(&Vr[v].y);
-
-    // Accumulate: residual × second_derivative × weight
-    // The residual contribution is: (vr_real * cosk + vr_imag * sink)
-    hessian_sum = fmaf(weight, (vr_real * cosk + vr_imag * sink) * d2I_dalpha2, hessian_sum);
-  }
-
-  // Apply normalization if needed
-  if (normalize) {
-    if (N_eff > 0.0f) {
-      hessian_sum /= N_eff;
-    } else {
-      hessian_sum /= numVisibilities;
-    }
-  }
-
-  // Accumulate Hessian contribution (adds to Fisher information)
-  atomicAdd(&hessian_contrib[N * M + N * i + j], hessian_sum);
-}
-
-// Hessian contribution for cross-term: H[0,1] += Σ (residual × ∂²I_ν/∂I_ν₀∂α)/σ²
-// Where: ∂²I_ν/∂I_ν₀∂α = fg_scale × atten × (ν/ν₀)^α × log(ν/ν₀)
-__global__ void hessian_I_nu_0_alpha(float* hessian_contrib,
-                                     float* images,
-                                     float* noise,
-                                     float noise_cut,
-                                     cufftComplex* Vr,
-                                     double3* UVW,
-                                     float* w,
-                                     float nu,
-                                     float nu_0,
-                                     float fg_scale,
-                                     float ref_xobs,
-                                     float ref_yobs,
-                                     float phs_xobs,
-                                     float phs_yobs,
-                                     double DELTAX,
-                                     double DELTAY,
-                                     float antenna_diameter,
-                                     float pb_factor,
-                                     float pb_cutoff,
-                                     float freq,
-                                     int primary_beam,
-                                     bool normalize,
-                                     float N_eff,
-                                     long N,
-                                     long M,
-                                     long numVisibilities) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-  // Early exit: check noise threshold first
-  const float noise_val = noise[N * i + j];
-  if (noise_val >= noise_cut) {
-    return;
-  }
-
-  // Compute pixel coordinates and direction cosines
-  const int x0 = phs_xobs;
-  const int y0 = phs_yobs;
-  const double x = (j - x0) * DELTAX * RPDEG_D;
-  const double y = (i - y0) * DELTAY * RPDEG_D;
-  const double z = sqrt(1.0 - x * x - y * y);
-
-  // Compute attenuation
-  const float atten =
-      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
-                  ref_yobs, DELTAX, DELTAY, primary_beam);
-
-  // Compute second derivative: ∂²I_ν/∂I_ν₀∂α = fg_scale × atten × (ν/ν₀)^α × log(ν/ν₀)
-  float alpha = images[N * M + N * i + j];
-  float nudiv = nu / nu_0;
-  float nudiv_pow_alpha = powf(nudiv, alpha);
-  float log_nu = logf(nudiv);
-  float d2I_dI_nu_0_dalpha = fg_scale * atten * nudiv_pow_alpha * log_nu;
-
-  // Accumulate residual-weighted second derivative
-  float hessian_sum = 0.0f;
-  const double z_minus_one = z - 1.0;
-  const double two = 2.0;
-
-#pragma unroll 4
-  for (int v = 0; v < numVisibilities; v++) {
-    const double uvw_x = UVW[v].x;
-    const double uvw_y = UVW[v].y;
-    const double uvw_z = UVW[v].z;
-
-    const double Ukv = x * uvw_x;
-    const double Vkv = y * uvw_y;
-    const double Wkv = z_minus_one * uvw_z;
-    const double phase = two * (Ukv + Vkv + Wkv);
-
-    float cosk, sink;
-#if (__CUDA_ARCH__ >= 300)
-    sincospif(phase, &sink, &cosk);
-#else
-    cosk = cospif(phase);
-    sink = sinpif(phase);
-#endif
-
-    const float weight = __ldg(&w[v]);
-    const float vr_real = __ldg(&Vr[v].x);
-    const float vr_imag = __ldg(&Vr[v].y);
-
-    // Accumulate: residual × second_derivative × weight
-    hessian_sum = fmaf(weight, (vr_real * cosk + vr_imag * sink) * d2I_dI_nu_0_dalpha, hessian_sum);
-  }
-
-  // Apply normalization if needed
-  if (normalize) {
-    if (N_eff > 0.0f) {
-      hessian_sum /= N_eff;
-    } else {
-      hessian_sum /= numVisibilities;
-    }
-  }
-
-  // Accumulate Hessian contribution (adds to Fisher information off-diagonal)
-  atomicAdd(&hessian_contrib[2 * M * N + N * i + j], hessian_sum);
+  // else: do nothing — keep accumulation from other channels
 }
 
 __global__ void noise_reduction(float* noise_I, long N, long M) {
@@ -5165,31 +4952,9 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
     noise_I[N * M + N * i + j] = 0.0f;
   }
 
-  // Index 2: Cov(I_nu_0, alpha) from 2x2 inversion (convertErrorUnits will scale by fg_scale to Jy/pixel)
+  // Index 2: Cov(I_nu_0, alpha) from 2x2 inversion.
+  // σ(I_nu_0) and Cov are in code units; fg_scale is applied when saving (Io).
   noise_I[2 * M * N + N * i + j] = cov01;
-}
-
-// Convert error units from code units to Jy/pixel when normalize=False
-// When normalize=False: fg_scale ≠ 1.0, so I_nu_0 is in code units
-// NOTE: With log-space fitting, index 0 stores σ(log(I_nu_0)) which is unitless.
-// To get σ(I_nu_0) in Jy/pixel, use error propagation: σ(I_nu_0) = I_nu_0 · σ(log(I_nu_0))
-// We still multiply covariance (index 2) by fg_scale to convert to Jy/pixel.
-// Alpha error (index 1) is unitless and unchanged.
-__global__ void convertErrorUnits(float* errors,
-                                  float fg_scale,
-                                  long N,
-                                  long M) {
-  const int j = threadIdx.x + blockDim.x * blockIdx.x;
-  const int i = threadIdx.y + blockDim.y * blockIdx.y;
-
-  // Index 0: σ(I_nu_0) — convert from code units to Jy/pixel
-  errors[N * i + j] *= fg_scale;
-
-  // Index 1: σ(alpha) — unitless, no conversion needed
-  // (no change)
-
-  // Index 2: Cov(I_nu_0, alpha) — already computed in noise_reduction; convert to Jy/pixel
-  errors[2 * M * N + N * i + j] *= fg_scale;
 }
 
 __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
@@ -6048,16 +5813,11 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
   cudaSetDevice(firstgpu);
 
   // Allocate error array: [I_nu_0, alpha, covariance] — 3 maps for 2 images.
-  // Error propagation uses Hessian-based approach (second derivatives) for finite-sample accuracy.
-  // Full Hessian: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ² + Σ (residual × ∂²I_ν/∂θ_i∂θ_j)/σ²
-  // First term (Fisher information) computed by I_nu_0_Noise, alpha_Noise, covariance_Noise.
-  // Second term (Hessian correction) computed by hessian_alpha_alpha, hessian_I_nu_0_alpha.
-  // Kernels accumulate inverse-variances (indices 0,1); noise_reduction converts to standard deviations.
-  // Output units (after noise_reduction: 2x2 Hessian inversion gives σ and Cov):
-  //   index 0: σ(I_nu_0)  [Jy/pixel] — uncertainty in flux at reference freq
-  //   index 1: σ(alpha)   [unitless] — uncertainty in spectral index
-  //   index 2: Cov(I_nu_0, alpha) [Jy/pixel] — covariance from H^{-1}[0,1] (same units as I_nu_0)
-  // Note: Residuals (Vr) must be computed before calling this function (e.g., from last chi2 evaluation).
+  // Error propagation uses Fisher information only (no Hessian terms).
+  // We combine inverse-variances over channels (1/σ²_total = Σ_c 1/σ²_c); summing σ's would be wrong.
+  // Fisher: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ² in I_nu_0_Noise, alpha_Noise, covariance_Noise.
+  // noise_reduction inverts 2x2 H to get σ(I_nu_0), σ(alpha), Cov. fg_scale applied when saving (Io).
+  //   index 0: σ(I_nu_0) [code units]; index 1: σ(alpha) [unitless]; index 2: Cov [code units].
   int error_image_count = image->getImageCount() + 1;  // +1 for covariance
   checkCudaErrors(
       cudaMalloc((void**)&errors, sizeof(float) * M * N * error_image_count));
@@ -6129,54 +5889,6 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
                     datasets[d].antennas[0].pb_cutoff, sum_weights, fg_scale, N,
                     M, datasets[d].antennas[0].primary_beam);
                 checkCudaErrors(cudaDeviceSynchronize());
-
-                // Compute Hessian contributions from residuals (second-derivative terms)
-                // Note: Residuals (Vr) should already be computed from the last chi2 evaluation
-                // The Hessian adds to the Fisher information: H[i,j] = F[i,j] + Σ (residual × ∂²I_ν/∂θ_i∂θ_j)/σ²
-                bool normalize = false;  // Use same normalization as Fisher information kernels
-                float N_eff = 0.0f;  // Not used if normalize=false
-                
-                // Hessian contribution for α diagonal: H[1,1] += Σ (residual × ∂²I_ν/∂α²)/σ²
-                hessian_alpha_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
-                    errors, image->getImage(), device_noise_image, noise_cut,
-                    datasets[d].fields[f].device_visibilities[i][s].Vr,
-                    datasets[d].fields[f].device_visibilities[i][s].uvw,
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    datasets[d].fields[f].nu[i], nu_0, fg_scale,
-                    datasets[d].fields[f].ref_xobs_pix,
-                    datasets[d].fields[f].ref_yobs_pix,
-                    datasets[d].fields[f].phs_xobs_pix,
-                    datasets[d].fields[f].phs_yobs_pix,
-                    DELTAX, DELTAY,
-                    datasets[d].antennas[0].antenna_diameter,
-                    datasets[d].antennas[0].pb_factor,
-                    datasets[d].antennas[0].pb_cutoff,
-                    datasets[d].fields[f].nu[i],
-                    datasets[d].antennas[0].primary_beam,
-                    normalize, N_eff, N, M,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                checkCudaErrors(cudaDeviceSynchronize());
-
-                // Hessian contribution for cross-term: H[0,1] += Σ (residual × ∂²I_ν/∂I_ν₀∂α)/σ²
-                hessian_I_nu_0_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
-                    errors, image->getImage(), device_noise_image, noise_cut,
-                    datasets[d].fields[f].device_visibilities[i][s].Vr,
-                    datasets[d].fields[f].device_visibilities[i][s].uvw,
-                    datasets[d].fields[f].device_visibilities[i][s].weight,
-                    datasets[d].fields[f].nu[i], nu_0, fg_scale,
-                    datasets[d].fields[f].ref_xobs_pix,
-                    datasets[d].fields[f].ref_yobs_pix,
-                    datasets[d].fields[f].phs_xobs_pix,
-                    datasets[d].fields[f].phs_yobs_pix,
-                    DELTAX, DELTAY,
-                    datasets[d].antennas[0].antenna_diameter,
-                    datasets[d].antennas[0].pb_factor,
-                    datasets[d].antennas[0].pb_cutoff,
-                    datasets[d].fields[f].nu[i],
-                    datasets[d].antennas[0].primary_beam,
-                    normalize, N_eff, N, M,
-                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-                checkCudaErrors(cudaDeviceSynchronize());
               }
             }
           }
@@ -6188,16 +5900,8 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
   noise_reduction<<<numBlocksNN, threadsPerBlockNN>>>(errors, N, M);
   checkCudaErrors(cudaDeviceSynchronize());
 
-  // Convert error units: if normalize=False (fg_scale ≠ 1.0), I_nu_0 is in code
-  // units, so we need to multiply error by fg_scale to convert to Jy/pixel. If
-  // normalize=True (fg_scale = 1.0), I_nu_0 is already in Jy/pixel, so no
-  // conversion needed.
-  if (fg_scale != 1.0f) {
-    convertErrorUnits<<<numBlocksNN, threadsPerBlockNN>>>(errors, fg_scale, N,
-                                                          M);
-    checkCudaErrors(cudaDeviceSynchronize());
-  }
-
+  // Error array holds σ(I_nu_0), σ(alpha), Cov in code units. fg_scale is
+  // applied when saving slices 0 and 2 to disk (Io classes).
   image->setErrorImage(errors);
 }
 

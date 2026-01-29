@@ -132,6 +132,13 @@ class IoFITS : public Io {
                                int iteration,
                                int index,
                                bool isInGPU) override;
+  void printNormalizedImage(float* I,
+                            char* name_image,
+                            char* units,
+                            int iteration,
+                            int index,
+                            float scale,
+                            bool isInGPU) override;
   void printNotPathNotNormalizedImage(float* I,
                                       char* name_image,
                                       char* units,

@@ -1217,11 +1217,12 @@ void MFS::writeImages() {
     this->error->calculateErrorImage(this->image, this->visibilities);
     if (IoOrderError == NULL) {
       if (print_images) {
-        // Error map layout: index 0 = σ(I_nu_0) [Jy/pixel], 1 = σ(alpha)
-        // [unitless], 2 = Cov(I_nu_0, alpha) [Jy/pixel]
-        ioImageHandler->printNotNormalizedImage(
+        // Error map layout: index 0 = σ(I_nu_0), 1 = σ(alpha), 2 = Cov (in code
+        // units). Use printNormalizedImage / printNotNormalizedImage so all
+        // three go to the same directory (this->path). Slice 0 uses fg_scale.
+        ioImageHandler->printNormalizedImage(
             image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL",
-            optimizer->getCurrentIteration(), 0, true);
+            optimizer->getCurrentIteration(), 0, this->fg_scale, true);
         ioImageHandler->printNotNormalizedImage(
             image->getErrorImage(), "error_alpha_0.fits", "",
             optimizer->getCurrentIteration(), 1, true);
