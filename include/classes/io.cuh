@@ -2,6 +2,9 @@
 #define IO_CUH
 
 #include "MSFITSIO.cuh"
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
 
 typedef struct stat Stat;
 

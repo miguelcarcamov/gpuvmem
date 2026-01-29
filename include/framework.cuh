@@ -81,6 +81,9 @@ typedef struct variables {
   float alpha_n_sigma;  // N sigma for alpha mask: alpha=0 where I_nu_0 <
                         // alpha_n_sigma*noise (e.g. 3 or 5)
   bool normalize;
+  std::string optimization_mode;  // "joint" | "block" | "one" | "alpha_static"
+  // joint = I_nu_0 + alpha together; block = alternate I_nu_0, alpha, ...;
+  // one = single image / one run; alpha_static = two images, alpha fixed, I_nu_0 only
 } Vars;
 
 class SynthesizerFactory {

@@ -32,6 +32,7 @@
  */
 
 #include "f1dim.cuh"
+#include "linesearcher.cuh"  // For LineSearcher class definition
 extern float* device_pcom;
 extern float *device_xicom, (*nrfunc)(float*);
 extern long M;
@@ -44,28 +45,46 @@ extern float* initial_values;
 extern int image_count;
 
 extern ObjectiveFunction* testof;
-extern Image* I;
+extern Image* I;  // Fallback for backward compatibility
+extern LineSearcher* current_line_searcher;  // Set by Brent, used to get Image object
 
 __host__ float f1dim(float x) {
   float* device_xt;
   float f;
 
-  checkCudaErrors(
-      cudaMalloc((void**)&device_xt, sizeof(float) * M * N * image_count));
-  checkCudaErrors(
-      cudaMemset(device_xt, 0, sizeof(float) * M * N * image_count));
+  // Get Image object from current_line_searcher (set by Brent) instead of extern Image* I
+  Image* image_to_use = (current_line_searcher != nullptr) ? current_line_searcher->getImage() : I;
+  
+  // Fallback to extern I if line searcher doesn't have image set (for backward compatibility)
+  if (image_to_use == nullptr) {
+    image_to_use = I;
+  }
+  
+  if (image_to_use == nullptr) {
+    std::cerr << "ERROR: f1dim: No Image object available!" << std::endl;
+    return 0.0f;
+  }
 
-  imageMap* auxPtr = I->getFunctionMapping();
+  long M_local = image_to_use->getM();
+  long N_local = image_to_use->getN();
+  int image_count_local = image_to_use->getImageCount();
+
+  checkCudaErrors(
+      cudaMalloc((void**)&device_xt, sizeof(float) * M_local * N_local * image_count_local));
+  checkCudaErrors(
+      cudaMemset(device_xt, 0, sizeof(float) * M_local * N_local * image_count_local));
+
+  imageMap* auxPtr = image_to_use->getFunctionMapping();
   // xt = pcom+x*xicom;
   if (!nopositivity) {
-    for (int i = 0; i < I->getImageCount(); i++) {
+    for (int i = 0; i < image_count_local; i++) {
       (auxPtr[i].evaluateXt)(device_xt, device_pcom, device_xicom, x, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
   } else {
-    for (int i = 0; i < I->getImageCount(); i++) {
+    for (int i = 0; i < image_count_local; i++) {
       evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(
-          device_xt, device_pcom, device_xicom, x, N, M, i);
+          device_xt, device_pcom, device_xicom, x, N_local, M_local, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
     /*evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt,

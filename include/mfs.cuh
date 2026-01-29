@@ -7,7 +7,7 @@
 #include <measures/Measures/MDirection.h>
 #include "directioncosines.cuh"
 #include "framework.cuh"
-#include "frprmn.cuh"
+#include "optimizers/conjugategradient.cuh"
 #include "functions.cuh"
 
 class MFS : public Synthesizer {
@@ -25,6 +25,9 @@ class MFS : public Synthesizer {
   void applyFilter(Filter* filter) {
     filter->applyCriteria(this->visibilities);
   };
+  
+ protected:
+  std::vector<float> minimal_pixel_values;  // Store minimal pixel values for Image object
 };
 
 #endif

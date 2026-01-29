@@ -143,8 +143,12 @@ endif()
 # Create executable target
 add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
 
-# Add all CUDA source files
-file(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu)
+# Add all CUDA source files (including subdirectories)
+file(GLOB_RECURSE SOURCE_FILES 
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu)
 target_sources(gpuvmem PRIVATE ${SOURCE_FILES})
 
 # Set C++ compile features based on standard
@@ -164,6 +168,9 @@ target_include_directories(
          ${CFITSIO_INCLUDE_DIR} # CFITSIO headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include # Project headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
          ${Boost_INCLUDE_DIRS} # Boost headers
          ${CUDAToolkit_LIBRARY_ROOT}/samples/common/inc # CUDA samples headers
 )

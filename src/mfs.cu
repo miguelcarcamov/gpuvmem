@@ -1,6 +1,7 @@
 #include "imageProcessor.cuh"
 #include "mfs.cuh"
-#include "secondderivateerror.cuh"
+#include "objective_function/terms/regularizers/secondderivateerror.cuh"
+#include "functions.cuh"
 
 long M, N, numVisibilities;
 
@@ -10,6 +11,10 @@ float noise_cut, MINPIX, minpix, random_probability = 1.0;
 float noise_jypix, eta, robust_param;
 float *host_I, sum_weights, *penalizators;
 double beam_bmaj, beam_bmin, beam_bpa;
+
+// Global Image pointer for backward compatibility (used as fallback in line searchers)
+// Line searchers prefer using this->image from optimizer, but fall back to extern I if needed
+Image* I;
 
 dim3 threadsPerBlockNN;
 dim3 numBlocksNN;
@@ -101,6 +106,14 @@ void MFS::configure(int argc, char** argv) {
   random_probability = variables.randoms;
   ioVisibilitiesHandler->setRandomProbability(random_probability);
   eta = variables.eta;
+  // Ensure eta is negative for proper positivity clipping
+  // eta defaults to -1.0f, but if user provides a non-negative value, use default
+  if (eta >= 0.0f) {
+    if (verbose_flag) {
+      std::cerr << "WARNING: eta must be negative for positivity clipping. Using default eta = -1.0" << std::endl;
+    }
+    eta = -1.0f;
+  }
   ioVisibilitiesHandler->setGridding(variables.gridding);
   this->setGriddingThreads(variables.gridding);
   nu_0 = variables.nu_0;
@@ -166,10 +179,21 @@ void MFS::configure(int argc, char** argv) {
     exit(-1);
   }
 
+  // Store minimal_pixel_values from initial_values (before eta multiplication)
+  // These will be stored in Image object
+  // Store as member variable so it's accessible in setDevice() where Image object is created
+  this->minimal_pixel_values.clear();
   for (int i = 0; i < image_count; i++) {
     if (i == 0) {
-      initial_values.push_back(std::stof(string_values[i]) * -1.0f * eta);
+      // Set MINPIX from the first initial value (before eta multiplication)
+      // This is the minimum pixel value threshold for positivity clipping
+      MINPIX = std::stof(string_values[i]);
+      // Store MINPIX * -1.0f * eta in minimal_pixel_values (same as initial_values)
+      this->minimal_pixel_values.push_back(MINPIX * -1.0f * eta);
+      // Store value after eta multiplication in initial_values
+      initial_values.push_back(MINPIX * -1.0f * eta);
     } else {
+      this->minimal_pixel_values.push_back(std::stof(string_values[i]));
       initial_values.push_back(std::stof(string_values[i]));
     }
   }
@@ -177,6 +201,7 @@ void MFS::configure(int argc, char** argv) {
   string_values.clear();
   if (image_count == 1) {
     initial_values.push_back(0.0f);
+    this->minimal_pixel_values.push_back(0.0f);  // Add default minimal pixel value for second image
     image_count++;
     imagesChanged = 1;
   }
@@ -807,7 +832,13 @@ void MFS::setDevice() {
         cudaMalloc((void**)&device_distance_image, sizeof(float) * M * N));
 
   /////////// MAKING IMAGE OBJECT /////////////
-  image = new Image(device_Image, image_count);
+  image = new Image(device_Image, image_count, M, N);
+  // Set minimal pixel values from initial_values (before eta multiplication)
+  // minimal_pixel_values was declared in configure() and stored as member variable
+  image->setMinimalPixelValues(this->minimal_pixel_values);
+  // Set global I pointer for backward compatibility (used as fallback in line searchers)
+  // Note: Line searchers prefer using this->image from optimizer, but fall back to extern I if needed
+  I = image;
   imageMap* functionPtr = (imageMap*)malloc(sizeof(imageMap) * image_count);
   image->setFunctionMapping(functionPtr);
 
@@ -934,9 +965,14 @@ void MFS::setDevice() {
 
   this->fg_scale = noise_min;
   noise_cut = noise_cut * noise_min;
+  // MINPIX is set from the -z option (first initial value) at line 181
+  // Note: 0.0 is a valid value for MINPIX (user may want values >= 0)
+  // So we don't check if MINPIX == 0.0f, as that would incorrectly overwrite
+  // a valid user-specified value of 0.0
   if (verbose_flag) {
     printf("fg_scale = %e\n", this->fg_scale);
     printf("noise (Jy/pix) = %e\n", noise_jypix);
+    printf("MINPIX = %e (from -z option)\n", MINPIX);
   }
 
   std::vector<float> u_mask;
@@ -1020,12 +1056,36 @@ void MFS::run() {
   }
 
   printf("\n\nStarting optimizer\n");
-  if (this->Order == NULL) {
-    if (imagesChanged) {
-      optimizer->setImage(image);
+  // Four modes: joint (I_nu_0+alpha), block (alternate), one (single image), alpha_static (I_nu_0 only, alpha fixed)
+  const std::string& mode = variables.optimization_mode;
+
+  if (image_count == 1) {
+    // One image mode: single run (flag 0 = single block)
+    if (verbose_flag)
+      printf("Optimization mode: one (single image)\n");
+    optimizer->setImage(image);
+    optimizer->setFlag(0);
+    optimizer->optimize();
+  } else if (image_count == 2) {
+    optimizer->setImage(image);
+    if (mode == "joint") {
+      if (verbose_flag)
+        printf("Optimization mode: joint (I_nu_0 + alpha together)\n");
+      optimizer->setFlag(-1);  // -1 = joint: gradient for all images
       optimizer->optimize();
-    } else if (image_count == 2) {
-      optimizer->setImage(image);
+    } else if (mode == "alpha_static") {
+      if (verbose_flag)
+        printf("Optimization mode: alpha_static (I_nu_0 only, alpha fixed)\n");
+      optimizer->setFlag(0);  // I_nu_0 only
+      optimizer->optimize();
+    } else if (mode == "block" && this->Order != NULL) {
+      if (verbose_flag)
+        printf("Optimization mode: block (alternating I_nu_0, alpha, ...)\n");
+      (this->Order)(optimizer, image);
+    } else {
+      // block with Order==NULL, or unknown mode: fallback to alternating
+      if (verbose_flag)
+        printf("Optimization mode: block (alternating I_nu_0, alpha, ...)\n");
       optimizer->setFlag(0);
       optimizer->optimize();
       optimizer->setFlag(1);
@@ -1035,8 +1095,11 @@ void MFS::run() {
       optimizer->setFlag(3);
       optimizer->optimize();
     }
-  } else {
+  } else if (this->Order != NULL) {
     (this->Order)(optimizer, image);
+  } else if (imagesChanged) {
+    optimizer->setImage(image);
+    optimizer->optimize();
   }
 
   float chi2_final = 0.0f;
@@ -1123,6 +1186,7 @@ void MFS::run() {
 
 void MFS::writeImages() {
   printf("Saving final image to disk\n");
+  
   if (IoOrderEnd == NULL) {
     ioImageHandler->printNotPathImage(image->getImage(), "JY/PIXEL",
                                       optimizer->getCurrentIteration(), 0,

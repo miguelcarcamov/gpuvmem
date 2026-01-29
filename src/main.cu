@@ -42,6 +42,16 @@
 #include "pswf_12D.cuh"
 #include "sinc2D.cuh"
 #include "uvtaper.cuh"
+#include "optimizers/conjugategradient.cuh"
+#include "lbfgs.cuh"
+#include "linesearcher.cuh"
+#include <memory>
+
+// Note: Optimizer factory registrations happen automatically when
+// conjugategradient.cu and lbfgs.cu are compiled and linked.
+// All available optimizers are registered via the factory pattern.
+// Line searcher and seeder factory registrations happen automatically when
+// their respective .cu files are compiled and linked.
 
 extern Vars variables;
 
@@ -86,18 +96,6 @@ std::vector<float> runGpuvmem(std::vector<float> args,
   }
 
   return lambdas;
-}
-
-void optimizationOrder(Optimizer* optimizer, Image* image) {
-  optimizer->setImage(image);
-  optimizer->setFlag(0);
-  optimizer->optimize();
-  /*optimizer->setFlag(1);
-  optimizer->optimize();
-  optimizer->setFlag(2);
-  optimizer->optimize();
-  optimizer->setFlag(3);
-  optimizer->optimize();*/
 }
 
 __host__ int main(int argc, char** argv) {
@@ -148,9 +146,58 @@ __host__ int main(int argc, char** argv) {
   }
 
   Synthesizer* sy = createObject<Synthesizer, std::string>("MFS");
-  Optimizer* cg = createObject<Optimizer, std::string>("CG-FRPRMN");
-  // Optimizer *cg = createObject<Optimizer, std::string>("CG-LBFGS");
-  // cg->setK(15);
+  
+  // Choose your optimizer! Available options:
+  // Conjugate Gradient variants:
+  //   "CG-FletcherReeves"      - Classic FR method (always non-negative beta)
+  //   "CG-PolakRibiere"         - PRP method (often faster for nonlinear problems)
+  //   "CG-HestenesStiefel"      - HS method (theoretical foundation)
+  //   "CG-LiuStorey"            - LS method (good for image restoration)
+  //   "CG-DaiYuan"              - DY method (global convergence guarantees)
+  //   "CG-HagerZhang"           - HZ method (excellent practical performance)
+  //   "CG-RMIL"                 - RMIL method (good for image recovery)
+  // Limited Memory BFGS:
+  //   "CG-LBFGS"                - L-BFGS method (quasi-Newton, good for large problems)
+  
+  // Optimizer* cg = createObject<Optimizer, std::string>("CG-FletcherReeves");
+  // Optimizer* cg = createObject<Optimizer, std::string>("CG-PolakRibiere");
+  // Optimizer* cg = createObject<Optimizer, std::string>("CG-HestenesStiefel");
+  // Optimizer* cg = createObject<Optimizer, std::string>("CG-LiuStorey");
+  // Optimizer* cg = createObject<Optimizer, std::string>("CG-DaiYuan");
+  Optimizer* cg = createObject<Optimizer, std::string>("CG-HagerZhang");
+  // Optimizer* cg = createObject<Optimizer, std::string>("CG-RMIL");
+  // Optimizer* cg = createObject<Optimizer, std::string>("CG-LBFGS");
+  // cg->setK(10);
+  // For LBFGS, you can set the memory limit (number of correction pairs):
+  // if (cg->getK() > 0) {  // Check if it's LBFGS
+  //   cg->setK(15);  // Use 15 correction pairs (default is 100)
+  // }
+  
+  // ========================================================================
+  // Configure Line Search and Seeder (Optional)
+  // ========================================================================
+  // By default, CG-HagerZhang uses Brent line search. You can customize it:
+  //
+  // Example: Use GLL Armijo with BB Min1 seeder (recommended for faster convergence)
+  // Step 1: Create LineSearcher using factory (returns raw pointer)
+  /*LineSearcher* searcher_ptr = createObject<LineSearcher, std::string>("GLLArmijo");
+  // Step 2: Create StepSizeSeeder using factory (returns raw pointer)
+  StepSizeSeeder* seeder_ptr = createObject<StepSizeSeeder, std::string>("BBMin1Seeder");
+  // Step 3: Wrap in unique_ptr and assign seeder to line searcher
+  auto searcher = std::unique_ptr<LineSearcher>(searcher_ptr);
+  searcher->setStepSizeSeeder(std::unique_ptr<StepSizeSeeder>(seeder_ptr));
+  
+  // Step 4: Optional - Set initial step size on line searcher (default is 1.0)
+  // Use a larger value (e.g., 2.0, 5.0, 10.0) if you want to start with bigger steps
+  searcher->setInitialStepSize(100.0f);  // Change this value to start with a bigger alpha
+  
+  // Step 5: Assign line searcher to optimizer (can call directly on Optimizer*)
+  cg->setLineSearcher(std::move(searcher));*/
+  //
+  // Other options:
+  //   Line searchers: "GLLArmijo", "BacktrackingArmijo", "FistaBacktracking", "Brent", "GoldenSectionSearch", "Fixed"
+  //   Seeders: "BBMin1Seeder", "BBMin2Seeder", "BBAlternatingSeeder", "CubicInterpolationSeeder", "QuadraticInterpolationSeeder"
+  //   (Seeders are optional - set on the line searcher before passing to optimizer)
   //  Choose your antialiasing kernel!
   CKernel* sc = new PillBox2D();
   // CKernel *sc = new Gaussian2D(7,7);
@@ -173,7 +220,6 @@ __host__ int main(int argc, char** argv) {
 
   sy->setIoVisibilitiesHandler(ioms);
   sy->setIoImageHandler(iofits);
-  sy->setOrder(&optimizationOrder);
   sy->setWeightingScheme(scheme);
   sy->setGriddingKernel(sc);
   sy->setOptimizator(cg);
@@ -189,9 +235,9 @@ __host__ int main(int argc, char** argv) {
   Fi* l1 = createObject<Fi, std::string>("L1-Norm");
   Fi* tsqv = createObject<Fi, std::string>("TotalSquaredVariation");
   Fi* l2cp = createObject<Fi, std::string>("L2ConstantPrior");
-  Fi* lap = createObject<Fi, std::string>("Laplacian");
+  /*Fi* lap = createObject<Fi, std::string>("Laplacian");
   Fi* atv = createObject<Fi, std::string>("AnisotropicTotalVariation");
-  Fi* itv = createObject<Fi, std::string>("IsotropicTotalVariation");
+  Fi* itv = createObject<Fi, std::string>("IsotropicTotalVariation");*/
 
   chi2->configure(-1, 0, 0,
                   variables.normalize);  // (penalizatorIndex, ImageIndex,
@@ -199,22 +245,17 @@ __host__ int main(int argc, char** argv) {
   e->configure(0, 0, 0, false);
   e->setPrior(0.001f);
   l1->configure(1, 0, 0, false);
-  tsqv->configure(2, 0, 0, false);
-  // l2cp->configure(3, 1, 0, false);
-  // l2cp->setPenalizationFactor(0.01f);
-  // l2cp->setPrior(3.0f);
-  lap->configure(3, 0, 0, false);
-  atv->configure(4, 0, 0, false);
-  itv->configure(5, 0, 0, false);
+  tsqv->configure(2, 1, 1, false);
+  tsqv->setPenalizationFactor(0.05f);
+  l2cp->configure(3, 1, 1, false);
+  l2cp->setPenalizationFactor(0.05f);
+  l2cp->setPrior(2.0f);
   // e->setPenalizationFactor(0.01); // If not used -Z (Fi.configure(-1,x,x))
   of->addFi(chi2);
   of->addFi(e);
   of->addFi(l1);
   of->addFi(tsqv);
-  // of->addFi(l2cp);
-  of->addFi(lap);
-  of->addFi(atv);
-  of->addFi(itv);
+  of->addFi(l2cp);
   // sy->getImage()->getFunctionMapping()[i].evaluateXt = particularEvaluateXt;
   // sy->getImage()->getFunctionMapping()[i].newP = particularNewP;
   // if the nopositivity flag is on  all images will run with no posivity,

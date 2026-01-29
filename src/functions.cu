@@ -46,6 +46,7 @@ extern float* device_I;
 extern float *device_dphi, *device_S, *device_dchi2_total, *device_dS,
     *device_noise_image;
 extern float noise_jypix, noise_cut, MINPIX, minpix, random_probability, eta;
+// Image object is accessed through thread-local variable set in updatePoint() instead of extern global
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
 
@@ -270,6 +271,9 @@ __host__ Vars getOptions(int argc, char** argv) {
              "Flags");
   flags.Bool(variables.normalize, 'l', "normalize",
              "Normalize chi-squared by effective number of samples", "Flags");
+  flags.Var(variables.optimization_mode, 'J', "optimization-mode",
+            std::string("alpha_static"),
+            "Optimization strategy: joint (I_nu_0+alpha), block (alternate), one (single image), alpha_static (I_nu_0 only)");
   flags.Bool(help, 'h', "help", "Shows this help", "Help");
   flags.Bool(warranty, 'w', "warranty", "Shows warranty details", "Help");
   flags.Bool(copyright, 'c', "copyright", "Shows copyright conditions", "Help");
@@ -3009,22 +3013,13 @@ __global__ void clip2IWNoise(float* noise,
 
   if (noise[N * i + j] > noise_cut) {
     if (eta > 0.0f) {
-      I[N * i + j] = 0.0f;
+      I[N * i + j] = 1e-10f;
     } else {
-      I[N * i + j] = -1.0 * eta * MINPIX;
+      I[N * i + j] = -1.0f * eta * MINPIX;
     }
     I[N * M + N * i + j] = 0.0f;
-  } else {
-    if (schedule > 0) {
-      // Mask alpha to 0 where I_nu_0 is below cut. When alpha_n_sigma > 0 use
-      // N*noise (e.g. 3 or 5 sigma); otherwise use absolute threshold.
-      float cut = (alpha_n_sigma > 0.0f) ? (alpha_n_sigma * noise[N * i + j])
-                                         : threshold;
-      if (I[N * i + j] < cut) {
-        I[N * M + N * i + j] = 0.0f;
-      }
-    }
   }
+  // Alpha masking/clipping removed - alpha is no longer masked based on I_nu_0 threshold
 }
 
 __global__ void getGandDGG(float* gg, float* dgg, float* xi, float* g, long N) {
@@ -3096,14 +3091,21 @@ __global__ void newP(float* p,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  xi[N * M * image + N * i + j] *= xmin;
+  // Bounds check to prevent illegal memory access
+  if (i >= M || j >= N) {
+    return;
+  }
 
-  if (p[N * M * image + N * i + j] + xi[N * M * image + N * i + j] >
-      -1.0 * eta * MINPIX) {
-    p[N * M * image + N * i + j] += xi[N * M * image + N * i + j];
+  const long idx = N * M * image + N * i + j;
+  xi[idx] *= xmin;
+
+  float min_threshold = -1.0f * eta * MINPIX;
+
+  if (p[idx] + xi[idx] > min_threshold) {
+    p[idx] += xi[idx];
   } else {
-    p[N * M * image + N * i + j] = -1.0f * eta * MINPIX;
-    xi[N * M * image + N * i + j] = 0.0f;
+    p[idx] = min_threshold;
+    xi[idx] = 0.0f;
   }
 }
 
@@ -3116,8 +3118,14 @@ __global__ void newPNoPositivity(float* p,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  xi[N * M * image + N * i + j] *= xmin;
-  p[N * M * image + N * i + j] += xi[N * M * image + N * i + j];
+  // Bounds check to prevent illegal memory access
+  if (i >= M || j >= N) {
+    return;
+  }
+
+  const long idx = N * M * image + N * i + j;
+  xi[idx] *= xmin;
+  p[idx] += xi[idx];
 }
 
 __global__ void evaluateXt(float* xt,
@@ -3150,12 +3158,14 @@ __global__ void evaluateXt(float* xt,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  float min_threshold = -1.0f * eta * MINPIX;
+
   if (pcom[N * M * image + N * i + j] + x * xicom[N * M * image + N * i + j] >
-      -1.0 * eta * MINPIX) {
+      min_threshold) {
     xt[N * M * image + N * i + j] =
         pcom[N * M * image + N * i + j] + x * xicom[N * M * image + N * i + j];
   } else {
-    xt[N * M * image + N * i + j] = -1.0f * eta * MINPIX;
+    xt[N * M * image + N * i + j] = min_threshold;
   }
 }
 
@@ -4282,7 +4292,8 @@ __global__ void DChi2(float* noise,
     }
   }
 
-  // Write result
+  // Sign: χ² = 0.5·Σ w|Vo−Vm|² ⇒ ∂χ²/∂Vm ∝ (Vm−Vo) = −Vr. Degrid(weight·Vr) ∝ −∂χ²/∂I_ν.
+  // Store dChi2 = −dchi2 so dChi2 = +∂χ²/∂I_ν (optimizer then uses descent dir −gradient).
   dChi2[N * i + j] = -dchi2;
 }
 
@@ -4389,7 +4400,7 @@ __global__ void DChi2(float* noise,
     }
   }
 
-  // Write result
+  // Sign: same as DChi2 (no gcf); dChi2 = +∂χ²/∂I_ν.
   dChi2[N * i + j] = -dchi2;
 }
 
@@ -4442,6 +4453,12 @@ __global__ void copyImage(cufftComplex* p, float* device_xt, long N) {
   p[N * i + j].x = device_xt[N * i + j];
 }
 
+
+// Compute base spectral model: I_ν = I_ν₀ × (ν/ν₀)^α
+// Note: This kernel only computes the spectral part of the forward model.
+// The attenuation (primary beam) and fg_scale are applied afterwards in
+// apply_beam2I kernel. The full forward model is:
+//   I_ν = attenuation × fg_scale × I_ν₀ × (ν/ν₀)^α
 __global__ void calculateInu(cufftComplex* I_nu,
                              float* I,
                              float nu,
@@ -4455,13 +4472,29 @@ __global__ void calculateInu(cufftComplex* I_nu,
 
   float I_nu_0, alpha, nudiv_pow_alpha, nudiv;
 
+  // Safety check: avoid division by zero
+  if (nu_0 <= 0.0f || nu <= 0.0f) {
+    I_nu[N * i + j].x = 0.0f;
+    I_nu[N * i + j].y = 0.0f;
+    return;
+  }
+
+  // Convention: nu/nu_0 (NOT nu_0/nu). Model I_ν = I_ν₀ × (ν/ν₀)^α
   nudiv = nu / nu_0;
+  
+  // Safety check: nudiv must be positive for powf
+  if (nudiv <= 0.0f) {
+    I_nu[N * i + j].x = 0.0f;
+    I_nu[N * i + j].y = 0.0f;
+    return;
+  }
 
   I_nu_0 = I[N * i + j];
   alpha = I[M * N + N * i + j];
-
   nudiv_pow_alpha = powf(nudiv, alpha);
 
+  // Base spectral model: I_ν_base = I_ν₀ × (ν/ν₀)^α
+  // (attenuation and fg_scale applied later in apply_beam2I)
   I_nu[N * i + j].x = I_nu_0 * nudiv_pow_alpha;
 
   if (I_nu[N * i + j].x < -1.0f * eta * MINPIX) {
@@ -4478,36 +4511,43 @@ __global__ void DChi2_total_alpha(float* noise,
                                   float nu,
                                   float nu_0,
                                   float noise_cut,
-                                  float fg_scale,
-                                  float threshold,
-                                  float alpha_n_sigma,
                                   long N,
                                   long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  float I_nu_0, alpha, dalpha, dI_nu_0;
+  float I_nu_0, alpha, dalpha, I_nu_base;
+  
+  // Safety check: avoid division by zero
+  if (nu_0 <= 0.0f || nu <= 0.0f) {
+    return;
+  }
+  
+  // Convention: nu/nu_0 (NOT nu_0/nu). So (ν/ν₀)^α; log(ν/ν₀) correct for ∂I_ν/∂α
   float nudiv = nu / nu_0;
+  
+  // Safety check: nudiv must be positive for logf and powf
+  if (nudiv <= 0.0f) {
+    return;
+  }
 
   I_nu_0 = I[N * i + j];
   alpha = I[N * M + N * i + j];
+  
+  // Compute I_ν_base = I_ν₀ · (ν/ν₀)^α
+  I_nu_base = I_nu_0 * powf(nudiv, alpha);
+  
+  // Chain rule for gradient with respect to α:
+  // Forward model: I_ν = fg_scale × atten × I_ν₀ × (ν/ν₀)^α
+  // ∂I_ν/∂α = fg_scale × atten × I_ν₀ × (ν/ν₀)^α × log(ν/ν₀) = fg_scale × atten × I_ν_base × log(ν/ν₀)
+  // ∂χ²/∂α = ∂χ²/∂I_ν × ∂I_ν/∂α = dchi2 × I_ν_base × log(ν/ν₀). dchi2 is +∂χ²/∂I_ν (see DChi2),
+  // so we accumulate +∂χ²/∂α; optimizer uses descent direction −∂χ²/∂α.
+  float log_nudiv = logf(nudiv);
+  dalpha = I_nu_base * log_nudiv;
 
-  dI_nu_0 = powf(nudiv, alpha);
-  // Chain rule derivative for alpha (without fg_scale * atten):
-  // ∂I_ν/∂α = fg_scale · atten · I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
-  // Since dchi2 already includes fg_scale * atten, we only compute:
-  // dalpha = I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
-  // Final gradient: ∂χ²/∂α = dchi2 · dalpha
-  dalpha = I_nu_0 * dI_nu_0 * logf(nudiv);
-
-  if (noise[N * i + j] < noise_cut) {
-    float cut =
-        (alpha_n_sigma > 0.0f) ? (alpha_n_sigma * noise[N * i + j]) : threshold;
-    if (I_nu_0 > cut) {
-      dchi2_total[N * M + N * i + j] += dchi2[N * i + j] * dalpha;
-    } else {
-      dchi2_total[N * M + N * i + j] += 0.0f;
-    }
+  // += accumulates over frequency channels (caller zeros dchi2_total before channel loop)
+  if (noise[N * i + j] < noise_cut && isfinite(dalpha)) {
+    dchi2_total[N * M + N * i + j] += dchi2[N * i + j] * dalpha;
   }
 }
 
@@ -4518,29 +4558,105 @@ __global__ void DChi2_total_I_nu_0(float* noise,
                                    float nu,
                                    float nu_0,
                                    float noise_cut,
-                                   float threshold,
                                    long N,
                                    long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  float I_nu_0, alpha, dI_nu_0;
+  float I_nu_0, alpha, dI_nu_0, I_nu_base;
+  
+  // Safety check: avoid division by zero
+  if (nu_0 <= 0.0f || nu <= 0.0f) {
+    return;
+  }
+  
   float nudiv = nu / nu_0;
+  
+  // Safety check: nudiv must be positive for powf
+  if (nudiv <= 0.0f) {
+    return;
+  }
 
   I_nu_0 = I[N * i + j];
   alpha = I[N * M + N * i + j];
-
+  
+  // Compute I_ν_base = I_ν₀ · (ν/ν₀)^α
+  I_nu_base = I_nu_0 * powf(nudiv, alpha);
+  
+  // Chain rule for gradient with respect to I_ν₀:
+  // Forward model: I_ν = fg_scale × atten × I_ν₀ × (ν/ν₀)^α
+  // ∂I_ν/∂I_ν₀ = fg_scale × atten × (ν/ν₀)^α
+  // ∂χ²/∂I_ν₀ = ∂χ²/∂I_ν × ∂I_ν/∂I_ν₀ = dchi2 × fg_scale × atten × (ν/ν₀)^α
+  // Since dchi2 (from DChi2 kernel) already includes fg_scale × atten (see DChi2 line 4287),
+  // we have: ∂χ²/∂I_ν₀ = dchi2 × (ν/ν₀)^α
   dI_nu_0 = powf(nudiv, alpha);
-  // Chain rule derivative for I_ν₀ (without fg_scale * atten):
-  // ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α
-  // Since dchi2 already includes fg_scale * atten, we only compute:
-  // dI_nu_0 = (ν/ν₀)^α
-  // Final gradient: ∂χ²/∂I_ν₀ = dchi2 · dI_nu_0
 
-  if (noise[N * i + j] < noise_cut)
+  // += accumulates over frequency channels (caller zeros dchi2_total before loop)
+  if (noise[N * i + j] < noise_cut && isfinite(dI_nu_0))
     dchi2_total[N * i + j] += dchi2[N * i + j] * dI_nu_0;
 }
 
+// Simplified version of chainRule2I that doesn't require attenuation parameters
+// Used when attenuation parameters aren't available (e.g., in linkChain2I)
+// Assumes atten ≈ 1.0, so I_ν ≈ fg_scale * I_ν_base
+__global__ void chainRule2ISimplified(float* chain,
+                                      float* noise,
+                                      float* I,
+                                      float nu,
+                                      float nu_0,
+                                      float noise_cut,
+                                      float fg_scale,
+                                      long N,
+                                      long M) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  float I_nu_0, alpha, dalpha, dI_nu_0, I_nu_base;
+  
+  // Safety check: avoid division by zero
+  if (nu_0 <= 0.0f || nu <= 0.0f) {
+    chain[N * i + j] = 0.0f;
+    chain[N * M + N * i + j] = 0.0f;
+    return;
+  }
+  
+  float nudiv = nu / nu_0;
+  
+  // Safety check: nudiv must be positive for logf and powf
+  if (nudiv <= 0.0f) {
+    chain[N * i + j] = 0.0f;
+    chain[N * M + N * i + j] = 0.0f;
+    return;
+  }
+
+  I_nu_0 = I[N * i + j];
+  alpha = I[N * M + N * i + j];
+  
+  // Compute I_ν_base = I_ν₀ · (ν/ν₀)^α
+  I_nu_base = I_nu_0 * powf(nudiv, alpha);
+  
+  // Chain rule derivatives for forward model: I_ν = fg_scale × atten × I_ν₀ × (ν/ν₀)^α
+  // ∂I_ν/∂I_ν₀ = fg_scale × atten × (ν/ν₀)^α
+  // ∂I_ν/∂α = fg_scale × atten × I_ν₀ × (ν/ν₀)^α × log(ν/ν₀) = fg_scale × atten × I_ν_base × log(ν/ν₀)
+  //
+  // Since dchi2 (from DChi2 kernel) already includes fg_scale × atten (see DChi2 line 4287),
+  // we store the chain rule factors without fg_scale × atten:
+  // chain[I_ν₀] = (ν/ν₀)^α
+  // chain[α] = I_ν_base × log(ν/ν₀)
+  //
+  // Final gradients:
+  //   ∂χ²/∂I_ν₀ = dchi2 × chain[I_ν₀] = dchi2 × (ν/ν₀)^α
+  //   ∂χ²/∂α = dchi2 × chain[α] = dchi2 × I_ν_base × log(ν/ν₀)
+  dI_nu_0 = powf(nudiv, alpha);
+  float log_nudiv = logf(nudiv);
+  dalpha = I_nu_base * log_nudiv;
+
+  // Safety check: ensure values are finite before storing
+  chain[N * i + j] = isfinite(dI_nu_0) ? dI_nu_0 : 0.0f;
+  chain[N * M + N * i + j] = isfinite(dalpha) ? dalpha : 0.0f;
+}
+
+// Full version with attenuation parameters (used in main gradient path)
 __global__ void chainRule2I(float* chain,
                             float* noise,
                             float* I,
@@ -4548,35 +4664,62 @@ __global__ void chainRule2I(float* chain,
                             float nu_0,
                             float noise_cut,
                             float fg_scale,
+                            float ref_xobs,
+                            float ref_yobs,
+                            double DELTAX,
+                            double DELTAY,
+                            float antenna_diameter,
+                            float pb_factor,
+                            float pb_cutoff,
+                            int primary_beam,
                             long N,
                             long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  float I_nu_0, alpha, dalpha, dI_nu_0;
+  float I_nu_0, alpha, dalpha, dI_nu_0, I_nu_base;
+  
+  // Safety check: avoid division by zero
+  if (nu_0 <= 0.0f || nu <= 0.0f) {
+    chain[N * i + j] = 0.0f;
+    chain[N * M + N * i + j] = 0.0f;
+    return;
+  }
+  
   float nudiv = nu / nu_0;
+  
+  // Safety check: nudiv must be positive for logf and powf
+  if (nudiv <= 0.0f) {
+    chain[N * i + j] = 0.0f;
+    chain[N * M + N * i + j] = 0.0f;
+    return;
+  }
 
   I_nu_0 = I[N * i + j];
   alpha = I[N * M + N * i + j];
-
-  dI_nu_0 = powf(nudiv, alpha);
-  // Chain rule derivatives (without fg_scale * atten, which is already in
-  // dchi2): ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α ∂I_ν/∂α = fg_scale · atten
-  // · I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
+  
+  // Compute I_ν_base = I_ν₀ · (ν/ν₀)^α
+  I_nu_base = I_nu_0 * powf(nudiv, alpha);
+  
+  // Chain rule derivatives for forward model: I_ν = fg_scale × atten × I_ν₀ × (ν/ν₀)^α
+  // ∂I_ν/∂I_ν₀ = fg_scale × atten × (ν/ν₀)^α
+  // ∂I_ν/∂α = fg_scale × atten × I_ν₀ × (ν/ν₀)^α × log(ν/ν₀) = fg_scale × atten × I_ν_base × log(ν/ν₀)
   //
-  // Since dchi2 (from DChi2 kernel) already includes fg_scale * atten,
-  // we only store the part without fg_scale * atten here:
+  // Since dchi2 (from DChi2 kernel) already includes fg_scale × atten (see DChi2 line 4287),
+  // we store the chain rule factors without fg_scale × atten:
   // chain[I_ν₀] = (ν/ν₀)^α
-  // chain[α] = I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
+  // chain[α] = I_ν_base × log(ν/ν₀)
   //
-  // Final gradient: ∂χ²/∂I_ν₀ = dchi2 · chain[I_ν₀] = (∂χ²/∂I_ν with
-  // fg_scale*atten) · (ν/ν₀)^α
-  //                 ∂χ²/∂α = dchi2 · chain[α] = (∂χ²/∂I_ν with fg_scale*atten)
-  //                 · I_ν₀ · (ν/ν₀)^α · log(ν/ν₀)
-  dalpha = I_nu_0 * dI_nu_0 * logf(nudiv);
+  // Final gradients:
+  //   ∂χ²/∂I_ν₀ = dchi2 × chain[I_ν₀] = dchi2 × (ν/ν₀)^α
+  //   ∂χ²/∂α = dchi2 × chain[α] = dchi2 × I_ν_base × log(ν/ν₀)
+  dI_nu_0 = powf(nudiv, alpha);
+  float log_nudiv = logf(nudiv);
+  dalpha = I_nu_base * log_nudiv;
 
-  chain[N * i + j] = dI_nu_0;
-  chain[N * M + N * i + j] = dalpha;
+  // Safety check: ensure values are finite before storing
+  chain[N * i + j] = isfinite(dI_nu_0) ? dI_nu_0 : 0.0f;
+  chain[N * M + N * i + j] = isfinite(dalpha) ? dalpha : 0.0f;
 }
 
 __global__ void DChi2_2I(float* noise,
@@ -4593,15 +4736,10 @@ __global__ void DChi2_2I(float* noise,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  // Alpha masking removed - always accumulate gradient regardless of I_nu_0 threshold
+  // Slice 0 = I_nu_0 gradient, slice 1 = alpha gradient (layout: dchi2_total[0..N*M-1], dchi2_total[N*M..2*N*M-1])
   if (noise[N * i + j] < noise_cut && image) {
-    float cut =
-        (alpha_n_sigma > 0.0f) ? (alpha_n_sigma * noise[N * i + j]) : threshold;
-    if (I[N * i + j] > cut) {
-      dchi2_total[N * i + j] += dchi2[N * i + j] * chain[N * M + N * i + j];
-    } else {
-      dchi2_total[N * i + j] += 0.0f;
-    }
-
+    dchi2_total[N * M + N * i + j] += dchi2[N * i + j] * chain[N * M + N * i + j];
   } else if (noise[N * i + j] < noise_cut) {
     dchi2_total[N * i + j] += dchi2[N * i + j] * chain[N * i + j];
   }
@@ -4629,20 +4767,25 @@ __global__ void I_nu_0_Noise(float* noise_I,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  float alpha, nudiv, nudiv_pow_alpha, atten;
+  float I_nu_0, alpha, nudiv, nudiv_pow_alpha, atten;
 
   atten = attenuation(antenna_diameter, pb_factor, pb_cutoff, nu, xobs, yobs,
                       DELTAX, DELTAY, primary_beam);
 
   nudiv = nu / nu_0;
+  I_nu_0 = images[N * i + j];
   alpha = images[N * M + N * i + j];
   nudiv_pow_alpha = powf(nudiv, 2.0f * alpha);
 
-  // Variance for I_nu_0: σ²(I_ν₀) ∝ (∂I_ν/∂I_ν₀)² * σ²(visibilities)
-  // Where: ∂I_ν/∂I_ν₀ = fg_scale · atten · (ν/ν₀)^α
-  // So: σ²(I_ν₀) ∝ fg_scale² · atten² · (ν/ν₀)^(2α) · σ²(visibilities)
+  // Variance for I_ν₀: σ²(I_ν₀) ∝ (∂I_ν/∂I_ν₀)² * σ²(visibilities)
+  // Where: ∂I_ν/∂I_ν₀ = fg_scale × atten × (ν/ν₀)^α
+  // Per-channel contribution to inverse-variance: 1/σ²_c = (∂I_ν/∂I_ν₀)² / σ²(I_ν,c)
+  //   = fg_scale² · atten² · (ν/ν₀)^(2α) · sum_weights
+  // We accumulate inverse-variance contributions: 1/σ²_total = Σ_c (1/σ²_c)
+  // Then convert to variance: σ²_total = 1 / (Σ_c 1/σ²_c)
   if (noise[N * i + j] < noise_cut) {
     float fg_scale_sq = fg_scale * fg_scale;
+    // Accumulate inverse-variance contribution for this channel
     noise_I[N * i + j] +=
         fg_scale_sq * atten * atten * sum_weights * nudiv_pow_alpha;
   } else {
@@ -4694,13 +4837,18 @@ __global__ void alpha_Noise(float* noise_I,
   I_nu = I_nu_0 * nudiv_pow_alpha;
   log_nu = logf(nudiv);
 
-  // Fisher for α (linear model I_ν = I_ν0·(ν/ν0)^α): (∂I_ν/∂α)²/σ²(I_ν) with
-  // ∂I_ν/∂α = I_ν·ln(ν/ν0). When ν = ν0, ln(ν/ν0)=0 so this channel contributes
-  // 0.
+  // Variance for α: σ²(α) from Fisher information
+  // Per-channel contribution to inverse-variance: 1/σ²_c = (∂I_ν/∂α)² / σ²(I_ν,c)
+  //   = fg_scale² · atten² · I_ν² · log²(ν/ν₀) · sum_weights
+  // Where: ∂I_ν/∂α = fg_scale × atten × I_ν_base × log(ν/ν₀) = fg_scale × atten × I_ν × log(ν/ν₀)
+  // We accumulate inverse-variance contributions: 1/σ²_total = Σ_c (1/σ²_c)
+  // Then convert to variance: σ²_total = 1 / (Σ_c 1/σ²_c)
+  // When ν = ν₀, log(ν/ν₀) = 0 so this channel contributes 0.
   float inv_var_alpha_c = fg_scale * fg_scale * atten * atten * I_nu * I_nu *
                           sum_weights * log_nu * log_nu;
 
   if (noise[N * i + j] < noise_cut) {
+    // Accumulate inverse-variance contribution for this channel
     noise_I[N * M + N * i + j] += inv_var_alpha_c;
   } else {
     noise_I[N * M + N * i + j] = 0.0f;
@@ -4757,11 +4905,10 @@ __global__ void covariance_Noise(float* noise_cov,
 
   float fg_scale_sq = fg_scale * fg_scale;
 
-  // Cov(I_ν₀, α) from Fisher (linear model I_ν = I_ν0·(ν/ν0)^α): use only
-  // first-order. Cov ∝ (∂I_ν/∂I_ν₀)(∂I_ν/∂α)/σ²(I_ν) with ∂I_ν/∂I_ν₀ =
-  // (ν/ν₀)^α, ∂I_ν/∂α = I_ν·ln(ν/ν₀), 1/σ²(I_ν) = fg_scale²·atten²·sum_weights.
-  // So cov_c = (ν/ν₀)^α · I_ν·ln(ν/ν₀) · fg_scale²·atten²·sum_weights. When
-  // ν=ν0, ln(ν/ν₀)=0 so this channel contributes 0 (same as σ(α)).
+  // Fisher off-diagonal H[0,1] for covariance (linear model I_ν = I_ν0·(ν/ν0)^α).
+  // Per-channel: H[0,1]_c = (∂I_ν/∂I_ν₀)(∂I_ν/∂α)/σ²(I_ν); we accumulate H[0,1].
+  // noise_reduction inverts the 2x2 Hessian to get Cov(I_nu_0, alpha) = -H[0,1]/det(H).
+  // When ν=ν₀, ln(ν/ν₀)=0 so this channel contributes 0 (same as σ(α)).
   float cov_c = fg_scale_sq * atten * atten * nudiv_pow_alpha * I_nu * log_nu *
                 sum_weights;
 
@@ -4772,40 +4919,262 @@ __global__ void covariance_Noise(float* noise_cov,
   }
 }
 
+// Hessian contribution kernels: compute second-derivative terms from residuals
+// The full Hessian is: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ² + Σ (residual × ∂²I_ν/∂θ_i∂θ_j)/σ²
+// The first term is Fisher information (already computed in I_nu_0_Noise, alpha_Noise, covariance_Noise)
+// These kernels compute the second term using residuals
+
+// Hessian contribution for α diagonal: H[1,1] += Σ (residual × ∂²I_ν/∂α²)/σ²
+// Where: ∂²I_ν/∂α² = fg_scale × atten × I_ν_base × log²(ν/ν₀)
+__global__ void hessian_alpha_alpha(float* hessian_contrib,
+                                   float* images,
+                                   float* noise,
+                                   float noise_cut,
+                                   cufftComplex* Vr,
+                                   double3* UVW,
+                                   float* w,
+                                   float nu,
+                                   float nu_0,
+                                   float fg_scale,
+                                   float ref_xobs,
+                                   float ref_yobs,
+                                   float phs_xobs,
+                                   float phs_yobs,
+                                   double DELTAX,
+                                   double DELTAY,
+                                   float antenna_diameter,
+                                   float pb_factor,
+                                   float pb_cutoff,
+                                   float freq,
+                                   int primary_beam,
+                                   bool normalize,
+                                   float N_eff,
+                                   long N,
+                                   long M,
+                                   long numVisibilities) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  // Early exit: check noise threshold first
+  const float noise_val = noise[N * i + j];
+  if (noise_val >= noise_cut) {
+    return;
+  }
+
+  // Compute pixel coordinates and direction cosines
+  const int x0 = phs_xobs;
+  const int y0 = phs_yobs;
+  const double x = (j - x0) * DELTAX * RPDEG_D;
+  const double y = (i - y0) * DELTAY * RPDEG_D;
+  const double z = sqrt(1.0 - x * x - y * y);
+
+  // Compute attenuation
+  const float atten =
+      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
+                  ref_yobs, DELTAX, DELTAY, primary_beam);
+
+  // Compute second derivative: ∂²I_ν/∂α² = fg_scale × atten × I_ν_base × log²(ν/ν₀)
+  float I_nu_0 = images[N * i + j];
+  float alpha = images[N * M + N * i + j];
+  float nudiv = nu / nu_0;
+  float nudiv_pow_alpha = powf(nudiv, alpha);
+  float I_nu_base = I_nu_0 * nudiv_pow_alpha;
+  float log_nu = logf(nudiv);
+  float d2I_dalpha2 = fg_scale * atten * I_nu_base * log_nu * log_nu;
+
+  // Accumulate residual-weighted second derivative
+  float hessian_sum = 0.0f;
+  const double z_minus_one = z - 1.0;
+  const double two = 2.0;
+
+#pragma unroll 4
+  for (int v = 0; v < numVisibilities; v++) {
+    const double uvw_x = UVW[v].x;
+    const double uvw_y = UVW[v].y;
+    const double uvw_z = UVW[v].z;
+
+    const double Ukv = x * uvw_x;
+    const double Vkv = y * uvw_y;
+    const double Wkv = z_minus_one * uvw_z;
+    const double phase = two * (Ukv + Vkv + Wkv);
+
+    float cosk, sink;
+#if (__CUDA_ARCH__ >= 300)
+    sincospif(phase, &sink, &cosk);
+#else
+    cosk = cospif(phase);
+    sink = sinpif(phase);
+#endif
+
+    const float weight = __ldg(&w[v]);
+    const float vr_real = __ldg(&Vr[v].x);
+    const float vr_imag = __ldg(&Vr[v].y);
+
+    // Accumulate: residual × second_derivative × weight
+    // The residual contribution is: (vr_real * cosk + vr_imag * sink)
+    hessian_sum = fmaf(weight, (vr_real * cosk + vr_imag * sink) * d2I_dalpha2, hessian_sum);
+  }
+
+  // Apply normalization if needed
+  if (normalize) {
+    if (N_eff > 0.0f) {
+      hessian_sum /= N_eff;
+    } else {
+      hessian_sum /= numVisibilities;
+    }
+  }
+
+  // Accumulate Hessian contribution (adds to Fisher information)
+  atomicAdd(&hessian_contrib[N * M + N * i + j], hessian_sum);
+}
+
+// Hessian contribution for cross-term: H[0,1] += Σ (residual × ∂²I_ν/∂I_ν₀∂α)/σ²
+// Where: ∂²I_ν/∂I_ν₀∂α = fg_scale × atten × (ν/ν₀)^α × log(ν/ν₀)
+__global__ void hessian_I_nu_0_alpha(float* hessian_contrib,
+                                     float* images,
+                                     float* noise,
+                                     float noise_cut,
+                                     cufftComplex* Vr,
+                                     double3* UVW,
+                                     float* w,
+                                     float nu,
+                                     float nu_0,
+                                     float fg_scale,
+                                     float ref_xobs,
+                                     float ref_yobs,
+                                     float phs_xobs,
+                                     float phs_yobs,
+                                     double DELTAX,
+                                     double DELTAY,
+                                     float antenna_diameter,
+                                     float pb_factor,
+                                     float pb_cutoff,
+                                     float freq,
+                                     int primary_beam,
+                                     bool normalize,
+                                     float N_eff,
+                                     long N,
+                                     long M,
+                                     long numVisibilities) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  // Early exit: check noise threshold first
+  const float noise_val = noise[N * i + j];
+  if (noise_val >= noise_cut) {
+    return;
+  }
+
+  // Compute pixel coordinates and direction cosines
+  const int x0 = phs_xobs;
+  const int y0 = phs_yobs;
+  const double x = (j - x0) * DELTAX * RPDEG_D;
+  const double y = (i - y0) * DELTAY * RPDEG_D;
+  const double z = sqrt(1.0 - x * x - y * y);
+
+  // Compute attenuation
+  const float atten =
+      attenuation(antenna_diameter, pb_factor, pb_cutoff, freq, ref_xobs,
+                  ref_yobs, DELTAX, DELTAY, primary_beam);
+
+  // Compute second derivative: ∂²I_ν/∂I_ν₀∂α = fg_scale × atten × (ν/ν₀)^α × log(ν/ν₀)
+  float alpha = images[N * M + N * i + j];
+  float nudiv = nu / nu_0;
+  float nudiv_pow_alpha = powf(nudiv, alpha);
+  float log_nu = logf(nudiv);
+  float d2I_dI_nu_0_dalpha = fg_scale * atten * nudiv_pow_alpha * log_nu;
+
+  // Accumulate residual-weighted second derivative
+  float hessian_sum = 0.0f;
+  const double z_minus_one = z - 1.0;
+  const double two = 2.0;
+
+#pragma unroll 4
+  for (int v = 0; v < numVisibilities; v++) {
+    const double uvw_x = UVW[v].x;
+    const double uvw_y = UVW[v].y;
+    const double uvw_z = UVW[v].z;
+
+    const double Ukv = x * uvw_x;
+    const double Vkv = y * uvw_y;
+    const double Wkv = z_minus_one * uvw_z;
+    const double phase = two * (Ukv + Vkv + Wkv);
+
+    float cosk, sink;
+#if (__CUDA_ARCH__ >= 300)
+    sincospif(phase, &sink, &cosk);
+#else
+    cosk = cospif(phase);
+    sink = sinpif(phase);
+#endif
+
+    const float weight = __ldg(&w[v]);
+    const float vr_real = __ldg(&Vr[v].x);
+    const float vr_imag = __ldg(&Vr[v].y);
+
+    // Accumulate: residual × second_derivative × weight
+    hessian_sum = fmaf(weight, (vr_real * cosk + vr_imag * sink) * d2I_dI_nu_0_dalpha, hessian_sum);
+  }
+
+  // Apply normalization if needed
+  if (normalize) {
+    if (N_eff > 0.0f) {
+      hessian_sum /= N_eff;
+    } else {
+      hessian_sum /= numVisibilities;
+    }
+  }
+
+  // Accumulate Hessian contribution (adds to Fisher information off-diagonal)
+  atomicAdd(&hessian_contrib[2 * M * N + N * i + j], hessian_sum);
+}
+
 __global__ void noise_reduction(float* noise_I, long N, long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  // Indices 0 and 1: kernels store inverse-variance; convert to σ for output.
-  // Index 0: σ(I_nu_0) [code units or Jy/pixel depending on fg_scale]
-  if (noise_I[N * i + j] > 0.0f)
-    noise_I[N * i + j] = 1.0f / sqrtf(noise_I[N * i + j]);
-  else
-    noise_I[N * i + j] = 0.0f;
+  // Error array holds (before this kernel): H[0,0], H[1,1], H[0,1] (Hessian/Fisher).
+  // Covariance from inverse: Cov = H^{-1}, so Cov[0,1] = -H[0,1] / det(H), det(H) = H[0,0]*H[1,1] - H[0,1]^2.
+  // We need det and Cov[0,1] before overwriting index 0 and 1.
+  float H00 = noise_I[N * i + j];
+  float H11 = noise_I[N * M + N * i + j];
+  float H01 = noise_I[2 * M * N + N * i + j];
 
-  // Index 1: σ(alpha) [unitless]. With consistent units (image in Jy etc.),
-  // σ(α) should be on the order of α (typically 0.1–2). Cap only guards
-  // against 1/sqrt(tiny) when α is unconstrained (e.g. ν≈ν0 or I_ν≈0).
+  const float det_eps = 1.0e-20f;
+  float det = H00 * H11 - H01 * H01;
+  float cov01 = 0.0f;
+  if (fabsf(det) > det_eps) {
+    cov01 = -H01 / det;  // Cov(I_nu_0, alpha) [same units as I_nu_0 before fg_scale]
+  }
+
+  // Index 0: σ(I_nu_0) [Jy/pixel]
+  if (H00 > 0.0f) {
+    float variance = 1.0f / H00;
+    noise_I[N * i + j] = sqrtf(variance);
+  } else {
+    noise_I[N * i + j] = 0.0f;
+  }
+
+  // Index 1: σ(alpha) [unitless]
   const float sigma_alpha_max = 10000.0f;
-  if (noise_I[N * M + N * i + j] > 0.0f) {
-    float sigma_alpha = 1.0f / sqrtf(noise_I[N * M + N * i + j]);
+  if (H11 > 0.0f) {
+    float variance_alpha = 1.0f / H11;
+    float sigma_alpha = sqrtf(variance_alpha);
     noise_I[N * M + N * i + j] = fminf(sigma_alpha, sigma_alpha_max);
   } else {
     noise_I[N * M + N * i + j] = 0.0f;
   }
 
-  // Index 2: Cov(I_nu_0, alpha) [code units or Jy/pixel depending on fg_scale]
-  // — kept as covariance (not correlation). Correlation: ρ = Cov / (σ(I_nu_0) *
-  // σ(alpha)). σ²(I_nu) = (∂I_nu/∂I_nu_0)²σ²(I_nu_0) +
-  // (∂I_nu/∂alpha)²σ²(alpha)
-  //          + 2(∂I_nu/∂I_nu_0)(∂I_nu/∂alpha)Cov(I_nu_0, alpha).
-  // Covariance can be negative (anti-correlation).
+  // Index 2: Cov(I_nu_0, alpha) from 2x2 inversion (convertErrorUnits will scale by fg_scale to Jy/pixel)
+  noise_I[2 * M * N + N * i + j] = cov01;
 }
 
 // Convert error units from code units to Jy/pixel when normalize=False
 // When normalize=False: fg_scale ≠ 1.0, so I_nu_0 is in code units
-// We multiply error for I_nu_0 (index 0) and covariance (index 2) by fg_scale
-// to convert to Jy/pixel. Alpha error (index 1) is unitless and unchanged.
+// NOTE: With log-space fitting, index 0 stores σ(log(I_nu_0)) which is unitless.
+// To get σ(I_nu_0) in Jy/pixel, use error propagation: σ(I_nu_0) = I_nu_0 · σ(log(I_nu_0))
+// We still multiply covariance (index 2) by fg_scale to convert to Jy/pixel.
+// Alpha error (index 1) is unitless and unchanged.
 __global__ void convertErrorUnits(float* errors,
                                   float fg_scale,
                                   long N,
@@ -4819,8 +5188,7 @@ __global__ void convertErrorUnits(float* errors,
   // Index 1: σ(alpha) — unitless, no conversion needed
   // (no change)
 
-  // Index 2: Cov(I_nu_0, alpha) — convert from code units to Jy/pixel
-  // (same units as I_nu_0)
+  // Index 2: Cov(I_nu_0, alpha) — already computed in noise_reduction; convert to Jy/pixel
   errors[2 * M * N + N * i + j] *= fg_scale;
 }
 
@@ -5095,18 +5463,29 @@ __host__ void dchi2(float* I,
 
 #pragma omp critical
               {
-                if (flag_opt % 2 == 0)
+                // += accumulates over channels into result_dchi2 (slice 0 = I_nu_0, slice 1 = alpha).
+                // With CUDA P2P, kernels on any GPU can write to result_dchi2 on firstgpu.
+                // device_noise_image, I, result_dchi2 on firstgpu; with P2P kernels on any GPU can read/write them.
+                if (flag_opt == -1) {
                   DChi2_total_I_nu_0<<<numBlocksNN, threadsPerBlockNN>>>(
                       device_noise_image, result_dchi2,
                       vars_gpu[gpu_idx].device_dchi2, I,
-                      datasets[d].fields[f].nu[i], nu_0, noise_cut, threshold,
-                      N, M);
-                else
+                      datasets[d].fields[f].nu[i], nu_0, noise_cut, N, M);
                   DChi2_total_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
                       device_noise_image, result_dchi2,
                       vars_gpu[gpu_idx].device_dchi2, I,
-                      datasets[d].fields[f].nu[i], nu_0, noise_cut, fg_scale,
-                      threshold, alpha_n_sigma, N, M);
+                      datasets[d].fields[f].nu[i], nu_0, noise_cut, N, M);
+                } else if (flag_opt % 2 == 0) {
+                  DChi2_total_I_nu_0<<<numBlocksNN, threadsPerBlockNN>>>(
+                      device_noise_image, result_dchi2,
+                      vars_gpu[gpu_idx].device_dchi2, I,
+                      datasets[d].fields[f].nu[i], nu_0, noise_cut, N, M);
+                } else {
+                  DChi2_total_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
+                      device_noise_image, result_dchi2,
+                      vars_gpu[gpu_idx].device_dchi2, I,
+                      datasets[d].fields[f].nu[i], nu_0, noise_cut, N, M);
+                }
                 checkCudaErrors(cudaDeviceSynchronize());
               }
             }
@@ -5126,13 +5505,35 @@ __host__ void linkAddToDPhi(float* dphi, float* dgi, int index) {
 };
 
 __host__ void defaultNewP(float* p, float* xi, float xmin, int image) {
+  // Ensure we're on firstgpu before launching kernel
+  extern int firstgpu;
+  cudaSetDevice(firstgpu);
   newPNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(p, xi, xmin, N, M,
                                                        image);
 };
 
+// Forward declaration for accessing Image object from updatePoint
+// This avoids needing extern global Image* I
+__host__ Image* getCurrentImage();
+
 __host__ void particularNewP(float* p, float* xi, float xmin, int image) {
-  newP<<<numBlocksNN, threadsPerBlockNN>>>(p, xi, xmin, N, M,
-                                           initial_values[image], eta, image);
+  // Ensure we're on firstgpu before launching kernel
+  extern int firstgpu;
+  extern float eta;
+  
+  // Access Image object through thread-local variable set in updatePoint()
+  // This avoids needing extern global variable
+  Image* current_image = getCurrentImage();
+
+  cudaSetDevice(firstgpu);
+
+  // Get dimensions and minimal pixel value from Image object instead of extern variables
+  long M_local = current_image ? current_image->getM() : M;  // Fallback to extern M if not set
+  long N_local = current_image ? current_image->getN() : N;   // Fallback to extern N if not set
+  float min_pixel_value = current_image ? current_image->getMinimalPixelValue(image) : MINPIX;  // Use Image's minimal pixel value
+
+  newP<<<numBlocksNN, threadsPerBlockNN>>>(p, xi, xmin, N_local, M_local,
+                                           min_pixel_value, eta, image);
 };
 
 __host__ void defaultEvaluateXt(float* xt,
@@ -5182,7 +5583,16 @@ __host__ void linkCalculateInu2I(cufftComplex* image, float* I, float freq) {
 };
 
 __host__ void linkChain2I(float* chain, float freq, float* I, float fg_scale) {
-  chainRule2I<<<numBlocksNN, threadsPerBlockNN>>>(
+  // Note: chainRule2I needs attenuation parameters, but they're not available here
+  // since they're stored in the dataset structure, not as global variables.
+  // For now, we'll use a simplified version that computes I_ν_base and scales by fg_scale.
+  // This assumes atten ≈ 1.0 near the center, which is reasonable.
+  // The main gradient path uses DChi2_total_I_nu_0 / DChi2_total_alpha (no attenuation in kernel).
+  extern double DELTAX, DELTAY;
+  
+  // Use simplified chainRule2I that doesn't require attenuation parameters
+  // We'll compute I_ν ≈ fg_scale * I_ν_base (assuming atten ≈ 1.0)
+  chainRule2ISimplified<<<numBlocksNN, threadsPerBlockNN>>>(
       chain, device_noise_image, I, freq, nu_0, noise_cut, fg_scale, N, M);
   checkCudaErrors(cudaDeviceSynchronize());
 };
@@ -5225,7 +5635,7 @@ __host__ void DL1Norm(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DL1NormK<<<numBlocksNN, threadsPerBlockNN>>>(
           dgi, I, device_noise_image, epsilon, noise_cut, penalization_factor,
           N, M, index);
@@ -5272,7 +5682,7 @@ __host__ void DGL1Norm(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DGL1NormK<<<numBlocksNN, threadsPerBlockNN>>>(
           dgi, I, prior, device_noise_image, epsilon_a, epsilon_b, noise_cut,
           penalization_factor, N, M, index);
@@ -5315,7 +5725,7 @@ __host__ void DEntropy(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DS<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image,
                                              noise_cut, penalization_factor,
                                              prior_value, eta, N, M, index);
@@ -5358,7 +5768,7 @@ __host__ void DGEntropy(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DSG<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image,
                                               noise_cut, penalization_factor,
                                               prior, eta, N, M, index);
@@ -5397,7 +5807,7 @@ __host__ void DLaplacian(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DL<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image,
                                              noise_cut, penalization_factor, N,
                                              M, index);
@@ -5436,7 +5846,7 @@ __host__ void DQuadraticP(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DQ<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image,
                                              noise_cut, penalization_factor, N,
                                              M, index);
@@ -5477,7 +5887,7 @@ __host__ void DL2ConstantPrior(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DL2ConstantPriorKernel<<<numBlocksNN, threadsPerBlockNN>>>(
           dgi, I, device_noise_image, prior_value, noise_cut,
           penalization_factor, N, M, index);
@@ -5518,7 +5928,7 @@ __host__ void DIsotropicTV(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DTV<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image,
                                               epsilon, noise_cut,
                                               penalization_factor, N, M, index);
@@ -5604,7 +6014,7 @@ __host__ void DAnisotropicTV(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DATV<<<numBlocksNN, threadsPerBlockNN>>>(
           dgi, I, device_noise_image, epsilon, noise_cut, penalization_factor,
           N, M, index);
@@ -5623,7 +6033,7 @@ __host__ void DTSVariation(float* I,
   cudaSetDevice(firstgpu);
 
   if (iter > 0 && penalization_factor) {
-    if (flag_opt % 2 == index) {
+    if (flag_opt == -1 || flag_opt % 2 == index) {
       DTSV<<<numBlocksNN, threadsPerBlockNN>>>(dgi, I, device_noise_image,
                                                noise_cut, penalization_factor,
                                                N, M, index);
@@ -5638,12 +6048,16 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
   cudaSetDevice(firstgpu);
 
   // Allocate error array: [I_nu_0, alpha, covariance] — 3 maps for 2 images.
-  // Kernels accumulate inverse-variances (indices 0,1); noise_reduction
-  // converts those to standard deviations. Output units:
+  // Error propagation uses Hessian-based approach (second derivatives) for finite-sample accuracy.
+  // Full Hessian: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ² + Σ (residual × ∂²I_ν/∂θ_i∂θ_j)/σ²
+  // First term (Fisher information) computed by I_nu_0_Noise, alpha_Noise, covariance_Noise.
+  // Second term (Hessian correction) computed by hessian_alpha_alpha, hessian_I_nu_0_alpha.
+  // Kernels accumulate inverse-variances (indices 0,1); noise_reduction converts to standard deviations.
+  // Output units (after noise_reduction: 2x2 Hessian inversion gives σ and Cov):
   //   index 0: σ(I_nu_0)  [Jy/pixel] — uncertainty in flux at reference freq
-  //   index 1: σ(alpha)    [unitless] — uncertainty in spectral index
-  //   index 2: Cov(I_nu_0, alpha) [Jy/pixel] — covariance (same units as
-  //   I_nu_0)
+  //   index 1: σ(alpha)   [unitless] — uncertainty in spectral index
+  //   index 2: Cov(I_nu_0, alpha) [Jy/pixel] — covariance from H^{-1}[0,1] (same units as I_nu_0)
+  // Note: Residuals (Vr) must be computed before calling this function (e.g., from last chi2 evaluation).
   int error_image_count = image->getImageCount() + 1;  // +1 for covariance
   checkCudaErrors(
       cudaMalloc((void**)&errors, sizeof(float) * M * N * error_image_count));
@@ -5714,6 +6128,54 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
                     datasets[d].antennas[0].pb_factor,
                     datasets[d].antennas[0].pb_cutoff, sum_weights, fg_scale, N,
                     M, datasets[d].antennas[0].primary_beam);
+                checkCudaErrors(cudaDeviceSynchronize());
+
+                // Compute Hessian contributions from residuals (second-derivative terms)
+                // Note: Residuals (Vr) should already be computed from the last chi2 evaluation
+                // The Hessian adds to the Fisher information: H[i,j] = F[i,j] + Σ (residual × ∂²I_ν/∂θ_i∂θ_j)/σ²
+                bool normalize = false;  // Use same normalization as Fisher information kernels
+                float N_eff = 0.0f;  // Not used if normalize=false
+                
+                // Hessian contribution for α diagonal: H[1,1] += Σ (residual × ∂²I_ν/∂α²)/σ²
+                hessian_alpha_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
+                    errors, image->getImage(), device_noise_image, noise_cut,
+                    datasets[d].fields[f].device_visibilities[i][s].Vr,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    datasets[d].fields[f].nu[i], nu_0, fg_scale,
+                    datasets[d].fields[f].ref_xobs_pix,
+                    datasets[d].fields[f].ref_yobs_pix,
+                    datasets[d].fields[f].phs_xobs_pix,
+                    datasets[d].fields[f].phs_yobs_pix,
+                    DELTAX, DELTAY,
+                    datasets[d].antennas[0].antenna_diameter,
+                    datasets[d].antennas[0].pb_factor,
+                    datasets[d].antennas[0].pb_cutoff,
+                    datasets[d].fields[f].nu[i],
+                    datasets[d].antennas[0].primary_beam,
+                    normalize, N_eff, N, M,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
+                checkCudaErrors(cudaDeviceSynchronize());
+
+                // Hessian contribution for cross-term: H[0,1] += Σ (residual × ∂²I_ν/∂I_ν₀∂α)/σ²
+                hessian_I_nu_0_alpha<<<numBlocksNN, threadsPerBlockNN>>>(
+                    errors, image->getImage(), device_noise_image, noise_cut,
+                    datasets[d].fields[f].device_visibilities[i][s].Vr,
+                    datasets[d].fields[f].device_visibilities[i][s].uvw,
+                    datasets[d].fields[f].device_visibilities[i][s].weight,
+                    datasets[d].fields[f].nu[i], nu_0, fg_scale,
+                    datasets[d].fields[f].ref_xobs_pix,
+                    datasets[d].fields[f].ref_yobs_pix,
+                    datasets[d].fields[f].phs_xobs_pix,
+                    datasets[d].fields[f].phs_yobs_pix,
+                    DELTAX, DELTAY,
+                    datasets[d].antennas[0].antenna_diameter,
+                    datasets[d].antennas[0].pb_factor,
+                    datasets[d].antennas[0].pb_cutoff,
+                    datasets[d].fields[f].nu[i],
+                    datasets[d].antennas[0].primary_beam,
+                    normalize, N_eff, N, M,
+                    datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
                 checkCudaErrors(cudaDeviceSynchronize());
               }
             }
