@@ -132,11 +132,8 @@ __host__ void LBFGS::setLineSearcher(std::unique_ptr<LineSearcher> searcher) {
 
 __host__ void LBFGS::deallocateMemoryGpu() {
   FREEALL
-  // Cleanup line searcher (seeder is owned by LineSearcher, cleaned up automatically)
-  if (linesearcher_ptr != nullptr) {
-    delete static_cast<LineSearcher*>(linesearcher_ptr);
-    linesearcher_ptr = nullptr;
-  }
+  // Do NOT delete linesearcher_ptr here - it must persist across multiple
+  // optimize() calls (e.g. block mode: I_nu_0 then alpha). Same as ConjugateGradient.
 }
 
 __host__ int LBFGS::mapToCircularBuffer(int k, int par_M, int lbfgs_it) {
