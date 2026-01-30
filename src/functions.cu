@@ -4950,7 +4950,9 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
     }
   }
 
-  // Index 0: σ(I_nu_0); index 1: σ(alpha); index 2: Cov; index 3: ρ
+  // Output: index 0 = σ(I_nu_0), 1 = σ(alpha), 2 = Cov(I_nu_0, alpha), 3 = ρ.
+  // Cov has same units as I_nu_0 (α is unitless); ρ = Cov/(σ_I·σ_α) in [-1,1].
+  // High |ρ| (e.g. ~0.9) means I_nu_0 and α are degenerate (trade off along ridge).
   noise_I[N * i + j] = sigma_I_nu_0;
   noise_I[N * M + N * i + j] = sigma_alpha;
   noise_I[2 * M * N + N * i + j] = cov01;
@@ -5815,10 +5817,8 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
   cudaSetDevice(firstgpu);
 
   // Allocate error array: [σ(I_nu_0), σ(alpha), Cov, ρ] — 4 maps for 2 images.
-  // Error propagation uses Fisher information only (no Hessian terms).
-  // Fisher: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ²; noise_reduction inverts 2x2 H (with small prior)
-  // to get marginal σ(I_nu_0), σ(alpha), Cov, and correlation ρ = Cov/(σ_I·σ_α).
-  //   index 0: σ(I_nu_0); 1: σ(alpha); 2: Cov; 3: ρ (unitless, in [-1,1]).
+  // Fisher H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ²; C = H^{-1} gives marginal variances
+  // and Cov. Cov has same units as I_nu_0; ρ = Cov/(σ_I·σ_α) in [-1,1] (high |ρ| = degeneracy).
   int error_image_count = image->getImageCount() + 2;  // +1 covariance, +1 correlation ρ
   checkCudaErrors(
       cudaMalloc((void**)&errors, sizeof(float) * M * N * error_image_count));

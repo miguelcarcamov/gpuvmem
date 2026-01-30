@@ -1217,17 +1217,18 @@ void MFS::writeImages() {
     this->error->calculateErrorImage(this->image, this->visibilities);
     if (IoOrderError == NULL) {
       if (print_images) {
-        // Error map layout: 0 = σ(I_nu_0), 1 = σ(alpha), 2 = Cov, 3 = ρ. Slice 0
-        // uses fg_scale; others use printNotNormalizedImage.
+        // Error map layout: 0 = σ(I_nu_0), 1 = σ(alpha), 2 = Cov, 3 = ρ.
+        // Slice 0 and 2 use fg_scale so σ(I_nu_0) and Cov are in Jy/pixel.
+        // ρ = correlation(I_nu_0, alpha); high |ρ| (e.g. ~0.9) means degeneracy.
         ioImageHandler->printNormalizedImage(
             image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL",
             optimizer->getCurrentIteration(), 0, this->fg_scale, true);
         ioImageHandler->printNotNormalizedImage(
             image->getErrorImage(), "error_alpha_0.fits", "",
             optimizer->getCurrentIteration(), 1, true);
-        ioImageHandler->printNotNormalizedImage(
+        ioImageHandler->printNormalizedImage(
             image->getErrorImage(), "error_cov_Inu_0_alpha.fits", "JY/PIXEL",
-            optimizer->getCurrentIteration(), 2, true);
+            optimizer->getCurrentIteration(), 2, this->fg_scale, true);
         ioImageHandler->printNotNormalizedImage(
             image->getErrorImage(), "error_rho_Inu_0_alpha.fits", "",
             optimizer->getCurrentIteration(), 3, true);
