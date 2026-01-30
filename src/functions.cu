@@ -5144,7 +5144,9 @@ __host__ void dchi2(float* I,
 
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
+      // ordered: accumulate gradient in iteration order (i then s) so that
+      // floating-point += order is deterministic and runs are reproducible.
+#pragma omp parallel for schedule(static, 1) num_threads(num_gpus) ordered
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         unsigned int j = omp_get_thread_num();
         unsigned int num_cpu_threads = omp_get_num_threads();
@@ -5226,11 +5228,11 @@ __host__ void dchi2(float* I,
               // antenna_diameter, pb_factor, pb_cutoff, fields[f].nu[i]);
               checkCudaErrors(cudaDeviceSynchronize());
 
-#pragma omp critical
+#pragma omp ordered
               {
-                // += accumulates over channels into result_dchi2 (slice 0 = I_nu_0, slice 1 = alpha).
-                // With CUDA P2P, kernels on any GPU can write to result_dchi2 on firstgpu.
-                // device_noise_image, I, result_dchi2 on firstgpu; with P2P kernels on any GPU can read/write them.
+                // += accumulates over channels into result_dchi2 (slice 0 =
+                // I_nu_0, slice 1 = alpha). Ordered so FP accumulation order
+                // is deterministic (i then s) for reproducible optimizer results.
                 if (flag_opt == -1) {
                   DChi2_total_I_nu_0<<<numBlocksNN, threadsPerBlockNN>>>(
                       device_noise_image, result_dchi2,
@@ -5826,8 +5828,10 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
   float sum_weights;
   for (int d = 0; d < nMeasurementSets; d++) {
     for (int f = 0; f < datasets[d].data.nfields; f++) {
+      // ordered: accumulate Fisher terms in iteration order (i then s) so that
+      // floating-point += order is deterministic and error maps are reproducible.
 #pragma omp parallel for private(sum_weights) num_threads(num_gpus) \
-    schedule(static, 1)
+    schedule(static, 1) ordered
       for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
         unsigned int j = omp_get_thread_num();
         unsigned int num_cpu_threads = omp_get_num_threads();
@@ -5849,7 +5853,7 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
                       .device_visibilities[i][s]
                       .threadsPerBlockUV);
 
-#pragma omp critical
+#pragma omp ordered
               {
                 // Compute variance for I_nu_0 (stored at index 0)
                 I_nu_0_Noise<<<numBlocksNN, threadsPerBlockNN>>>(
