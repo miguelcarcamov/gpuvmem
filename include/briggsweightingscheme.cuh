@@ -14,7 +14,7 @@ class BriggsWeightingScheme : public WeightingScheme {
   BriggsWeightingScheme();
   BriggsWeightingScheme(int threads);
   BriggsWeightingScheme(int threads, UVTaper* uvtaper);
-  void apply(std::vector<MSDataset>& d);
+  void apply(std::vector<gpuvmem::ms::MSWithGPU>& d);
   void configure(void* params);
   float getRobustParam();
   void setRobustParam(float robust_param);

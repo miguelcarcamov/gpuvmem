@@ -1,7 +1,15 @@
 #include "imageProcessor.cuh"
+#include "gridder.cuh"
 #include "mfs.cuh"
+#include "ms/data_column.h"
+#include "ms/ms_reader.h"
+#include "ms/ms_writer.h"
+#include "ms/polarization.h"
+#include "objective_function/terms/chi2/chi2.cuh"
 #include "objective_function/terms/regularizers/secondderivateerror.cuh"
 #include "functions.cuh"
+
+#include <algorithm>
 
 long M, N, numVisibilities;
 
@@ -34,7 +42,8 @@ std::string radesys;
 float equinox;
 
 std::vector<float> initial_values;
-std::vector<MSDataset> datasets;
+std::vector<gpuvmem::ms::MSWithGPU> datasets;
+std::vector<gpuvmem::ms::MSWithGPU>* g_datasets = nullptr;
 
 varsPerGPU* vars_gpu;
 
@@ -158,18 +167,16 @@ void MFS::configure(int argc, char** argv) {
     printf("Number of input datasets %d\n", nMeasurementSets);
 
   for (int i = 0; i < nMeasurementSets; i++) {
-    datasets.push_back(MSDataset());
-    datasets[i].name =
-        (char*)malloc((string_values[i].length() + 1) * sizeof(char));
-    datasets[i].oname =
-        (char*)malloc((s_output_values[i].length() + 1) * sizeof(char));
-    strcpy(datasets[i].name, string_values[i].c_str());
-    strcpy(datasets[i].oname, s_output_values[i].c_str());
+    gpuvmem::ms::MSWithGPU dw;
+    dw.name = string_values[i];
+    dw.oname = s_output_values[i];
+    datasets.push_back(std::move(dw));
   }
 
   string_values.clear();
   s_output_values.clear();
 
+  std::vector<std::string> requested_stokes;
   if (variables.initial_values != "NULL") {
     string_values = countAndSeparateStrings(variables.initial_values, ",");
     image_count = string_values.size();
@@ -199,7 +206,20 @@ void MFS::configure(int argc, char** argv) {
   }
 
   string_values.clear();
-  if (image_count == 1) {
+  if (!variables.stokes.empty()) {
+    // Stokes imaging: image_count = number of requested Stokes; validate against datasets after read
+    requested_stokes = countAndSeparateStrings(variables.stokes, ",");
+    image_count = static_cast<int>(requested_stokes.size());
+    if (image_count <= 0) {
+      printf("ERROR: --stokes must specify at least one Stokes (e.g. I or I,Q,U,V)\n");
+      exit(-1);
+    }
+    // Ensure minimal_pixel_values and initial_values have image_count entries (pad with 0.0f)
+    while (static_cast<int>(this->minimal_pixel_values.size()) < image_count)
+      this->minimal_pixel_values.push_back(0.0f);
+    while (static_cast<int>(initial_values.size()) < image_count)
+      initial_values.push_back(0.0f);
+  } else if (image_count == 1) {
     initial_values.push_back(0.0f);
     this->minimal_pixel_values.push_back(0.0f);  // Add default minimal pixel value for second image
     image_count++;
@@ -318,17 +338,72 @@ void MFS::configure(int argc, char** argv) {
   std::vector<float> ms_max_blength;
   std::vector<float> ms_min_blength;
   std::vector<float> ms_uvmax_wavelength;
+  auto reader = gpuvmem::ms::create_ms_reader();
+  gpuvmem::ms::MSReadOptions read_opts;
+  read_opts.random_probability = random_probability;
   for (int d = 0; d < nMeasurementSets; d++) {
-    ioVisibilitiesHandler->read(datasets[d].name, datasets[d].antennas,
-                                datasets[d].fields, &datasets[d].data);
-    ms_ref_freqs.push_back(datasets[d].data.ref_freq);
-    ms_max_freqs.push_back(datasets[d].data.max_freq);
-    ms_min_freqs.push_back(datasets[d].data.min_freq);
-    ms_max_blength.push_back(datasets[d].data.max_blength);
-    ms_min_blength.push_back(datasets[d].data.min_blength);
-    ms_uvmax_wavelength.push_back(datasets[d].data.uvmax_wavelength);
+    if (!reader->read(datasets[d].name, datasets[d].ms, read_opts)) {
+      printf("Failed to read MS: %s\n", datasets[d].name.c_str());
+      exit(-1);
+    }
+    float min_f = 1e30f, max_f = 0.f;
+    for (const auto& spw : datasets[d].ms.metadata().spectral_windows()) {
+      for (double f : spw.frequencies()) {
+        if (f < min_f) min_f = static_cast<float>(f);
+        if (f > max_f) max_f = static_cast<float>(f);
+      }
+    }
+    if (min_f > max_f) min_f = max_f;
+    ms_ref_freqs.push_back(0.5f * (min_f + max_f));
+    ms_max_freqs.push_back(max_f);
+    ms_min_freqs.push_back(min_f);
+    ms_max_blength.push_back(1e10f);
+    ms_min_blength.push_back(0.f);
+    ms_uvmax_wavelength.push_back(1e-5f);
+    float ant_diam = 0.f;
+    if (!datasets[d].ms.metadata().antennas().empty())
+      ant_diam = datasets[d].ms.metadata().antennas()[0].antenna_diameter;
     printf("Dataset %d: %s - Antenna diameter: %.3f metres\n", d,
-           datasets[d].name, datasets[d].antennas[0].antenna_diameter);
+           datasets[d].name.c_str(), ant_diam);
+  }
+
+  // Validate that all datasets can form the requested Stokes (when --stokes was set)
+  if (!requested_stokes.empty()) {
+    for (int d = 0; d < nMeasurementSets; d++) {
+      if (!gpuvmem::ms::stokes_supported_by_metadata(datasets[d].ms.metadata(),
+                                                      requested_stokes)) {
+        gpuvmem::ms::PolarizationHelper helper(&datasets[d].ms.metadata());
+        std::vector<std::string> available;
+        for (const auto& dd : datasets[d].ms.metadata().data_descriptions())
+          for (const std::string& a :
+               helper.available_stokes_for_data_desc(dd.data_desc_id()))
+            if (std::find(available.begin(), available.end(), a) == available.end())
+              available.push_back(a);
+        printf("ERROR: dataset %d (%s) cannot form requested Stokes (",
+               d, datasets[d].name.c_str());
+        for (size_t i = 0; i < requested_stokes.size(); i++)
+          printf("%s%s", requested_stokes[i].c_str(),
+                 i + 1 < requested_stokes.size() ? "," : "");
+        printf("). Available from correlations: ");
+        for (size_t i = 0; i < available.size(); i++)
+          printf("%s%s", available[i].c_str(),
+                 i + 1 < available.size() ? "," : "");
+        printf("\n");
+        exit(-1);
+      }
+    }
+    if (verbose_flag)
+      printf("Stokes imaging: %d plane(s) (%s)\n", image_count,
+             variables.stokes.c_str());
+    // Convert visibility data to Stokes so pol index = Stokes index (I=0, Q=1, U=2, V=3)
+    for (int d = 0; d < nMeasurementSets; d++) {
+      if (!gpuvmem::ms::correlations_to_stokes(datasets[d].ms,
+                                                requested_stokes)) {
+        printf("ERROR: failed to convert dataset %d (%s) to Stokes\n", d,
+               datasets[d].name.c_str());
+        exit(-1);
+      }
+    }
   }
 
   /*
@@ -382,11 +457,16 @@ void MFS::configure(int argc, char** argv) {
 
   if (verbose_flag) {
     for (int i = 0; i < nMeasurementSets; i++) {
-      printf("Dataset %d: %s\n", i, datasets[i].name);
-      printf("\tNumber of fields = %d\n", datasets[i].data.nfields);
-      printf("\tNumber of frequencies = %d\n",
-             datasets[i].data.total_frequencies);
-      printf("\tNumber of correlations = %d\n", datasets[i].data.nstokes);
+      size_t nchan = 0;
+      int npol = 0;
+      for (const auto& dd : datasets[i].ms.metadata().data_descriptions()) {
+        nchan += dd.nchan();
+        if (dd.npol() > 0) npol = dd.npol();
+      }
+      printf("Dataset %d: %s\n", i, datasets[i].name.c_str());
+      printf("\tNumber of fields = %zu\n", datasets[i].ms.num_fields());
+      printf("\tNumber of frequencies = %zu\n", nchan);
+      printf("\tNumber of correlations = %d\n", npol);
     }
   }
 
@@ -435,8 +515,10 @@ void MFS::configure(int argc, char** argv) {
       num_gpus = 1;
     } else {
       for (int d = 0; d < nMeasurementSets; d++) {
-        if (datasets[d].data.total_frequencies > max_nfreq)
-          max_nfreq = datasets[d].data.total_frequencies;
+        int nfreq = 0;
+        for (const auto& dd : datasets[d].ms.metadata().data_descriptions())
+          nfreq += dd.nchan();
+        if (nfreq > max_nfreq) max_nfreq = nfreq;
       }
 
       if (max_nfreq == 1) {
@@ -527,9 +609,9 @@ void MFS::configure(int argc, char** argv) {
 
   vars_gpu = (varsPerGPU*)malloc(num_gpus * sizeof(varsPerGPU));
 
-  this->visibilities = new Visibilities();
-  this->visibilities->setMSDataset(datasets);
-  this->visibilities->setNDatasets(nMeasurementSets);
+  this->setDatasets(&datasets);
+  this->setNDatasets(nMeasurementSets);
+  g_datasets = &datasets;
 
   double deltax = RPDEG_D * DELTAX;  // radians
   double deltay = RPDEG_D * DELTAY;  // radians
@@ -562,9 +644,11 @@ void MFS::configure(int argc, char** argv) {
         this->ckernel->getName().c_str(), this->ckernel->getm(),
         this->ckernel->getn(), this->ckernel->getSupportX(),
         this->ckernel->getSupportY());
+    Gridder gridder(this->ckernel, this->getGriddingThreads());
+    gridder.grid(datasets);
+  } else {
     for (int d = 0; d < nMeasurementSets; d++)
-      do_gridding(datasets[d].fields, &datasets[d].data, deltau, deltav, M, N,
-                  this->ckernel, this->getGriddingThreads());
+      datasets[d].upload();
   }
 }
 
@@ -586,83 +670,42 @@ void MFS::setDevice() {
   }
 
   // Estimates the noise in JY/BEAM, beam major, minor axis and angle in
-  // degrees.
-  sum_weights = calculateNoiseAndBeam(datasets, &total_visibilities,
-                                      variables.blockSizeV, &beam_bmaj,
-                                      &beam_bmin, &beam_bpa, &this->vis_noise);
+  // degrees (each dataset contributes its beam/noise; we accumulate then
+  // compute once).
+  {
+    double s_uu = 0.0, s_vv = 0.0, s_uv = 0.0;
+    float sw = 0.0f;
+    int tot_vis = 0;
+    for (auto& dw : datasets) {
+      dw.computeNoiseAndBeamContribution(&s_uu, &s_vv, &s_uv, &sw, &tot_vis);
+    }
+    total_visibilities = tot_vis;
+    sum_weights = sw;
+    gpuvmem::ms::beamNoiseFromSums(s_uu, s_vv, s_uv, sum_weights, &beam_bmaj,
+                                   &beam_bmin, &beam_bpa, &this->vis_noise);
+  }
 
-  this->visibilities->setTotalVisibilities(total_visibilities);
+  this->setTotalVisibilities(total_visibilities);
 
   for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-      cudaSetDevice(firstgpu);
-      checkCudaErrors(cudaMalloc((void**)&datasets[d].fields[f].atten_image,
+    if (datasets[d].gpu.num_fields() == 0)
+      datasets[d].upload();
+    gpuvmem::ms::MeasurementSet& ms = datasets[d].ms;
+    datasets[d].atten_image.resize(ms.num_fields());
+    cudaSetDevice(firstgpu);
+    for (size_t f = 0; f < ms.num_fields(); f++) {
+      checkCudaErrors(cudaMalloc((void**)&datasets[d].atten_image[f],
                                  sizeof(float) * M * N));
-      checkCudaErrors(cudaMemset(datasets[d].fields[f].atten_image, 0,
+      checkCudaErrors(cudaMemset(datasets[d].atten_image[f], 0,
                                  sizeof(float) * M * N));
-      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-        cudaSetDevice((i % num_gpus) + firstgpu);
-        for (int s = 0; s < datasets[d].data.nstokes; s++) {
-          checkCudaErrors(cudaMalloc(
-              &datasets[d].fields[f].device_visibilities[i][s].uvw,
-              sizeof(double3) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-          checkCudaErrors(cudaMalloc(
-              &datasets[d].fields[f].device_visibilities[i][s].Vo,
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-          checkCudaErrors(cudaMalloc(
-              &datasets[d].fields[f].device_visibilities[i][s].weight,
-              sizeof(float) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-          checkCudaErrors(cudaMalloc(
-              &datasets[d].fields[f].device_visibilities[i][s].Vm,
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-          checkCudaErrors(cudaMalloc(
-              &datasets[d].fields[f].device_visibilities[i][s].Vr,
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-          checkCudaErrors(cudaMemcpy(
-              datasets[d].fields[f].device_visibilities[i][s].uvw,
-              datasets[d].fields[f].visibilities[i][s].uvw.data(),
-              sizeof(double3) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-              cudaMemcpyHostToDevice));
-
-          checkCudaErrors(cudaMemcpy(
-              datasets[d].fields[f].device_visibilities[i][s].weight,
-              datasets[d].fields[f].visibilities[i][s].weight.data(),
-              sizeof(float) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-              cudaMemcpyHostToDevice));
-
-          checkCudaErrors(cudaMemcpy(
-              datasets[d].fields[f].device_visibilities[i][s].Vo,
-              datasets[d].fields[f].visibilities[i][s].Vo.data(),
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s],
-              cudaMemcpyHostToDevice));
-
-          checkCudaErrors(cudaMemset(
-              datasets[d].fields[f].device_visibilities[i][s].Vr, 0,
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-          checkCudaErrors(cudaMemset(
-              datasets[d].fields[f].device_visibilities[i][s].Vm, 0,
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        }
-      }
     }
   }
 
   max_number_vis = 0;
   for (int d = 0; d < nMeasurementSets; d++) {
-    if (datasets[d].data.max_number_visibilities_in_channel_and_stokes >
-        max_number_vis)
-      max_number_vis =
-          datasets[d].data.max_number_visibilities_in_channel_and_stokes;
+    size_t mc = datasets[d].gpu.max_chunk_count();
+    if (mc > static_cast<size_t>(max_number_vis))
+      max_number_vis = static_cast<int>(mc);
   }
 
   if (max_number_vis == 0) {
@@ -670,7 +713,7 @@ void MFS::setDevice() {
     exit(-1);
   }
 
-  this->visibilities->setMaxNumberVis(max_number_vis);
+  this->setMaxNumberVis(max_number_vis);
 
   printf("Estimated beam size: %e x %e (arcsec) / %lf (degrees)\n",
          beam_bmaj * 3600.0, beam_bmin * 3600.0, beam_bpa);
@@ -701,14 +744,14 @@ void MFS::setDevice() {
   for (int d = 0; d < nMeasurementSets; d++) {
     if (verbose_flag)
       printf("Dataset: %s\n", datasets[d].name);
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-      direccos(datasets[d].fields[f].ref_ra, datasets[d].fields[f].ref_dec,
+    gpuvmem::ms::MeasurementSet& ms = datasets[d].ms;
+    for (size_t f = 0; f < ms.num_fields(); f++) {
+      gpuvmem::ms::Field& field = ms.field(f);
+      gpuvmem::ms::FieldMetadata& fmeta = field.metadata();
+      direccos(field.reference_dir()[0], field.reference_dir()[1],
                raimage, decimage, &lobs, &mobs);
-      direccos(datasets[d].fields[f].phs_ra, datasets[d].fields[f].phs_dec,
+      direccos(field.phase_dir()[0], field.phase_dir()[1],
                raimage, decimage, &lphs, &mphs);
-
-      dcosines_l_pix_ref = lobs / deltax;  // Radians to pixels
-      dcosines_m_pix_ref = mobs / deltay;  // Radians to pixels
 
       dcosines_l_pix_phs = lphs / deltax;  // Radians to pixels
       dcosines_m_pix_phs = mphs / deltay;  // Radians to pixels
@@ -719,55 +762,40 @@ void MFS::setDevice() {
         printf("Phase: l (pix): %e, m (pix): %e\n", dcosines_l_pix_phs,
                dcosines_m_pix_phs);
       }
-      datasets[d].fields[f].ref_xobs_cartesian = dcosines_l_pix_phs;
-      datasets[d].fields[f].ref_yobs_cartesian = dcosines_m_pix_phs;
-
-      datasets[d].fields[f].phs_xobs_cartesian = dcosines_l_pix_phs;
-      datasets[d].fields[f].phs_yobs_cartesian = dcosines_m_pix_phs;
-
-      datasets[d].fields[f].ref_xobs_pix = dcosines_l_pix_phs + (crpix1 - 1.0f);
-      datasets[d].fields[f].ref_yobs_pix = dcosines_m_pix_phs + (crpix2 - 1.0f);
-
-      datasets[d].fields[f].phs_xobs_pix = dcosines_l_pix_phs + (crpix1 - 1.0f);
-      datasets[d].fields[f].phs_yobs_pix = dcosines_m_pix_phs + (crpix2 - 1.0f);
+      fmeta.ref_xobs_pix = static_cast<float>(dcosines_l_pix_phs + (crpix1 - 1.0));
+      fmeta.ref_yobs_pix = static_cast<float>(dcosines_m_pix_phs + (crpix2 - 1.0));
+      fmeta.phs_xobs_pix = static_cast<float>(dcosines_l_pix_phs + (crpix1 - 1.0));
+      fmeta.phs_yobs_pix = static_cast<float>(dcosines_m_pix_phs + (crpix2 - 1.0));
 
       if (verbose_flag) {
         printf(
-            "Ref: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), "
+            "Ref: Field %zu - Ra: %.16e (rad), dec: %.16e (rad), x0: %f (pix), "
             "y0: %f (pix)\n",
-            f, datasets[d].fields[f].ref_ra, datasets[d].fields[f].ref_dec,
-            datasets[d].fields[f].ref_xobs_pix,
-            datasets[d].fields[f].ref_yobs_pix);
+            f, field.reference_dir()[0], field.reference_dir()[1],
+            fmeta.ref_xobs_pix, fmeta.ref_yobs_pix);
         printf(
-            "Phase: Field %d - Ra: %.16e (rad), dec: %.16e (rad), x0: %f "
+            "Phase: Field %zu - Ra: %.16e (rad), dec: %.16e (rad), x0: %f "
             "(pix), y0: %f (pix)\n",
-            f, datasets[d].fields[f].phs_ra, datasets[d].fields[f].phs_dec,
-            datasets[d].fields[f].phs_xobs_pix,
-            datasets[d].fields[f].phs_yobs_pix);
+            f, field.phase_dir()[0], field.phase_dir()[1],
+            fmeta.phs_xobs_pix, fmeta.phs_yobs_pix);
       }
 
-      if (datasets[d].fields[f].ref_xobs_pix < 0 ||
-          datasets[d].fields[f].ref_xobs_pix >= M ||
-          datasets[d].fields[f].ref_xobs_pix < 0 ||
-          datasets[d].fields[f].ref_yobs_pix >= N) {
-        printf("Dataset: %s\n", datasets[d].name);
+      if (fmeta.ref_xobs_pix < 0 || fmeta.ref_xobs_pix >= M ||
+          fmeta.ref_yobs_pix < 0 || fmeta.ref_yobs_pix >= N) {
+        printf("Dataset: %s\n", datasets[d].name.c_str());
         printf(
             "Pointing reference center (%f,%f) is outside the range of the "
             "image\n",
-            datasets[d].fields[f].ref_xobs_pix,
-            datasets[d].fields[f].ref_yobs_pix);
+            fmeta.ref_xobs_pix, fmeta.ref_yobs_pix);
         goToError();
       }
 
-      if (datasets[d].fields[f].phs_xobs_pix < 0 ||
-          datasets[d].fields[f].phs_xobs_pix >= M ||
-          datasets[d].fields[f].phs_xobs_pix < 0 ||
-          datasets[d].fields[f].phs_yobs_pix >= N) {
-        printf("Dataset: %s\n", datasets[d].name);
+      if (fmeta.phs_xobs_pix < 0 || fmeta.phs_xobs_pix >= M ||
+          fmeta.phs_yobs_pix < 0 || fmeta.phs_yobs_pix >= N) {
+        printf("Dataset: %s\n", datasets[d].name.c_str());
         printf(
             "Pointing phase center (%f,%f) is outside the range of the image\n",
-            datasets[d].fields[f].phs_xobs_pix,
-            datasets[d].fields[f].phs_yobs_pix);
+            fmeta.phs_xobs_pix, fmeta.phs_yobs_pix);
         goToError();
       }
     }
@@ -833,12 +861,21 @@ void MFS::setDevice() {
 
   /////////// MAKING IMAGE OBJECT /////////////
   image = new Image(device_Image, image_count, M, N);
+  image->set_pixel_scale_ra_deg(DELTAX);
+  image->set_pixel_scale_dec_deg(DELTAY);
   // Set minimal pixel values from initial_values (before eta multiplication)
   // minimal_pixel_values was declared in configure() and stored as member variable
   image->setMinimalPixelValues(this->minimal_pixel_values);
   // Set global I pointer for backward compatibility (used as fallback in line searchers)
   // Note: Line searchers prefer using this->image from optimizer, but fall back to extern I if needed
   I = image;
+  // Configure Chi2's ImageProcessor from Image geometry (so ip uses image->getM(), getN(), getImageCount())
+  if (this->getOptimizator() && this->getOptimizator()->getObjectiveFunction()) {
+    Fi* chi2_fi = this->getOptimizator()->getObjectiveFunction()->getFiByName("Chi2");
+    Chi2* chi2_term = (chi2_fi ? dynamic_cast<Chi2*>(chi2_fi) : nullptr);
+    if (chi2_term)
+      chi2_term->configureImage(image);
+  }
   imageMap* functionPtr = (imageMap*)malloc(sizeof(imageMap) * image_count);
   image->setFunctionMapping(functionPtr);
 
@@ -863,76 +900,45 @@ void MFS::setDevice() {
   t = clock();
   start = omp_get_wtime();
   for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-#pragma omp parallel for schedule(static, 1) num_threads(num_gpus)
-      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-        unsigned int j = omp_get_thread_num();
-        unsigned int num_cpu_threads = omp_get_num_threads();
-        int gpu_idx = i % num_gpus;
-        cudaSetDevice(gpu_idx + firstgpu);
-        int gpu_id = -1;
-        cudaGetDevice(&gpu_id);
-
-        for (int s = 0; s < datasets[d].data.nstokes; s++) {
-          if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-            // Convert UVW coordinates from meters to lambda units
-            // Note: We do NOT apply Hermitian symmetry here because:
-            // 1. We use ifft2 (complex-to-complex), not irfft2
-            // 2. The FFT of a real image naturally has Hermitian symmetry
-            // 3. We can sample the grid at any (u,v) position directly
-            convertUVWToLambda<<<
-                datasets[d].fields[f].device_visibilities[i][s].numBlocksUV,
-                datasets[d]
-                    .fields[f]
-                    .device_visibilities[i][s]
-                    .threadsPerBlockUV>>>(
-                datasets[d].fields[f].device_visibilities[i][s].uvw,
-                datasets[d].fields[f].nu[i],
-                datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
-            checkCudaErrors(cudaDeviceSynchronize());
-          }
-        }
-      }
-    }
-
+    const gpuvmem::ms::MeasurementSetMetadata& meta = datasets[d].ms.metadata();
+    if (meta.num_antennas() == 0) continue;
+    const gpuvmem::ms::Antenna& ant0 = meta.antenna(0);
+    int primary_beam_int =
+        (ant0.primary_beam == gpuvmem::ms::PrimaryBeamType::AiryDisk) ? 1 : 0;
     cudaSetDevice(firstgpu);
-
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
+    for (size_t f = 0; f < datasets[d].ms.num_fields(); f++) {
+      const gpuvmem::ms::FieldMetadata& fmeta =
+          datasets[d].ms.field(f).metadata();
       total_attenuation<<<numBlocksNN, threadsPerBlockNN>>>(
-          datasets[d].fields[f].atten_image,
-          datasets[d].antennas[0].antenna_diameter,
-          datasets[d].antennas[0].pb_factor, datasets[d].antennas[0].pb_cutoff,
-          nu_0, datasets[d].fields[f].ref_xobs_pix,
-          datasets[d].fields[f].ref_yobs_pix, DELTAX, DELTAY, N,
-          datasets[d].antennas[0].primary_beam);
+          datasets[d].atten_image[f],
+          ant0.antenna_diameter, ant0.pb_factor, ant0.pb_cutoff,
+          nu_0, fmeta.ref_xobs_pix, fmeta.ref_yobs_pix, DELTAX, DELTAY, N,
+          primary_beam_int);
       checkCudaErrors(cudaDeviceSynchronize());
 
       if (print_images) {
         std::string atten_name = "dataset_" + std::to_string(d) + "_atten";
         ioImageHandler->printNotNormalizedImageIteration(
-            datasets[d].fields[f].atten_image, atten_name.c_str(), "", f, 0,
-            true);
+            datasets[d].atten_image[f], atten_name.c_str(), "",
+            static_cast<int>(f), 0, true);
       }
     }
   }
 
   cudaSetDevice(firstgpu);
 
-  // Note: Cannot fully parallelize this loop because device_weight_image is
-  // shared But we can parallelize the outer dataset loop if datasets are
-  // independent
   for (int d = 0; d < nMeasurementSets; d++) {
-    // Fields within a dataset must be sequential due to shared
-    // device_weight_image
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
+    for (size_t f = 0; f < datasets[d].ms.num_fields(); f++) {
       weight_image<<<numBlocksNN, threadsPerBlockNN>>>(
-          device_weight_image, datasets[d].fields[f].atten_image, N);
+          device_weight_image, datasets[d].atten_image[f], N);
       checkCudaErrors(cudaDeviceSynchronize());
 
       if (radius_mask) {
+        const gpuvmem::ms::FieldMetadata& fmeta =
+            datasets[d].ms.field(f).metadata();
         distance_image<<<numBlocksNN, threadsPerBlockNN>>>(
-            device_distance_image, datasets[d].fields[f].ref_xobs_pix,
-            datasets[d].fields[f].ref_yobs_pix, 4.5e-05, DELTAX, DELTAY, N);
+            device_distance_image, fmeta.ref_xobs_pix, fmeta.ref_yobs_pix,
+            4.5e-05, DELTAX, DELTAY, N);
         checkCudaErrors(cudaDeviceSynchronize());
       }
     }
@@ -992,29 +998,16 @@ void MFS::setDevice() {
   if (radius_mask)
     cudaFree(device_distance_image);
   for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-      cudaFree(datasets[d].fields[f].atten_image);
+    for (size_t f = 0; f < datasets[d].atten_image.size(); f++) {
+      cudaFree(datasets[d].atten_image[f]);
     }
+    datasets[d].atten_image.clear();
   }
 };
 
 void MFS::clearRun() {
   for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-        cudaSetDevice((i % num_gpus) + firstgpu);
-        for (int s = 0; s < datasets[d].data.nstokes; s++) {
-          checkCudaErrors(cudaMemset(
-              datasets[d].fields[f].device_visibilities[i][s].Vr, 0,
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-          checkCudaErrors(cudaMemset(
-              datasets[d].fields[f].device_visibilities[i][s].Vm, 0,
-              sizeof(cufftComplex) *
-                  datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s]));
-        }
-      }
-    }
+    datasets[d].gpu.zero_model_and_residual();
   }
 
   for (int g = 0; g < num_gpus; g++) {
@@ -1214,24 +1207,34 @@ void MFS::writeImages() {
     /* code to calculate error */
     /* make void * params */
     printf("Calculating Error Images\n");
-    this->error->calculateErrorImage(this->image, this->visibilities);
+    this->error->calculateErrorImage(this->image, *this->getDatasets());
     if (IoOrderError == NULL) {
       if (print_images) {
-        // Error map layout: 0 = σ(I_nu_0), 1 = σ(alpha), 2 = Cov, 3 = ρ.
-        // Slice 0 and 2 use fg_scale so σ(I_nu_0) and Cov are in Jy/pixel.
-        // ρ = correlation(I_nu_0, alpha); high |ρ| (e.g. ~0.9) means degeneracy.
-        ioImageHandler->printNormalizedImage(
-            image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL",
-            optimizer->getCurrentIteration(), 0, this->fg_scale, true);
-        ioImageHandler->printNotNormalizedImage(
-            image->getErrorImage(), "error_alpha_0.fits", "",
-            optimizer->getCurrentIteration(), 1, true);
-        ioImageHandler->printNormalizedImage(
-            image->getErrorImage(), "error_cov_Inu_0_alpha.fits", "JY/PIXEL",
-            optimizer->getCurrentIteration(), 2, this->fg_scale, true);
-        ioImageHandler->printNotNormalizedImage(
-            image->getErrorImage(), "error_rho_Inu_0_alpha.fits", "",
-            optimizer->getCurrentIteration(), 3, true);
+        int image_count = image->getImageCount();
+        if (image_count == 2) {
+          // MFS: 0 = σ(I_nu_0), 1 = σ(alpha), 2 = Cov, 3 = ρ.
+          ioImageHandler->printNormalizedImage(
+              image->getErrorImage(), "error_Inu_0.fits", "JY/PIXEL",
+              optimizer->getCurrentIteration(), 0, this->fg_scale, true);
+          ioImageHandler->printNotNormalizedImage(
+              image->getErrorImage(), "error_alpha_0.fits", "",
+              optimizer->getCurrentIteration(), 1, true);
+          ioImageHandler->printNormalizedImage(
+              image->getErrorImage(), "error_cov_Inu_0_alpha.fits", "JY/PIXEL",
+              optimizer->getCurrentIteration(), 2, this->fg_scale, true);
+          ioImageHandler->printNotNormalizedImage(
+              image->getErrorImage(), "error_rho_Inu_0_alpha.fits", "",
+              optimizer->getCurrentIteration(), 3, true);
+        } else {
+          // Stokes/single: one σ per image plane (Jy/pixel with fg_scale).
+          for (int p = 0; p < image_count; p++) {
+            char fname[64];
+            snprintf(fname, sizeof(fname), "error_stokes_%d.fits", p);
+            ioImageHandler->printNormalizedImage(
+                image->getErrorImage(), fname, "JY/PIXEL",
+                optimizer->getCurrentIteration(), p, this->fg_scale, true);
+          }
+        }
       }
 
     } else {
@@ -1244,7 +1247,7 @@ void MFS::writeResiduals() {
   // Restoring the weights to the original
   printf("Transferring residuals to host memory\n");
   if (!this->gridding) {
-    this->scheme->restoreWeights(datasets);
+    this->scheme->restoreWeights(*this->getDatasets());
   } else {
     double deltax = RPDEG_D * DELTAX;  // radians
     double deltay = RPDEG_D * DELTAY;  // radians
@@ -1254,43 +1257,27 @@ void MFS::writeResiduals() {
     printf(
         "Visibilities are gridded, we will need to de-grid to save them in a "
         "Measurement Set File\n");
-    // In the de-gridding procedure weights are also restored to the original
-    // Create ImageProcessor for degridding (needed to recompute FFT from final
-    // image)
+    // Native degridding: compute model visibilities from final image on
+    // MeasurementSet + ChunkedVisibilityGPU; download to ms; refresh legacy view.
     ImageProcessor* ip = new ImageProcessor();
-    ip->configure(image_count);
+    ip->configure(image);
     if (this->ckernel != NULL) {
       ip->setCKernel(this->ckernel);
     }
-
+    Gridder gridder(this->ckernel, this->getGriddingThreads());
     for (int d = 0; d < nMeasurementSets; d++) {
-      // Use new degridding function that recomputes FFT from final image
-      // This is more accurate than bilinear interpolation
-      degridding(datasets[d].fields, datasets[d].data, deltau, deltav, num_gpus,
-                 firstgpu, variables.blockSizeV, M, N, this->ckernel,
-                 image->getImage(), ip, datasets[d]);
+      // Upload original (ungridded) ms to gpu so degridding fills Vm at
+      // original positions; gpu currently holds gridded data from do_gridding.
+      datasets[d].upload();
+      gridder.degrid(datasets[d], image->getImage(), ip);
+      datasets[d].download();
     }
-
-    // Clean up ImageProcessor
     delete ip;
 
-    // After degridding, numVisibilitiesPerFreqPerStoke holds the original
-    // (pre-grid) counts, which can be larger than max_number_vis (which was
-    // set from the gridded max). chi2->calcFi() runs chi2Vector over these
-    // counts and writes to vars_gpu[g].device_chi2; if count > max_number_vis
-    // we get out-of-bounds write -> cudaErrorIllegalAddress. Grow device_chi2
-    // when needed.
     int max_orig = 0;
     for (int d = 0; d < nMeasurementSets; d++) {
-      for (int f = 0; f < datasets[d].data.nfields; f++) {
-        for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-          for (int s = 0; s < datasets[d].data.nstokes; s++) {
-            int n = datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s];
-            if (n > max_orig)
-              max_orig = n;
-          }
-        }
-      }
+      size_t mc = datasets[d].gpu.max_chunk_count();
+      if (mc > static_cast<size_t>(max_orig)) max_orig = static_cast<int>(mc);
     }
     if (max_orig > max_number_vis) {
       max_number_vis = max_orig;
@@ -1309,41 +1296,41 @@ void MFS::writeResiduals() {
   }
 
   for (int d = 0; d < nMeasurementSets; d++) {
-    // No Hermitian conjugation needed - we no longer apply Hermitian symmetry
-    // to the input visibilities, so model visibilities are already correct
-    modelToHost(datasets[d].fields, datasets[d].data, num_gpus, firstgpu,
-                false);
+    datasets[d].download();
   }
-
   printf("Saving residuals and model to MS...\n");
+  std::unique_ptr<gpuvmem::ms::MSWriter> writer =
+      gpuvmem::ms::create_ms_writer();
+  gpuvmem::ms::MSWriteOptions opts;
+  opts.write_columns = {gpuvmem::ms::DataColumn::MODEL_DATA};
+  opts.write_residual = true;
+  opts.residual_column_name = "RESIDUAL_DATA";
+  opts.update_weights = true;
   for (int d = 0; d < nMeasurementSets; d++) {
-    ioVisibilitiesHandler->copy(datasets[d].name, datasets[d].oname);
-    ioVisibilitiesHandler->writeResidualsAndModel(
-        datasets[d].name, datasets[d].oname, datasets[d].fields,
-        datasets[d].data);
+    ioVisibilitiesHandler->copy(datasets[d].name.c_str(),
+                                datasets[d].oname.c_str());
+    gpuvmem::ms::MeasurementSet& ms = datasets[d].ms;
+    if (ms.storage_mode() == gpuvmem::ms::StorageMode::Stokes) {
+      gpuvmem::ms::stokes_to_correlations(ms);
+    }
+    if (!writer->write(datasets[d].oname, ms, opts)) {
+      std::fprintf(stderr, "MFS: MSWriter failed for %s\n",
+                   datasets[d].oname.c_str());
+    }
   }
-
   printf("Residuals and model visibilities saved.\n");
 };
 
 void MFS::unSetDevice() {
-  // Free device and host memory
   printf("Freeing device memory\n");
   cudaSetDevice(firstgpu);
 
   for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-        cudaSetDevice((i % num_gpus) + firstgpu);
-        for (int s = 0; s < datasets[d].data.nstokes; s++) {
-          cudaFree(datasets[d].fields[f].device_visibilities[i][s].uvw);
-          cudaFree(datasets[d].fields[f].device_visibilities[i][s].weight);
-          cudaFree(datasets[d].fields[f].device_visibilities[i][s].Vr);
-          cudaFree(datasets[d].fields[f].device_visibilities[i][s].Vm);
-          cudaFree(datasets[d].fields[f].device_visibilities[i][s].Vo);
-        }
-      }
+    datasets[d].clear();
+    for (size_t f = 0; f < datasets[d].atten_image.size(); f++) {
+      cudaFree(datasets[d].atten_image[f]);
     }
+    datasets[d].atten_image.clear();
   }
 
   printf("Freeing cuFFT plans\n");
@@ -1353,27 +1340,6 @@ void MFS::unSetDevice() {
   }
 
   printf("Freeing host memory\n");
-  for (int d = 0; d < nMeasurementSets; d++) {
-    for (int f = 0; f < datasets[d].data.nfields; f++) {
-      for (int i = 0; i < datasets[d].data.total_frequencies; i++) {
-        for (int s = 0; s < datasets[d].data.nstokes; s++) {
-          if (datasets[d].fields[f].numVisibilitiesPerFreqPerStoke[i][s] > 0) {
-            datasets[d].fields[f].visibilities[i][s].uvw.clear();
-            datasets[d].fields[f].visibilities[i][s].weight.clear();
-            datasets[d].fields[f].visibilities[i][s].Vo.clear();
-            datasets[d].fields[f].visibilities[i][s].Vm.clear();
-
-            if (this->gridding) {
-              datasets[d].fields[f].backup_visibilities[i][s].uvw.clear();
-              datasets[d].fields[f].backup_visibilities[i][s].weight.clear();
-              datasets[d].fields[f].backup_visibilities[i][s].Vo.clear();
-            }
-          }
-        }
-      }
-    }
-  }
-
   cudaSetDevice(firstgpu);
   cudaFree(device_Image);
 
@@ -1410,8 +1376,8 @@ void MFS::unSetDevice() {
   free(host_I);
 
   for (int i = 0; i < nMeasurementSets; i++) {
-    free(datasets[i].name);
-    free(datasets[i].oname);
+    datasets[i].name.clear();
+    datasets[i].oname.clear();
   }
 };
 

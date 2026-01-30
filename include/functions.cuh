@@ -2,6 +2,7 @@
 #define FUNCTIONS_CUH
 
 #include "framework.cuh"
+#include "ms/ms_with_gpu.h"
 
 #define FLOAT_IMG -32
 #define DOUBLE_IMG -64
@@ -87,6 +88,30 @@ __host__ void do_gridding(std::vector<Field>& fields,
                           int N,
                           CKernel* ckernel,
                           int gridding);
+/** New MS model: grid from MeasurementSet (host); upload to gpu; returns
+ * gridded MeasurementSet for legacy view. */
+__host__ gpuvmem::ms::MeasurementSet do_gridding(
+    gpuvmem::ms::MeasurementSet& ms,
+    gpuvmem::ms::ChunkedVisibilityGPU* gpu,
+    double deltau,
+    double deltav,
+    long M,
+    long N,
+    CKernel* ckernel,
+    int gridding);
+/** New MS model: degrid from image into MeasurementSet / ChunkedVisibilityGPU. */
+__host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
+                            gpuvmem::ms::ChunkedVisibilityGPU* gpu,
+                            double deltau,
+                            double deltav,
+                            int num_gpus,
+                            int firstgpu,
+                            int blockSizeV,
+                            long M,
+                            long N,
+                            CKernel* ckernel,
+                            float* I,
+                            VirtualImageProcessor* ip);
 __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
                             std::vector<cufftComplex> Vm_gridded_sp,
                             std::vector<double3> uvw_gridded_sp,
@@ -96,26 +121,6 @@ __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
                             long M,
                             long N,
                             int numvis);
-__host__ void degridding(std::vector<Field>& fields,
-                         MSData data,
-                         double deltau,
-                         double deltav,
-                         int num_gpus,
-                         int firstgpu,
-                         int blockSizeV,
-                         long M,
-                         long N,
-                         CKernel* ckernel,
-                         float* I,
-                         VirtualImageProcessor* ip,
-                         MSDataset& dataset);
-__host__ float calculateNoiseAndBeam(std::vector<MSDataset>& datasets,
-                                     int* total_visibilities,
-                                     int blockSizeV,
-                                     double* bmaj,
-                                     double* bmin,
-                                     double* bpa,
-                                     float* noise);
 __host__ void calc_sBeam(std::vector<double> u,
                          std::vector<double> v,
                          std::vector<float> weight,
@@ -199,6 +204,10 @@ __host__ void linkApplyBeam2I(cufftComplex* image,
                               int primary_beam,
                               float fg_scale);
 __host__ void linkClipWNoise2I(float* I);
+/** Clip each image plane by noise (Stokes or single-plane; image_count != 2). */
+__host__ void linkClipStokesWNoise(float* I, int nplanes);
+/** Copy single-plane I to device_I_nu (real = I, imag = 0). For Stokes/single-image (image_count != 2). */
+__host__ void linkCopyItoInu(cufftComplex* image, float* I);
 __host__ void linkCalculateInu2I(cufftComplex* image, float* I, float freq);
 __host__ void linkChain2I(float* chain, float freq, float* I, float fg_scale);
 __host__ void normalizeImage(float* image, float normalization_factor);

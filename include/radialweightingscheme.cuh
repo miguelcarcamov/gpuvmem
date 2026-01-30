@@ -13,7 +13,7 @@ class RadialWeightingScheme : public WeightingScheme {
  public:
   RadialWeightingScheme();
   RadialWeightingScheme(int threads);
-  void apply(std::vector<MSDataset>& d);
+  void apply(std::vector<gpuvmem::ms::MSWithGPU>& d);
   void configure(void* params){};
 };
 

@@ -146,6 +146,7 @@ add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
 # Add all CUDA source files (including subdirectories)
 file(GLOB_RECURSE SOURCE_FILES 
      ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/ms/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu)

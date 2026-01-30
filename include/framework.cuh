@@ -35,7 +35,6 @@
 #include <uvtaper.cuh>
 #include <vector>
 #include <virtualimageprocessor.cuh>
-#include <visibilities.cuh>
 #include <weightingscheme.cuh>
 
 #include "copyrightwarranty.cuh"
@@ -64,6 +63,7 @@ typedef struct variables {
   std::string output_image;
   std::string gpus;
   std::string initial_values;
+  std::string stokes;  // Stokes to image, e.g. "I" or "I,Q,U,V". Empty = use initial_values count (MFS).
   std::string penalization_factors;
   std::string user_mask;
   int blockSizeX;

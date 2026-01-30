@@ -23,8 +23,9 @@ class MFS : public Synthesizer {
                                                    std::string sep);
   void configure(int argc, char** argv);
   void applyFilter(Filter* filter) {
-    filter->applyCriteria(this->visibilities);
-  };
+    if (this->getDatasets())
+      filter->applyCriteria(*this->getDatasets());
+  }
   
  protected:
   std::vector<float> minimal_pixel_values;  // Store minimal pixel values for Image object

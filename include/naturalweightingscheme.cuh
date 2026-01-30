@@ -10,7 +10,7 @@ class NaturalWeightingScheme : public WeightingScheme {
   NaturalWeightingScheme(int threads);
   NaturalWeightingScheme(int threads, UVTaper* uvtaper);
   void configure(void* params){};
-  void apply(std::vector<MSDataset>& d);
+  void apply(std::vector<gpuvmem::ms::MSWithGPU>& d);
 };
 
 #endif

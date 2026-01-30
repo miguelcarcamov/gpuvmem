@@ -14,7 +14,7 @@ class UniformWeightingScheme : public WeightingScheme {
   UniformWeightingScheme();
   UniformWeightingScheme(int threads);
   UniformWeightingScheme(int threads, UVTaper* uvtaper);
-  void apply(std::vector<MSDataset>& d);
+  void apply(std::vector<gpuvmem::ms::MSWithGPU>& d);
   void configure(void* params){};
 };
 

@@ -1,48 +1,47 @@
 #include "radialweightingscheme.cuh"
+#include "functions.cuh"
+#include "ms/measurement_set.h"
+#include "ms/time_sample.h"
+
+#include <iostream>
 
 RadialWeightingScheme::RadialWeightingScheme() : WeightingScheme(){};
-
 RadialWeightingScheme::RadialWeightingScheme(int threads)
     : WeightingScheme(threads){};
 
-void RadialWeightingScheme::apply(std::vector<MSDataset>& d) {
+void RadialWeightingScheme::apply(std::vector<gpuvmem::ms::MSWithGPU>& d) {
   std::cout << "Running weighting scheme with " << this->threads << " threads"
             << std::endl;
-  float w;
-  double3 uvw;
-  for (int j = 0; j < d.size(); j++) {
-    for (int f = 0; f < d[j].data.nfields; f++) {
-      for (int i = 0; i < d[j].data.total_frequencies; i++) {
-        for (int s = 0; s < d[j].data.nstokes; s++) {
-          d[j].fields[f].backup_visibilities[i][s].weight.resize(
-              d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]);
 
-#pragma omp parallel for schedule(static, 1) \
-    num_threads(this->threads) private(uvw, w)
-          for (int z = 0;
-               z < d[j].fields[f].numVisibilitiesPerFreqPerStoke[i][s]; z++) {
-            uvw = d[j].fields[f].visibilities[i][s].uvw[z];
-            uvw.x = metres_to_lambda(uvw.x, d[j].fields[f].nu[i]);
-            uvw.y = metres_to_lambda(uvw.y, d[j].fields[f].nu[i]);
-            w = d[j].fields[f].visibilities[i][s].weight[z];
-            d[j].fields[f].visibilities[i][s].weight[z] *=
-                distance(uvw.x, uvw.y, 0.0f, 0.0f);
+  for (auto& dw : d) {
+    const gpuvmem::ms::MeasurementSetMetadata& meta = dw.ms.metadata();
+    for (size_t f = 0; f < dw.ms.num_fields(); f++) {
+      gpuvmem::ms::Field& field = dw.ms.field(f);
+      for (auto& bl : field.baselines()) {
+        for (auto& ts : bl.time_samples()) {
+          const gpuvmem::ms::DataDescription* dd =
+              meta.find_data_description(ts.data_desc_id());
+          if (!dd) continue;
+          const gpuvmem::ms::SpectralWindow* spw =
+              meta.find_spectral_window(dd->spectral_window_id());
+          if (!spw) continue;
 
-            if (NULL != this->uvtaper)
-              d[j].fields[f].visibilities[i][s].weight[z] *=
-                  this->uvtaper->getValue(uvw.x, uvw.y);
-
-            if (this->modify_weights)
-              d[j].fields[f].backup_visibilities[i][s].weight[z] =
-                  d[j].fields[f].visibilities[i][s].weight[z];
-            else
-              d[j].fields[f].backup_visibilities[i][s].weight[z] = w;
+          double3 uvw = ts.uvw();
+#pragma omp parallel for schedule(static, 1) num_threads(this->threads)
+          for (size_t z = 0; z < ts.visibilities().size(); z++) {
+            auto& vis = ts.visibilities()[z];
+            float freq = static_cast<float>(spw->frequency(vis.chan));
+            double ux = metres_to_lambda(uvw.x, freq);
+            double uy = metres_to_lambda(uvw.y, freq);
+            vis.imaging_weight *= distance(ux, uy, 0.0f, 0.0f);
+            if (this->uvtaper != NULL)
+              vis.imaging_weight *= this->uvtaper->getValue(ux, uy);
           }
         }
       }
     }
   }
-};
+}
 
 namespace {
 WeightingScheme* CreateWeightingScheme() {

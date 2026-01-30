@@ -1,5 +1,11 @@
 #ifndef SYNTHESIZER_CUH
 #define SYNTHESIZER_CUH
+
+#include "ms/ms_with_gpu.h"
+#include "weightingscheme.cuh"
+
+#include <vector>
+
 class Synthesizer {
  public:
   __host__ virtual void run() = 0;
@@ -15,7 +21,19 @@ class Synthesizer {
   __host__ virtual void clearRun() = 0;
   __host__ virtual void writeResiduals() = 0;
   __host__ void setOptimizator(Optimizer* min) { this->optimizer = min; };
-  __host__ void setVisibilities(Visibilities* v) { this->visibilities = v; };
+  /** Set the group of datasets (one or multiple MS + GPU). Pipeline owns the vector. */
+  __host__ void setDatasets(std::vector<gpuvmem::ms::MSWithGPU>* d) {
+    datasets_ = d;
+  }
+  __host__ std::vector<gpuvmem::ms::MSWithGPU>* getDatasets() {
+    return datasets_;
+  }
+  __host__ void setTotalVisibilities(int t) { total_visibilities_ = t; }
+  __host__ void setNDatasets(int n) { ndatasets_ = n; }
+  __host__ void setMaxNumberVis(int m) { max_number_vis_ = m; }
+  __host__ int getTotalVisibilities() const { return total_visibilities_; }
+  __host__ int getNDatasets() const { return ndatasets_; }
+  __host__ int getMaxNumberVis() const { return max_number_vis_; }
 
   __host__ void setIoImageHandler(Io* imageHandler) {
     this->ioImageHandler = imageHandler;
@@ -81,7 +99,10 @@ class Synthesizer {
   CKernel* ckernel;
   Io* ioImageHandler = NULL;
   Io* ioVisibilitiesHandler = NULL;
-  Visibilities* visibilities;
+  std::vector<gpuvmem::ms::MSWithGPU>* datasets_ = nullptr;
+  int total_visibilities_ = 0;
+  int ndatasets_ = 0;
+  int max_number_vis_ = 0;
   Error* error = NULL;
   int griddingThreads = 0;
   bool gridding = false;
