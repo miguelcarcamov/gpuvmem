@@ -4920,41 +4920,41 @@ __global__ void noise_reduction(float* noise_I, long N, long M) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  // Error array holds (before this kernel): H[0,0], H[1,1], H[0,1] (Hessian/Fisher).
-  // Covariance from inverse: Cov = H^{-1}, so Cov[0,1] = -H[0,1] / det(H), det(H) = H[0,0]*H[1,1] - H[0,1]^2.
-  // We need det and Cov[0,1] before overwriting index 0 and 1.
-  float H00 = noise_I[N * i + j];
-  float H11 = noise_I[N * M + N * i + j];
+  // Error array holds (before this kernel): H[0,0], H[1,1], H[0,1] (Fisher).
+  // Add small diagonal prior to stabilize inversion in low-S/N pixels.
+  const float prior_lam = 1.0e-12f;
+  float H00 = noise_I[N * i + j] + prior_lam;
+  float H11 = noise_I[N * M + N * i + j] + prior_lam;
   float H01 = noise_I[2 * M * N + N * i + j];
 
-  const float det_eps = 1.0e-20f;
+  // Full 2x2 inverse: C = H^{-1}. Marginal variances: C[0,0]=H11/det, C[1,1]=H00/det.
   float det = H00 * H11 - H01 * H01;
+  const float det_eps = 1.0e-12f * (H00 * H11 + 1.0e-30f);
+  float sigma_I_nu_0 = 0.0f;
+  float sigma_alpha = 0.0f;
   float cov01 = 0.0f;
+  float rho = 0.0f;
+
   if (fabsf(det) > det_eps) {
-    cov01 = -H01 / det;  // Cov(I_nu_0, alpha) [same units as I_nu_0 before fg_scale]
+    float C00 = H11 / det;   // Var(I_nu_0)
+    float C11 = H00 / det;   // Var(alpha)
+    cov01 = -H01 / det;      // Cov(I_nu_0, alpha)
+    sigma_I_nu_0 = sqrtf(fmaxf(C00, 0.0f));
+    float sigma_alpha_raw = sqrtf(fmaxf(C11, 0.0f));
+    const float sigma_alpha_max = 10000.0f;
+    sigma_alpha = fminf(sigma_alpha_raw, sigma_alpha_max);
+    // Correlation coefficient ρ = Cov / (σ(I_nu_0) * σ(alpha)), clamped to [-1,1]
+    if (sigma_I_nu_0 > 1.0e-30f && sigma_alpha > 1.0e-30f) {
+      rho = cov01 / (sigma_I_nu_0 * sigma_alpha);
+      rho = fmaxf(-1.0f, fminf(1.0f, rho));
+    }
   }
 
-  // Index 0: σ(I_nu_0) [Jy/pixel]
-  if (H00 > 0.0f) {
-    float variance = 1.0f / H00;
-    noise_I[N * i + j] = sqrtf(variance);
-  } else {
-    noise_I[N * i + j] = 0.0f;
-  }
-
-  // Index 1: σ(alpha) [unitless]
-  const float sigma_alpha_max = 10000.0f;
-  if (H11 > 0.0f) {
-    float variance_alpha = 1.0f / H11;
-    float sigma_alpha = sqrtf(variance_alpha);
-    noise_I[N * M + N * i + j] = fminf(sigma_alpha, sigma_alpha_max);
-  } else {
-    noise_I[N * M + N * i + j] = 0.0f;
-  }
-
-  // Index 2: Cov(I_nu_0, alpha) from 2x2 inversion.
-  // σ(I_nu_0) and Cov are in code units; fg_scale is applied when saving (Io).
+  // Index 0: σ(I_nu_0); index 1: σ(alpha); index 2: Cov; index 3: ρ
+  noise_I[N * i + j] = sigma_I_nu_0;
+  noise_I[N * M + N * i + j] = sigma_alpha;
   noise_I[2 * M * N + N * i + j] = cov01;
+  noise_I[3 * M * N + N * i + j] = rho;
 }
 
 __host__ float simulate(float* I, VirtualImageProcessor* ip, float fg_scale) {
@@ -5814,13 +5814,12 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
 
   cudaSetDevice(firstgpu);
 
-  // Allocate error array: [I_nu_0, alpha, covariance] — 3 maps for 2 images.
+  // Allocate error array: [σ(I_nu_0), σ(alpha), Cov, ρ] — 4 maps for 2 images.
   // Error propagation uses Fisher information only (no Hessian terms).
-  // We combine inverse-variances over channels (1/σ²_total = Σ_c 1/σ²_c); summing σ's would be wrong.
-  // Fisher: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ² in I_nu_0_Noise, alpha_Noise, covariance_Noise.
-  // noise_reduction inverts 2x2 H to get σ(I_nu_0), σ(alpha), Cov. fg_scale applied when saving (Io).
-  //   index 0: σ(I_nu_0) [code units]; index 1: σ(alpha) [unitless]; index 2: Cov [code units].
-  int error_image_count = image->getImageCount() + 1;  // +1 for covariance
+  // Fisher: H[i,j] = Σ (∂I_ν/∂θ_i)(∂I_ν/∂θ_j)/σ²; noise_reduction inverts 2x2 H (with small prior)
+  // to get marginal σ(I_nu_0), σ(alpha), Cov, and correlation ρ = Cov/(σ_I·σ_α).
+  //   index 0: σ(I_nu_0); 1: σ(alpha); 2: Cov; 3: ρ (unitless, in [-1,1]).
+  int error_image_count = image->getImageCount() + 2;  // +1 covariance, +1 correlation ρ
   checkCudaErrors(
       cudaMalloc((void**)&errors, sizeof(float) * M * N * error_image_count));
   checkCudaErrors(
@@ -5904,8 +5903,8 @@ __host__ void calculateErrors(Image* image, float fg_scale) {
   noise_reduction<<<numBlocksNN, threadsPerBlockNN>>>(errors, N, M);
   checkCudaErrors(cudaDeviceSynchronize());
 
-  // Error array holds σ(I_nu_0), σ(alpha), Cov in code units. fg_scale is
-  // applied when saving slices 0 and 2 to disk (Io classes).
+  // Error array holds σ(I_nu_0), σ(alpha), Cov, ρ. fg_scale applied when saving
+  // slices 0 and 2 (Io classes).
   image->setErrorImage(errors);
 }
 
