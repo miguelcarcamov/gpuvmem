@@ -21,8 +21,8 @@
 # 1. Custom Install Prefix: cmake -DPREFIX=/custom/path ..
 #
 # REQUIREMENTS: - CUDA Toolkit 10.0+ (13.0+ requires C++17) - CMake 3.18+ -
-# Boost libraries - CFITSIO - Casacore (casa, ms, tables, measures, meas
-# components) - NVIDIA GPU with compute capability >= 5.0
+# Boost libraries - CCfits (C++ FITS I/O; requires CFITSIO) - Casacore (casa, ms,
+# tables, measures, meas components) - NVIDIA GPU with compute capability >= 5.0
 #
 # ============================================================================
 
@@ -72,7 +72,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 # Find required packages
 find_package(CUDAToolkit REQUIRED)
 find_package(Boost REQUIRED)
-find_package(CFITSIO REQUIRED)
+find_package(CFITSIO REQUIRED)  # Required by CCfits
+find_package(CCfits REQUIRED)  # Mandatory C++ FITS I/O in gpuvmem
 
 # Casacore configuration Make external dependencies optional to avoid build
 # failures
@@ -493,7 +494,9 @@ endif()
 set(CUDA_LIBS ${CUDA_cuda_LIBRARY} ${CUDA_cudart_LIBRARY} ${CUDA_cufft_LIBRARY})
 
 # External libraries
-set(EXTERNAL_LIBS ${CASACORE_LIBRARIES} ${CFITSIO_LIBRARY} ${Boost_LIBRARIES})
+target_include_directories(gpuvmem PUBLIC ${CCfits_INCLUDE_DIRS})
+set(EXTERNAL_LIBS ${CASACORE_LIBRARIES} ${CCfits_LIBRARIES} ${CFITSIO_LIBRARIES} ${Boost_LIBRARIES})
+message(STATUS "FITS I/O: CCfits (mandatory)")
 
 # Link all libraries
 target_link_libraries(

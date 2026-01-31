@@ -71,11 +71,11 @@ implemented first with CFITSIO behind RAII (e.g. a `FitsFile` handle that closes
 
 ## Migration steps
 
-1. **Extract FITS-only types** from MSFITSIO.cuh into a dedicated header (e.g. `include/fits/fits_io.h`): at least the header struct used for read/write (no Casacore/CUDA in that header).
-2. **Implement** `read_fits_header`, `read_fits_image_float`, `write_fits_image_slice` (and optionally `write_fits_image_planes`) in `src/fits/fits_io.cu` using CFITSIO with RAII; keep CUDA copy (device → host) inside this module if needed.
-3. **Refactor IoFITS** to use the new API: build `WriteFitsImageOptions` from Io state and call `write_fits_image_slice` (and read helpers). Deprecate or remove the many `printImage`/`printNormalizedImage` overloads in favor of a smaller set that fill the options struct.
-4. **Optionally add CCfits** as a dependency and reimplement the `fits_io` module using CCfits; keep the same public API so callers do not change.
-5. **Clean up** MSFITSIO.cuh: move legacy MS types to an MS-specific header; keep only what is still needed for FITS (if anything) or remove FITS from MSFITSIO entirely once migration is done.
+1. **Extract FITS-only types** – **Done.** `include/fits/fits_io.h`: `FitsHeader`, `WriteFitsImageOptions` (FITS-aligned names: naxis1/naxis2, cdelt1/cdelt2, crval1/crval2, bunit, niter, normalization_factor, header_template, radesys).
+2. **Implement** – **Done.** `src/fits/fits_io.cu`: `read_fits_header`, `read_fits_image_float`, `write_fits_image_slice` with CFITSIO + RAII (`FitsFileGuard`), device→host copy when `data_on_device` is true.
+3. **Refactor IoFITS** – **Done.** IoFITS uses the new API: `readHeader` calls `read_fits_header` and converts to legacy `headerValues` via `to_header_values()`; `read_data_float_FITS` calls `read_fits_image_float`; all float-image `print*` methods call a local `write_slice()` that builds `WriteFitsImageOptions` and calls `write_fits_image_slice`. `OCopyFITSCufftComplex` (complex/MEM images) still uses MSFITSIO; can be migrated later.
+4. **CCfits (mandatory)** – **Done.** FITS I/O in gpuvmem uses **CCfits only** (no CFITSIO fallback). `cmake/FindCCfits.cmake` finds CCfits; `find_package(CCfits REQUIRED)`. `src/fits/fits_io.cu` implements read/write with the CCfits API (FITS object, pHDU().read()/write(), copy header from template; key updates via fitsPointer() and CFITSIO). CCfits depends on CFITSIO; the build links both. Install CCfits (e.g. `./configure --with-cfitsio=/usr && make && make install`, or package/conda) and set `CCfits_ROOT_DIR` if needed.
+5. **Clean up** MSFITSIO.cuh: move legacy MS types to an MS-specific header; keep only what is still needed for FITS (e.g. `readOpenedFITSHeader` / `open_fits` for double/int read, `OCopyFITSCufftComplex`) or add equivalent to fits_io and remove FITS from MSFITSIO entirely.
 
 ## File layout (suggested)
 
