@@ -1,6 +1,6 @@
 #include "imageProcessor.cuh"
 #include "mfs.cuh"
-#include "objective_function/terms/regularizers/secondderivateerror.cuh"
+#include "classes/secondderivateerror.cuh"
 #include "functions.cuh"
 
 long M, N, numVisibilities;
@@ -1209,6 +1209,7 @@ void MFS::writeImages() {
           dynamic_cast<SecondDerivateError*>(this->error);
       if (sde != NULL) {
         sde->setOptimizer(this->optimizer);
+        sde->setFgScale(this->getFgScale());
       }
     }
     /* code to calculate error */

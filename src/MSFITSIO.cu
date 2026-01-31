@@ -698,7 +698,6 @@ __host__ void readMS(const char* MS_name,
 
               fields[f].visibilities[g + j][sto].weight.push_back(weights[sto]);
               fields[f].numVisibilitiesPerFreqPerStoke[g + j][sto]++;
-              fields[f].numVisibilitiesPerFreq[g + j]++;
             }
           }
         }
@@ -934,8 +933,8 @@ __host__ void readMS(const char* MS_name,
 
   data->n_internal_frequencies = spectral_window_tab.nrow();
 
-  casacore::ROArrayColumn<float> chan_freq_col(spectral_window_tab,
-                                                          "CHAN_FREQ");
+  casacore::ROArrayColumn<double> chan_freq_col(spectral_window_tab,
+                                                 "CHAN_FREQ");
 
   casacore::ROScalarColumn<casacore::Int64> n_chan_freq(spectral_window_tab,
                                                         "NUM_CHAN");
@@ -959,7 +958,7 @@ __host__ void readMS(const char* MS_name,
 
   for (int f = 0; f < data->nfields; f++) {
     for (int i = 0; i < data->n_internal_frequencies; i++) {
-      casacore::Vector<float> chan_freq_vector;
+      casacore::Vector<double> chan_freq_vector;
       chan_freq_vector = chan_freq_col(i);
       for (int j = 0; j < data->channels[i]; j++) {
         fields[f].nu.push_back(chan_freq_vector[j]);
@@ -1048,7 +1047,6 @@ __host__ void readMS(const char* MS_name,
 
               fields[f].visibilities[g + j][sto].weight.push_back(weights[sto]);
               fields[f].numVisibilitiesPerFreqPerStoke[g + j][sto]++;
-              fields[f].numVisibilitiesPerFreq[g + j]++;
             }
           }
         }
@@ -1170,11 +1168,6 @@ __host__ void writeMS(const char* outfile,
     main_tab.flush();
   }
 
-  for (int f = 0; f < data.nfields; f++) {
-    for (auto& i : fields[f].numVisibilitiesPerFreqPerStoke)
-      std::fill(i.begin(), i.end(), 0);
-  }
-
   int g = 0;
   long c;
   cufftComplex vis;
@@ -1186,6 +1179,8 @@ __host__ void writeMS(const char* outfile,
   casacore::Matrix<bool> flagCol;
 
   for (int f = 0; f < data.nfields; f++) {
+    std::vector<std::vector<long>> write_index(
+        data.total_frequencies, std::vector<long>(data.nstokes, 0));
     g = 0;
     for (int i = 0; i < data.n_internal_frequencies; i++) {
       dataCol.resize(data.nstokes, data.channels[i]);
@@ -1213,7 +1208,7 @@ __host__ void writeMS(const char* outfile,
         for (int j = 0; j < data.channels[i]; j++) {
           for (int sto = 0; sto < data.nstokes; sto++) {
             if (flagCol(sto, j) == false && weights[sto] > 0.0f) {
-              c = fields[f].numVisibilitiesPerFreqPerStoke[g + j][sto];
+              c = write_index[g + j][sto];
 
               if (sim && noise) {
                 vis = addNoiseToVis(fields[f].visibilities[g + j][sto].Vm[c],
@@ -1227,7 +1222,7 @@ __host__ void writeMS(const char* outfile,
 
               dataCol(sto, j) = casacore::Complex(vis.x, vis.y);
               weights[sto] = fields[f].visibilities[g + j][sto].weight[c];
-              fields[f].numVisibilitiesPerFreqPerStoke[g + j][sto]++;
+              write_index[g + j][sto]++;
             }
           }
         }
