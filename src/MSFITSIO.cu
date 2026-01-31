@@ -261,12 +261,10 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
 
   headerValues h_values;
   int bitpix;
-  char* aux_radesys;
-  int radesys_length;
+  char* aux_radesys = nullptr;
+  int radesys_length = 0;
 
-  fits_get_key_strlen(hdu_in, "RADESYS", &radesys_length, &status_header);
-
-  aux_radesys = (char*)malloc(radesys_length * sizeof(char));
+  fits_get_key_strlen(hdu_in, "RADESYS", &radesys_length, &status_radesys);
 
   fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL,
                 &status_header);
@@ -287,11 +285,21 @@ __host__ headerValues readOpenedFITSHeader(fitsfile*& hdu_in, bool close_fits) {
   fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL,
                 &status_dirty_beam);
   fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
-  fits_read_key(hdu_in, TSTRING, "RADESYS", aux_radesys, NULL, &status_radesys);
+  if (status_radesys == 0 && radesys_length > 0) {
+    aux_radesys = (char*)malloc((radesys_length + 1) * sizeof(char));
+    if (aux_radesys) {
+      fits_read_key(hdu_in, TSTRING, "RADESYS", aux_radesys, NULL,
+                    &status_radesys);
+      h_values.radesys = aux_radesys;
+      free(aux_radesys);
+    } else {
+      h_values.radesys = "";
+    }
+  } else {
+    h_values.radesys = "";
+  }
   fits_read_key(hdu_in, TFLOAT, "EQUINOX", &h_values.equinox, NULL,
                 &status_equinox);
-
-  h_values.radesys = aux_radesys;
 
   fits_get_img_type(hdu_in, &bitpix, &status_header);
   h_values.bitpix = bitpix;
@@ -325,14 +333,12 @@ __host__ headerValues readFITSHeader(const char* filename) {
 
   headerValues h_values;
   int bitpix;
-  char* aux_radesys;
-  int radesys_length;
+  char* aux_radesys = nullptr;
+  int radesys_length = 0;
 
   fitsfile* hdu_in = openFITS(filename);
 
-  fits_get_key_strlen(hdu_in, "RADESYS", &radesys_length, &status_header);
-
-  aux_radesys = (char*)malloc(radesys_length * sizeof(char));
+  fits_get_key_strlen(hdu_in, "RADESYS", &radesys_length, &status_radesys);
 
   fits_read_key(hdu_in, TDOUBLE, "CDELT1", &h_values.DELTAX, NULL,
                 &status_header);
@@ -353,11 +359,21 @@ __host__ headerValues readFITSHeader(const char* filename) {
   fits_read_key(hdu_in, TDOUBLE, "BPA", &h_values.beam_bpa, NULL,
                 &status_dirty_beam);
   fits_read_key(hdu_in, TFLOAT, "NOISE", &aux_noise, NULL, &status_noise);
-  fits_read_key(hdu_in, TSTRING, "RADESYS", aux_radesys, NULL, &status_radesys);
+  if (status_radesys == 0 && radesys_length > 0) {
+    aux_radesys = (char*)malloc((radesys_length + 1) * sizeof(char));
+    if (aux_radesys) {
+      fits_read_key(hdu_in, TSTRING, "RADESYS", aux_radesys, NULL,
+                    &status_radesys);
+      h_values.radesys = aux_radesys;
+      free(aux_radesys);
+    } else {
+      h_values.radesys = "";
+    }
+  } else {
+    h_values.radesys = "";
+  }
   fits_read_key(hdu_in, TFLOAT, "EQUINOX", &h_values.equinox, NULL,
                 &status_equinox);
-
-  h_values.radesys = aux_radesys;
 
   fits_get_img_type(hdu_in, &bitpix, &status_header);
   h_values.bitpix = bitpix;
@@ -655,7 +671,7 @@ __host__ void readMS(const char* MS_name,
               "SPECTRAL_WINDOW_ID=" +
               std::to_string(data->n_internal_frequencies_ids[i]) +
               " and !FLAG_ROW giving [ROWID()]] and FIELD_ID=" +
-              std::to_string(fields[f].id) + " and !FLAG_ROW and ANY(!FLAG)";
+              std::to_string(f) + " and !FLAG_ROW and ANY(!FLAG)";
       if (W_projection && random_prob < 1.0) {
         query += " and RAND()<" + std::to_string(random_prob) +
                  " ORDERBY ASC UVW[2]";
@@ -1004,7 +1020,7 @@ __host__ void readMS(const char* MS_name,
               "SPECTRAL_WINDOW_ID=" +
               std::to_string(data->n_internal_frequencies_ids[i]) +
               " and !FLAG_ROW giving [ROWID()]] and FIELD_ID=" +
-              std::to_string(fields[f].id) + " and !FLAG_ROW and ANY(!FLAG)";
+              std::to_string(f) + " and !FLAG_ROW and ANY(!FLAG)";
       if (W_projection && random_prob < 1.0) {
         query += " and RAND()<" + std::to_string(random_prob) +
                  " ORDERBY ASC UVW[2]";
