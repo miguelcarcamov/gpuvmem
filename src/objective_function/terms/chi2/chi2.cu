@@ -1,0 +1,91 @@
+#include <fstream>
+#include <iostream>
+
+#include "objective_function/terms/chi2/chi2.cuh"
+#include "classes/image.cuh"
+#include "imageProcessor.cuh"
+
+extern long M, N;
+extern int image_count;
+extern int flag_opt;
+extern float* penalizators;
+extern int nPenalizators;
+
+Chi2::Chi2() {
+  this->ip = new ImageProcessor();
+  this->name = "Chi2";
+  this->normalize = false;
+};
+
+void Chi2::configure(int penalizatorIndex,
+                     int imageIndex,
+                     int imageToAdd,
+                     bool normalize) {
+  this->imageIndex = imageIndex;
+  this->order = order;
+  this->mod = mod;
+  this->normalize = normalize;
+  /* ImageProcessor is configured from Image in configureImage() when image is created (e.g. from setDevice). */
+
+  if (penalizatorIndex != -1) {
+    if (penalizatorIndex > (nPenalizators - 1) || penalizatorIndex < 0) {
+      printf("invalid index for penalizator (%s)\n", this->name);
+      exit(-1);
+    } else {
+      this->penalization_factor = penalizators[penalizatorIndex];
+    }
+  }
+
+  checkCudaErrors(
+      cudaMalloc((void**)&result_dchi2, sizeof(float) * M * N * image_count));
+  checkCudaErrors(
+      cudaMemset(result_dchi2, 0, sizeof(float) * M * N * image_count));
+}
+
+void Chi2::configureImage(Image* image) {
+  if (image && ip)
+    ip->configure(image->getImageCount());
+}
+
+float Chi2::calcFi(float* p) {
+  float result = 0.0f;
+  this->set_fivalue(chi2(p, ip, this->normalize, this->fg_scale));
+  result = (penalization_factor) * (this->get_fivalue());
+  return result;
+};
+
+void Chi2::calcGi(float* p, float* xi) {
+  dchi2(p, xi, result_dchi2, ip, this->normalize, this->fg_scale);
+};
+
+void Chi2::restartDGi() {
+  checkCudaErrors(
+      cudaMemset(result_dchi2, 0, sizeof(float) * M * N * image_count));
+};
+
+void Chi2::addToDphi(float* device_dphi) {
+  for (int i = 0; i < image_count; i++)
+    linkAddToDPhi(device_dphi, result_dchi2 + i * M * N, i);
+};
+
+void Chi2::setCKernel(CKernel* ckernel) {
+  this->ip->setCKernel(ckernel);
+};
+
+void Chi2::setFgScale(float fg_scale) {
+  this->fg_scale = fg_scale;
+};
+
+float Chi2::getFgScale() {
+  return this->fg_scale;
+};
+
+namespace {
+Fi* CreateChi2() {
+  return new Chi2;
+}
+
+const std::string name = "Chi2";
+const bool RegisteredChi2 =
+    registerCreationFunction<Fi, std::string>(name, CreateChi2);
+};  // namespace

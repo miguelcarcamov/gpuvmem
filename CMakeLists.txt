@@ -148,7 +148,9 @@ file(GLOB_RECURSE SOURCE_FILES
      ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cu
-     ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu)
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/chi2/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/regularizers/*.cu)
 target_sources(gpuvmem PRIVATE ${SOURCE_FILES})
 
 # Set C++ compile features based on standard

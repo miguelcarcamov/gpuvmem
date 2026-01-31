@@ -1,6 +1,7 @@
 #include "imageProcessor.cuh"
 #include "mfs.cuh"
-#include "classes/secondderivateerror.cuh"
+#include "objective_function/terms/chi2/chi2.cuh"
+#include "objective_function/terms/regularizers/secondderivateerror.cuh"
 #include "functions.cuh"
 
 long M, N, numVisibilities;
@@ -1046,6 +1047,10 @@ void MFS::run() {
     if (NULL != chi2)
       chi2->setCKernel(this->ckernel);
   }
+
+  Chi2* chi2_obj = (chi2 != nullptr) ? dynamic_cast<Chi2*>(chi2) : nullptr;
+  if (chi2_obj != nullptr)
+    chi2_obj->configureImage(this->image);
 
   // Pre-compute effective number of samples before optimization starts
   // This avoids recalculating N_eff on every iteration
