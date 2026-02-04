@@ -247,6 +247,13 @@ __host__ float LBFGS::computeScalingFactor(int par_M, int lbfgs_it) {
   }
 
   cudaFree(temp_aux);
+  
+  // Safety check: ensure scaling factor is finite, use default if not
+  if (!isfinite(sy_yy) || sy_yy <= 0.0f) {
+    // Default scaling: use identity (gamma = 1.0) if history is invalid
+    return 1.0f;
+  }
+  
   return sy_yy;
 }
 
@@ -303,19 +310,24 @@ __host__ void LBFGS::computeBetaCoefficients(float* r, float** alpha, int par_M,
                                              int lbfgs_it) {
   // Second loop: iterate forwards (oldest to newest)
   // Note: aux_vector is allocated in computeDirection
+  // Get dimensions from Image object
+  long M_local = image->getM();
+  long N_local = image->getN();
+  int image_count_local = image->getImageCount();
+  
   float rho = 0.0f;
   float rho_den;
   float beta = 0.0f;
 
-  for (int i = 0; i < image->getImageCount(); i++) {
+  for (int i = 0; i < image_count_local; i++) {
     for (int k = 0; k < par_M; k++) {
       int hist_idx = mapToCircularBuffer(k, par_M, lbfgs_it);
       
       // Compute rho_k = 1.0 / (y_k^T s_k)
       getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, d_s,
-                                                          hist_idx, hist_idx, M, N, i);
+                                                          hist_idx, hist_idx, M_local, N_local, i);
       checkCudaErrors(cudaDeviceSynchronize());
-      rho_den = deviceReduce<float>(aux_vector, M * N,
+      rho_den = deviceReduce<float>(aux_vector, M_local * N_local,
                                     threadsPerBlockNN.x * threadsPerBlockNN.y);
       // Safety check: avoid division by very small numbers to prevent overflow
       if (fabsf(rho_den) > EPS)
@@ -325,9 +337,9 @@ __host__ void LBFGS::computeBetaCoefficients(float* r, float** alpha, int par_M,
       
       // Compute beta_k = rho_k * (y_k^T * r)
       getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(aux_vector, d_y, r,
-                                                          hist_idx, 0, M, N, i);
+                                                          hist_idx, 0, M_local, N_local, i);
       checkCudaErrors(cudaDeviceSynchronize());
-      float dot_yr = deviceReduce<float>(aux_vector, M * N,
+      float dot_yr = deviceReduce<float>(aux_vector, M_local * N_local,
                                        threadsPerBlockNN.x * threadsPerBlockNN.y);
       beta = rho * dot_yr;
       
@@ -338,7 +350,7 @@ __host__ void LBFGS::computeBetaCoefficients(float* r, float** alpha, int par_M,
       
       // Update r: r = r + s_k * (alpha_k - beta_k)
       updateQ<<<numBlocksNN, threadsPerBlockNN>>>(r, alpha[i][k] - beta, d_s,
-                                                  hist_idx, M, N, i);
+                                                  hist_idx, M_local, N_local, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
   }
@@ -388,9 +400,14 @@ __host__ void LBFGS::computeDirection(float* gradient) {
 
   // Compute gamma scaling factor
   float gamma = computeScalingFactor(par_M, lbfgs_it);
+  
+  // Safety check: ensure gamma is finite and positive
+  if (!isfinite(gamma) || gamma <= 0.0f) {
+    gamma = 1.0f;  // Fallback to identity scaling
+  }
 
   // Scale q: r = gamma * q
-  for (int i = 0; i < image->getImageCount(); i++) {
+  for (int i = 0; i < image_count_local; i++) {
     getR<<<numBlocksNN, threadsPerBlockNN>>>(d_r, d_q, gamma, M_local, N_local, i);
     checkCudaErrors(cudaDeviceSynchronize());
   }
@@ -399,7 +416,7 @@ __host__ void LBFGS::computeDirection(float* gradient) {
   computeBetaCoefficients(d_r, alpha, par_M, lbfgs_it);
 
   // Set search direction to negative of r
-  for (int i = 0; i < image->getImageCount(); i++) {
+  for (int i = 0; i < image_count_local; i++) {
     searchDirection_LBFGS<<<numBlocksNN, threadsPerBlockNN>>>(
         d_r, M_local, N_local, i);
     checkCudaErrors(cudaDeviceSynchronize());
@@ -447,12 +464,17 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
               << std::endl;
   }
 
+  // Get dimensions from Image object
+  long M_local = image->getM();
+  long N_local = image->getN();
+  int image_count_local = image->getImageCount();
+  
   // Save previous state before line search
   checkCudaErrors(cudaMemcpy(p_old, image->getImage(),
-                             sizeof(float) * M * N * image->getImageCount(),
+                             sizeof(float) * M_local * N_local * image_count_local,
                              cudaMemcpyDeviceToDevice));
   checkCudaErrors(cudaMemcpy(xi_old, xi,
-                             sizeof(float) * M * N * image->getImageCount(),
+                             sizeof(float) * M_local * N_local * image_count_local,
                              cudaMemcpyDeviceToDevice));
 
   // Perform line search
@@ -466,6 +488,27 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
   auto result = searcher->search(image->getImage(), xi, of, nullptr);
   float new_function_value = result.first;
   float alpha_step = result.second;
+  
+  // Safety check: detect NaN/Inf in function value or step size
+  if (!isfinite(new_function_value)) {
+    std::cerr << "ERROR: LBFGS iteration " << iteration 
+              << " - function value is NaN/Inf: " << new_function_value << std::endl;
+    std::cerr << "Previous function value: " << prev_function_value << std::endl;
+    std::cerr << "Alpha step: " << alpha_step << std::endl;
+    // Try to recover by using previous function value and resetting search direction
+    new_function_value = prev_function_value;
+    alpha_step = 0.0f;
+  }
+  
+  if (!isfinite(alpha_step) || alpha_step <= 0.0f) {
+    if (verbose_flag) {
+      std::cerr << "WARNING: LBFGS iteration " << iteration 
+                << " - invalid alpha step: " << alpha_step 
+                << ", using fallback alpha = 1.0" << std::endl;
+    }
+    alpha_step = 1.0f;  // Fallback to default step size
+  }
+  
   fret = new_function_value;  // Store for compatibility
   
   // Store step size for next iteration (as fallback initial_alpha)
