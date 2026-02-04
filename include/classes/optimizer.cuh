@@ -22,18 +22,36 @@ class Optimizer {
     this->ftol = 1E-12;
     this->gtol = 1E-12;
     this->total_iterations = 100;
+    this->verbose = false;
+    this->fret = 0.0f;
+    this->fp = 0.0f;
+    this->configured = 1;
+    this->prev_step_size = 1.0f;
+    this->linesearcher_ptr = nullptr;
   };
 
   __host__ Optimizer(int total_iterations, float ftol) {
     this->ftol = ftol;
     this->gtol = 1E-12;
     this->total_iterations = total_iterations;
+    this->verbose = false;
+    this->fret = 0.0f;
+    this->fp = 0.0f;
+    this->configured = 1;
+    this->prev_step_size = 1.0f;
+    this->linesearcher_ptr = nullptr;
   };
 
   __host__ Optimizer(int total_iterations, float ftol, float gtol) {
     this->ftol = ftol;
     this->gtol = gtol;
     this->total_iterations = total_iterations;
+    this->verbose = false;
+    this->fret = 0.0f;
+    this->fp = 0.0f;
+    this->configured = 1;
+    this->prev_step_size = 1.0f;
+    this->linesearcher_ptr = nullptr;
   };
 
   __host__ float getFtol() { return this->ftol; };
@@ -53,6 +71,9 @@ class Optimizer {
   void setTotalIterations(int iterations) {
     this->total_iterations = iterations;
   };
+
+  void setVerbose(bool verbose) { this->verbose = verbose; };
+  bool getVerbose() const { return this->verbose; };
 
   ObjectiveFunction* getObjectiveFunction() { return this->of; };
 
@@ -74,6 +95,17 @@ protected:
   int current_iteration = 0;
   float ftol;
   float gtol;
+  
+  // Shared optimization state (used by ConjugateGradient and LBFGS)
+  bool verbose;              // Verbose output flag
+  float fret;                // Function value after line search
+  float fp;                  // Previous function value
+  int configured;            // Configuration flag (1 = needs configuration)
+  float prev_step_size;      // Previous step size (used as fallback initial_alpha for line search)
+  
+  // Line search (opaque pointer to avoid circular dependency in header)
+  void* linesearcher_ptr;     // Line search algorithm (LineSearcher*)
+                            // Note: LineSearcher owns its own seeder internally
 };
 
 #endif  // OPTIMIZER_CUH

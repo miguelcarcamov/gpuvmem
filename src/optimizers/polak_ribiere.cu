@@ -62,7 +62,16 @@ float PolakRibiere::computeConjugateGradientParameter(
       device_gg_vector, M_local * N_local * image_count_local,
       tpb.x * tpb.y);
 
-  return numerator / norm2_grad_prev;
+  // Safety check: ensure result is finite
+  float beta = numerator / norm2_grad_prev;
+  if (!isfinite(beta)) {
+    if (verbose) {
+      std::cerr << "WARNING: Polak-Ribiere beta is NaN/Inf, returning 0.0 (restart)" << std::endl;
+    }
+    return 0.0f;  // Restart (steepest descent)
+  }
+  
+  return beta;
 }
 
 // Factory registration function

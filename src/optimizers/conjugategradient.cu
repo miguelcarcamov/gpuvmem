@@ -51,7 +51,6 @@ ObjectiveFunction* testof;
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-extern int verbose_flag;
 int flag_opt;
 
 #define EPS 1.0e-10
@@ -119,7 +118,7 @@ __global__ void updateSearchDirectionCG(float* search_dir, float* grad,
 __host__ ConjugateGradient::ConjugateGradient() {
   // Default to Brent line search (current implementation)
   linesearcher_ptr = new Brent();
-  prev_step_size = 1.0f;
+  // Note: prev_step_size is initialized in Optimizer base class constructor
 }
 
 __host__ void ConjugateGradient::setLineSearcher(std::unique_ptr<LineSearcher> searcher) {
@@ -223,7 +222,7 @@ __host__ float ConjugateGradient::initializeOptimizationState() {
   testof = of;
 
   float initial_function_value = of->calcFunction(image->getImage());
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "Starting function value = " << std::setprecision(4)
               << std::fixed << initial_function_value << std::endl;
   }
@@ -246,6 +245,9 @@ __host__ float ConjugateGradient::initializeOptimizationState() {
   }
 
   prev_step_size = 1.0f;
+  
+  // Initialize restart counter
+  iterations_since_restart = 0;
 
   LineSearcher* searcher = static_cast<LineSearcher*>(linesearcher_ptr);
   if (searcher != nullptr) {
@@ -320,7 +322,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   double start = omp_get_wtime();
   this->current_iteration = iteration;
 
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "\n\n********** Iteration " << iteration << " **********\n"
               << std::endl;
   }
@@ -351,9 +353,30 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   auto result = searcher->search(image->getImage(), xi, of, nullptr);
   float new_function_value = result.first;
   float alpha_step = result.second;
+  
+  // Safety check: detect NaN/Inf in function value or step size
+  if (!isfinite(new_function_value)) {
+    std::cerr << "ERROR: CG iteration " << iteration 
+              << " - function value is NaN/Inf: " << new_function_value << std::endl;
+    std::cerr << "Previous function value: " << prev_function_value << std::endl;
+    std::cerr << "Alpha step: " << alpha_step << std::endl;
+    // Try to recover by using previous function value and resetting search direction
+    new_function_value = prev_function_value;
+    alpha_step = 0.0f;
+  }
+  
+  if (!isfinite(alpha_step) || alpha_step <= 0.0f) {
+    if (verbose) {
+      std::cerr << "WARNING: CG iteration " << iteration 
+                << " - invalid alpha step: " << alpha_step 
+                << ", using fallback alpha = 1.0" << std::endl;
+    }
+    alpha_step = 1.0f;  // Fallback to default step size
+  }
+  
   fret = new_function_value;
 
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "Function value = " << std::setprecision(4) << std::fixed
               << new_function_value << std::endl;
   }
@@ -372,10 +395,87 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   // Conjugate gradient parameter and search-direction update: use kernels
   // (conjugateGradientParameter uses reduce kernels; newXi does per-pixel math).
   float beta;
+  bool should_restart = false;
+  
   try {
     beta = conjugateGradientParameter(xi, device_g, device_h);
+    
+    // Safety check: ensure beta is finite
+    if (!isfinite(beta)) {
+      std::cerr << "WARNING: CG iteration " << iteration 
+                << " - beta is NaN/Inf: " << beta << ", restarting" << std::endl;
+      beta = 0.0f;  // Restart (beta = 0 means steepest descent)
+      should_restart = true;
+    }
+    
+    // Restart strategy: check for negative beta (especially important for PR method)
+    if (restart_on_negative_beta && beta < 0.0f) {
+      if (verbose) {
+        std::cout << "Restarting CG: beta = " << beta << " < 0" << std::endl;
+      }
+      beta = 0.0f;  // Restart (beta = 0 means steepest descent)
+      should_restart = true;
+    }
+    
+    // Restart strategy: periodic restart
+    if (restart_period > 0 && iterations_since_restart >= restart_period) {
+      if (verbose) {
+        std::cout << "Restarting CG: periodic restart (every " << restart_period 
+                  << " iterations)" << std::endl;
+      }
+      beta = 0.0f;  // Restart (beta = 0 means steepest descent)
+      should_restart = true;
+      iterations_since_restart = 0;
+    }
+    
   } catch (const GradientNormError&) {
     throw;
+  }
+  
+  // Check if search direction is a descent direction (g^T d < 0)
+  if (restart_on_non_descent && !should_restart) {
+    // Compute dot product: g^T * d (where d = -g + beta * h)
+    // We can check this by computing g^T * (-g + beta * h) = -||g||^2 + beta * (g^T * h)
+    checkCudaErrors(cudaMemset(device_gg_vector, 0, grad_size));
+    dim3 blocks = of->getNumBlocksNN();
+    dim3 threads = of->getThreadsPerBlockNN();
+    
+    // Compute g^T * h (previous search direction)
+    for (int i = 0; i < image_count_local; i++) {
+      computeDotProduct<<<blocks, threads>>>(
+          device_gg_vector, xi, device_h, N_local, M_local, i);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+    float gTh = deviceReduce<float>(
+        device_gg_vector, M_local * N_local * image_count_local,
+        threads.x * threads.y);
+    
+    // Compute ||g||^2
+    for (int i = 0; i < image_count_local; i++) {
+      computeNorm2Gradient<<<blocks, threads>>>(
+          device_gg_vector, xi, N_local, M_local, i);
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+    float norm2_g = deviceReduce<float>(
+        device_gg_vector, M_local * N_local * image_count_local,
+        threads.x * threads.y);
+    
+    // Check descent condition: g^T * d = -||g||^2 + beta * (g^T * h) < 0
+    float descent_test = -norm2_g + beta * gTh;
+    if (descent_test >= 0.0f) {
+      if (verbose) {
+        std::cout << "Restarting CG: search direction is not descent (g^T*d = " 
+                  << descent_test << " >= 0)" << std::endl;
+      }
+      beta = 0.0f;  // Restart (beta = 0 means steepest descent)
+      should_restart = true;
+    }
+  }
+  
+  if (should_restart) {
+    iterations_since_restart = 0;
+  } else {
+    iterations_since_restart++;
   }
 
   // Save g_{k+1} (in xi) to device_g for next iteration; then newXi overwrites xi and
@@ -391,7 +491,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
     checkCudaErrors(cudaDeviceSynchronize());
   }
 
-  if (verbose_flag) {
+  if (verbose) {
     double end = omp_get_wtime();
     std::cout << "Time: " << std::setprecision(4) << (end - start)
               << " seconds" << std::endl;
@@ -401,7 +501,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
 }
 
 __host__ void ConjugateGradient::optimize() {
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "\n\nStarting " << methodName()
               << " method (Conj. Grad.)\n\n";
   }
@@ -425,7 +525,7 @@ __host__ void ConjugateGradient::optimize() {
       new_function_value = performIteration(iteration, prev_function_value);
     } catch (const GradientNormError&) {
       // Zero gradient norm detected - optimization converged
-      if (verbose_flag) {
+      if (verbose) {
         std::cout << methodName() << " converged due to zero gradient norm (gg = 0) after " 
                   << iteration << " iterations" << std::endl;
       }
@@ -437,7 +537,7 @@ __host__ void ConjugateGradient::optimize() {
 
     // Check for function convergence
     if (checkFunctionConvergence(new_function_value, prev_function_value)) {
-      if (verbose_flag) {
+      if (verbose) {
         std::cout << methodName() << " converged after " << iteration
                   << " iterations" << std::endl;
       }
@@ -449,7 +549,7 @@ __host__ void ConjugateGradient::optimize() {
 
     // Check for gradient convergence (device_g holds current gradient; xi holds search direction)
     if (checkGradientConvergence(device_g, new_function_value)) {
-      if (verbose_flag) {
+      if (verbose) {
         std::cout << methodName() << " converged due to gradient tolerance after " 
                   << iteration << " iterations" << std::endl;
       }
@@ -462,7 +562,7 @@ __host__ void ConjugateGradient::optimize() {
     prev_function_value = new_function_value;
   }
 
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << methodName() << " reached maximum iterations ("
               << this->total_iterations << ")" << std::endl;
   }

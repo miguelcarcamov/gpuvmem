@@ -102,6 +102,7 @@ void MFS::configure(int argc, char** argv) {
   ioImageHandler->setOutput(out_image);
   ioImageHandler->setPath(variables.path);
   optimizer->setTotalIterations(variables.it_max);
+  optimizer->setVerbose(verbose_flag);  // Set optimizer verbose flag from command-line
   this->setVisNoise(variables.noise);
   noise_cut = variables.noise_cut;
   random_probability = variables.randoms;

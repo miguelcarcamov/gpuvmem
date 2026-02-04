@@ -100,6 +100,14 @@ float HagerZhang::computeConjugateGradientParameter(
 
   float beta = (yk_gk1 / dk_yk) - 2.0f * (norm2_yk * dk_gk1) / (dk_yk * dk_yk);
 
+  // Safety check: ensure result is finite
+  if (!isfinite(beta)) {
+    if (verbose) {
+      std::cerr << "WARNING: Hager-Zhang beta is NaN/Inf, returning 0.0 (restart)" << std::endl;
+    }
+    return 0.0f;  // Restart (steepest descent)
+  }
+  
   return beta;
 }
 

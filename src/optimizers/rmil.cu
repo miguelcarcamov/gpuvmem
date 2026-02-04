@@ -85,7 +85,17 @@ float RMIL::computeConjugateGradientParameter(
     return 0.0f;  // Fallback to steepest descent
   }
 
-  return numerator / denominator;
+  float beta = numerator / denominator;
+  
+  // Safety check: ensure result is finite
+  if (!isfinite(beta)) {
+    if (verbose) {
+      std::cerr << "WARNING: RMIL beta is NaN/Inf, returning 0.0 (restart)" << std::endl;
+    }
+    return 0.0f;  // Restart (steepest descent)
+  }
+  
+  return beta;
 }
 
 // Factory registration function

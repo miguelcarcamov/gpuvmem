@@ -49,7 +49,6 @@ extern Image* I;
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-extern int verbose_flag;
 extern int flag_opt;
 
 #define EPS 1.0e-10
@@ -111,7 +110,7 @@ __host__ void LBFGS::allocateMemoryGpu() {
 __host__ LBFGS::LBFGS() {
   // Default to Brent line search (current implementation)
   linesearcher_ptr = new Brent();
-  prev_step_size = 1.0f;
+  // Note: prev_step_size is initialized in Optimizer base class constructor
   // Note: Image object will be set in setLineSearcher() or performIteration()
   // when image member is available
 }
@@ -165,7 +164,7 @@ __host__ float LBFGS::initializeOptimizationState() {
 
   float initial_function_value = of->calcFunction(image->getImage());
   
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "Starting function value = " << std::setprecision(4)
               << std::fixed << initial_function_value << std::endl;
   }
@@ -459,7 +458,7 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
   this->current_iteration = iteration;
   this->max_per_it = 0.0f;
 
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "\n\n********** Iteration " << iteration << " **********\n"
               << std::endl;
   }
@@ -501,7 +500,7 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
   }
   
   if (!isfinite(alpha_step) || alpha_step <= 0.0f) {
-    if (verbose_flag) {
+    if (verbose) {
       std::cerr << "WARNING: LBFGS iteration " << iteration 
                 << " - invalid alpha step: " << alpha_step 
                 << ", using fallback alpha = 1.0" << std::endl;
@@ -516,7 +515,7 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
 
   // Check for function convergence
   
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "Function value = " << std::setprecision(4) << std::fixed
               << new_function_value << std::endl;
   }
@@ -530,7 +529,7 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
   // Compute new search direction using two-loop recursion
   computeDirection(xi);
 
-  if (verbose_flag) {
+  if (verbose) {
     double end = omp_get_wtime();
     std::cout << "Time: " << std::setprecision(4) << (end - start)
               << " seconds" << std::endl;
@@ -540,7 +539,7 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
 }
 
 __host__ void LBFGS::optimize() {
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "\n\nStarting LBFGS method\n" << std::endl;
   }
 
@@ -559,7 +558,7 @@ __host__ void LBFGS::optimize() {
 
     // Check for function convergence
     if (checkFunctionConvergence(new_function_value, prev_function_value)) {
-      if (verbose_flag) {
+      if (verbose) {
         std::cout << "Exit due to tolerance" << std::endl;
       }
       // Use optimizer's image member instead of extern Image* I
@@ -570,7 +569,7 @@ __host__ void LBFGS::optimize() {
 
     // Check for gradient convergence
     if (checkGradientConvergence()) {
-      if (verbose_flag) {
+      if (verbose) {
         std::cout << "Exit due to gnorm ~ 0" << std::endl;
       }
       of->calcFunction(image->getImage());
@@ -582,7 +581,7 @@ __host__ void LBFGS::optimize() {
     prev_function_value = new_function_value;
   }
 
-  if (verbose_flag) {
+  if (verbose) {
     std::cout << "Too many iterations in LBFGS" << std::endl;
   }
 

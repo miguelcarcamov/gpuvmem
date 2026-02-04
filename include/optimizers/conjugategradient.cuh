@@ -140,17 +140,14 @@ class ConjugateGradient : public Optimizer {
   float* device_gg_vector;  // reduction scratch (||g_prev||^2)
   float* device_dgg_vector; // reduction scratch (dot products for beta)
 
-  // Optimization state
-  float fret = 0.0f;      // Function value after line search
-  float fp = 0.0f;        // Previous function value
-  int configured = 1;     // Configuration flag (1 = needs configuration)
+  // Restart strategy parameters
+  int restart_period = 20;  // Periodic restart every N iterations (0 = disabled)
+  bool restart_on_negative_beta = true;  // Restart when beta < 0 (for PR method)
+  bool restart_on_non_descent = true;    // Restart when search direction is not descent
+  int iterations_since_restart = 0;      // Track iterations since last restart
   
-  // Line search (opaque pointer to avoid circular dependency in header)
-  void* linesearcher_ptr;  // Line search algorithm (LineSearcher*)
-                          // Note: LineSearcher owns its own seeder internally
-  
-  // Previous step size (used as fallback initial_alpha for line search)
-  float prev_step_size;   // Previous step size
+  // Note: fret, fp, configured, prev_step_size, and linesearcher_ptr are now
+  // inherited from Optimizer base class
 };
 
 /**
