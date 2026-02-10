@@ -166,8 +166,7 @@ __host__ int main(int argc, char** argv) {
   // Optimizer* cg = createObject<Optimizer, std::string>("CG-DaiYuan");
   // Optimizer* cg = createObject<Optimizer, std::string>("CG-HagerZhang");
   // Optimizer* cg = createObject<Optimizer, std::string>("CG-RMIL");
-  Optimizer* cg = createObject<Optimizer, std::string>("CG-LBFGS");
-  cg->setK(10);
+  Optimizer* cg = createObject<Optimizer, std::string>("CG-PolakRibiere");
   // For LBFGS, you can set the memory limit (number of correction pairs):
   // if (cg->getK() > 0) {  // Check if it's LBFGS
   //   cg->setK(15);  // Use 15 correction pairs (default is 100)
