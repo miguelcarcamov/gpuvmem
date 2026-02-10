@@ -137,20 +137,8 @@ std::pair<float, float> Brent::search(float* current_point,
   }
 
   // Update current point: p = p + xmin * search_direction
-  // Reuse image_to_use and dimensions from earlier in function
-  imageMap* auxPtr = image_to_use->getFunctionMapping();
-  if (!nopositivity) {
-    for (int i = 0; i < image_count_local; i++) {
-      (auxPtr[i].newP)(current_point, search_direction, xmin, i);
-      checkCudaErrors(cudaDeviceSynchronize());
-    }
-  } else {
-    for (int i = 0; i < image_count_local; i++) {
-      newPNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(
-          current_point, search_direction, xmin, N_local, M_local, i);
-      checkCudaErrors(cudaDeviceSynchronize());
-    }
-  }
+  // Use updatePoint from linesearch_utils for consistency with other line searchers
+  updatePoint(objective_function, image_to_use, current_point, search_direction, xmin);
 
   // Free temporary memory
   cudaFree(local_device_xicom);

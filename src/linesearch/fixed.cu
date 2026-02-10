@@ -99,21 +99,9 @@ std::pair<float, float> Fixed::search(float* current_point,
 
   float f_value = this->evaluateLineFunction(alpha);
 
-  // Update current point
-  // Reuse image_to_use and dimensions from earlier in function
-  imageMap* auxPtr = image_to_use->getFunctionMapping();
-  if (!nopositivity) {
-    for (int i = 0; i < image_count_local; i++) {
-      (auxPtr[i].newP)(current_point, search_direction, alpha, i);
-      checkCudaErrors(cudaDeviceSynchronize());
-    }
-  } else {
-    for (int i = 0; i < image_count_local; i++) {
-      newPNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(
-          current_point, search_direction, alpha, N_local, M_local, i);
-      checkCudaErrors(cudaDeviceSynchronize());
-    }
-  }
+  // Update current point: p = p + alpha * search_direction
+  // Use updatePoint from linesearch_utils for consistency with other line searchers
+  updatePoint(objective_function, image_to_use, current_point, search_direction, alpha);
 
   // Free temporary memory
   cudaFree(local_device_xicom);
