@@ -2,7 +2,7 @@
 #define GL1NORM_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class GL1Norm : public Fi {
  private:

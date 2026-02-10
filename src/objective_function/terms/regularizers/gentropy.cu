@@ -1,4 +1,7 @@
 #include "objective_function/terms/regularizers/gentropy.cuh"
+#include "regularizers/regularizers_host.cuh"
+#include "optimizers/optimizer_host.cuh"
+#include "image_processing/image_processing_host.cuh"
 
 extern long M, N;
 extern int image_count;

@@ -1,7 +1,7 @@
 #ifndef FIBONACCI_SEARCH_LINESEARCH_CUH
 #define FIBONACCI_SEARCH_LINESEARCH_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Fibonacci search for line search.

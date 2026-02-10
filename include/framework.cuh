@@ -1,51 +1,119 @@
 #ifndef FRAMEWORK_CUH
 #define FRAMEWORK_CUH
 
-#include <cooperative_groups.h>
-#include <cufft.h>
 #include <fcntl.h>
 #include <float.h>
 #include <getopt.h>
-#include <math_constants.h>
 #include <omp.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifdef __CUDACC__
+#include <cooperative_groups.h>
+#include <cufft.h>
+#include <math_constants.h>
+#include "device_launch_parameters.h"
+#endif
+
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
-#include <ckernel.cuh>
-#include <complexOps.cuh>
 #include <cstdint>
 #include <ctgmath>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <numeric>
+#include <string>
+#include <vector>
+
+#include "flags.cuh"
+#include "utils/constants.hh"  // For PI and PI_D constants
+
+#ifdef __CUDACC__
+#include "io/MSFITSIO.cuh"  // For CUDA-specific types and functions
+#include <ckernel.cuh>
+#include "utils/complexOps.cuh"
 #include <error.cuh>
 #include <factory.cuh>
 #include <fi.cuh>
 #include <filter.cuh>
-#include <flags.cuh>
-#include <functional>
 #include <image.cuh>
 #include <io.cuh>
-#include <iostream>
-#include <map>
-#include <numeric>
 #include <objectivefunction.cuh>
 #include <optimizer.cuh>
-#include <string>
 #include <synthesizer.cuh>
 #include <uvtaper.cuh>
-#include <vector>
 #include <virtualimageprocessor.cuh>
 #include <visibilities.cuh>
 #include <weightingscheme.cuh>
+#include "utils/copyrightwarranty.cuh"
+#endif
 
-#include "copyrightwarranty.cuh"
-#include "device_launch_parameters.h"
+// ============================================================================
+// Constants and Enums
+// ============================================================================
+
+#define FLOAT_IMG -32
+#define DOUBLE_IMG -64
+
+#define TSTRING 16
+#define TLONG 41
+#define TINT 31
+#define TFLOAT 42
+#define TDOUBLE 82
+#define TCOMPLEX 83
+#define TDBLCOMPLEX 163
+
+const float RPDEG = (PI / 180.0f);
+const double RPDEG_D = (PI_D / 180.0);
+const float RPARCSEC = (PI / (180.0f * 3600.0f));
+const float RPARCSEC_D = (PI_D / (180.0 * 3600.0));
+const float RPARCM = (PI / (180.0f * 60.0f));
+const float RPARCM_D = (PI_D / (180.0 * 60.0));
+const float RZ = 1.2196698912665045;
+
+enum stokes {
+  None,
+  I_s,
+  Q_s,
+  U_s,
+  V_s,
+  RR,
+  RL,
+  LR,
+  LL,
+  XX,
+  XY,
+  YX,
+  YY,
+  RX,
+  RY,
+  LX,
+  LY,
+  XR,
+  XL,
+  YR,
+  YL,
+  PP,
+  PQ,
+  QP,
+  QQ,
+  RCircular,
+  LCircular,
+  Linear,
+  Ptotal,
+  Plinear,
+  PFtotal,
+  PFlinear,
+  Pangle
+};
 
 extern long M, N;
 extern int image_count;
 extern float* penalizators;
 extern int nPenalizators;
 
+#ifdef __CUDACC__
 typedef struct varsPerGPU {
   float* device_chi2;
   float* device_dchi2;
@@ -53,6 +121,7 @@ typedef struct varsPerGPU {
   cufftComplex* device_I_nu;
   cufftComplex* device_V;
 } varsPerGPU;
+#endif
 
 typedef struct variables {
   std::string input;
@@ -86,6 +155,7 @@ typedef struct variables {
   // one = single image / one run; alpha_static = two images, alpha fixed, I_nu_0 only
 } Vars;
 
+#ifdef __CUDACC__
 class SynthesizerFactory {
  public:
   typedef Synthesizer* (*CreateSynthesizerCallback)();
@@ -247,4 +317,6 @@ class CKernelFactory {
   CallbackMap callbacks_;
 };
 
-#endif
+#endif  // __CUDACC__
+
+#endif  // FRAMEWORK_CUH

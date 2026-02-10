@@ -33,18 +33,18 @@
 
 #include <time.h>
 
-#include "directioncosines.cuh"
-#include "fixedpoint.cuh"
+#include "utils/direction_cosines.cuh"
+#include "utils/fixed_point.cuh"
 #include "framework.cuh"
-#include "gaussian2D.cuh"
-#include "gaussianSinc2D.cuh"
-#include "pillBox2D.cuh"
-#include "pswf_12D.cuh"
-#include "sinc2D.cuh"
+#include "kernels/gaussian2D.cuh"
+#include "kernels/gaussianSinc2D.cuh"
+#include "kernels/pillBox2D.cuh"
+#include "kernels/pswf_12D.cuh"
+#include "kernels/sinc2D.cuh"
 #include "uvtaper.cuh"
 #include "optimizers/conjugategradient.cuh"
-#include "lbfgs.cuh"
-#include "linesearcher.cuh"
+#include "optimizers/lbfgs.cuh"
+#include "linesearch/linesearcher.cuh"
 #include <memory>
 
 // Note: Optimizer factory registrations happen automatically when

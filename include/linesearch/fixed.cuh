@@ -1,7 +1,7 @@
 #ifndef FIXED_LINESEARCH_CUH
 #define FIXED_LINESEARCH_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Fixed step size line search.

@@ -143,15 +143,62 @@ endif()
 # Create executable target
 add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
 
-# Add all CUDA source files (including subdirectories)
-file(GLOB_RECURSE SOURCE_FILES 
+# Add all CUDA source files (.cu) - compiled with nvcc
+file(GLOB_RECURSE CUDA_SOURCE_FILES 
      ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu
-     ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/reduction/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/fft/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/gridding/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/beam/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/psf/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/visibility/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/chi2/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/image_processing/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/regularizers/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/weighting/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernels/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/io/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/rng/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/mfs/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/measurement_operator/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/errors/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/idft/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/classes/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/chi2/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/regularizers/*.cu)
-target_sources(gpuvmem PRIVATE ${SOURCE_FILES})
+
+# Add all C++ source files (.cc) - compiled with g++
+file(GLOB_RECURSE CPP_SOURCE_FILES 
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/reduction/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/fft/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/gridding/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/beam/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/psf/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/visibility/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/chi2/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/image_processing/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/regularizers/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/rng/*.cc)
+
+# Add CUDA files (compiled with nvcc)
+target_sources(gpuvmem PRIVATE ${CUDA_SOURCE_FILES})
+
+# Add C++ files (compiled with g++)
+if(CPP_SOURCE_FILES)
+  target_sources(gpuvmem PRIVATE ${CPP_SOURCE_FILES})
+  # Set language property for .cc files to ensure they're compiled with g++
+  foreach(CC_FILE ${CPP_SOURCE_FILES})
+    set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
+  endforeach()
+endif()
 
 # Set C++ compile features based on standard
 target_compile_features(gpuvmem PUBLIC cxx_std_${CMAKE_CXX_STANDARD})
@@ -170,8 +217,18 @@ target_include_directories(
          ${CFITSIO_INCLUDE_DIR} # CFITSIO headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include # Project headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/reduction
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/fft
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/gridding
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/beam
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/psf
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/visibility
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/chi2
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/image_processing
          ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
          ${Boost_INCLUDE_DIRS} # Boost headers
          ${CUDAToolkit_LIBRARY_ROOT}/samples/common/inc # CUDA samples headers

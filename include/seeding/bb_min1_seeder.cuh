@@ -1,7 +1,7 @@
 #ifndef BB_MIN1_SEEDER_CUH
 #define BB_MIN1_SEEDER_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Barzilai-Borwein Adaptive Min1 step size seeder.

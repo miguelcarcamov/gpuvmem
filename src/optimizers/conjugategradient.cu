@@ -32,10 +32,12 @@
  */
 
 #include "optimizers/conjugategradient.cuh"
-#include "linesearcher.cuh"  // Include here to avoid circular dependency
+#include "optimizers/optimizer_kernels.cuh"
+#include "reduction/reduction_host.cuh"
+#include "linesearch/linesearcher.cuh"  // Include here to avoid circular dependency
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "factory.cuh"
 #include <iostream>
 #include <iomanip>
@@ -116,7 +118,7 @@ __global__ void updateSearchDirectionCG(float* search_dir, float* grad,
 // Base class implementation
 
 __host__ ConjugateGradient::ConjugateGradient() {
-  // Default to Brent line search (current implementation)
+  // Default to Brent line search
   linesearcher_ptr = new Brent();
   // Note: prev_step_size is initialized in Optimizer base class constructor
 }

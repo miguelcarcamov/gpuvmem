@@ -2,8 +2,10 @@
 #include <iostream>
 
 #include "objective_function/terms/chi2/chi2.cuh"
+#include "chi2/chi2_host.cuh"
+#include "optimizers/optimizer_host.cuh"
 #include "classes/image.cuh"
-#include "imageProcessor.cuh"
+#include "image_processing/imageProcessor.cuh"
 
 extern long M, N;
 extern int image_count;

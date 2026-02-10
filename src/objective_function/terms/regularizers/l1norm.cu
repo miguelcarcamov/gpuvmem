@@ -1,4 +1,6 @@
 #include "objective_function/terms/regularizers/l1norm.cuh"
+#include "regularizers/regularizers_host.cuh"
+#include "optimizers/optimizer_host.cuh"
 
 extern long M, N;
 extern int image_count;

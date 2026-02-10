@@ -1,9 +1,9 @@
 #ifndef CONJUGATEGRADIENT_CUH
 #define CONJUGATEGRADIENT_CUH
 
-#include "linmin.cuh"
+// linmin.cuh removed - replaced by LineSearcher infrastructure
 #include "classes/optimizer.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include <string>
 #include <memory>
 
@@ -102,7 +102,8 @@ class ConjugateGradient : public Optimizer {
   __host__ bool checkGradientConvergence(float* current_gradient, float function_value);
 
   /**
-   * @brief Initialize optimization state (gradient and search direction in device_g, device_h, xi).
+   * @brief Initialize optimization state.
+   * 
    * @return Initial function value
    */
   __host__ float initializeOptimizationState();
@@ -132,22 +133,31 @@ class ConjugateGradient : public Optimizer {
                                                   float* dir_prev,
                                                   float norm2_grad_prev) = 0;
 
-  // CG state buffers (reused each iteration; roles in performIteration comments)
-  float* device_g;         // g_prev: gradient at previous point (for beta)
-  float* device_h;         // d_prev: search direction (then updated to d_new)
-  float* xi;              // gradient at new point, then overwritten with d_new
-  float* temp;            // scratch (CGGradCondition, newXi output -g)
-  float* device_gg_vector;  // reduction scratch (||g_prev||^2)
-  float* device_dgg_vector; // reduction scratch (dot products for beta)
+  // Memory pointers for CUDA operations
+  float* device_g;        // Previous gradient (g_k)
+  float* device_h;        // Previous search direction (d_k)
+  float* xi;              // Current gradient (g_{k+1}) / search direction
+  float* temp;             // Temporary storage for gradient convergence check
+  float* device_gg_vector; // Temporary storage for dot product reductions
+  float* device_dgg_vector; // Temporary storage for dot product reductions
 
-  // Restart strategy parameters
-  int restart_period = 20;  // Periodic restart every N iterations (0 = disabled)
-  bool restart_on_negative_beta = true;  // Restart when beta < 0 (for PR method)
-  bool restart_on_non_descent = true;    // Restart when search direction is not descent
-  int iterations_since_restart = 0;      // Track iterations since last restart
+  // Optimization state
+  float fret = 0.0f;      // Function value after line search
+  float fp = 0.0f;        // Previous function value
+  int configured = 1;     // Configuration flag (1 = needs configuration)
   
-  // Note: fret, fp, configured, prev_step_size, and linesearcher_ptr are now
-  // inherited from Optimizer base class
+  // Line search (opaque pointer to avoid circular dependency in header)
+  void* linesearcher_ptr;  // Line search algorithm (LineSearcher*)
+                          // Note: LineSearcher owns its own seeder internally
+  
+  // Previous step size (used as fallback initial_alpha for line search)
+  float prev_step_size;   // Previous step size
+  
+  // Restart strategy parameters
+  int iterations_since_restart = 0;  // Counter for iterations since last restart
+  bool restart_on_negative_beta = true;  // Restart if beta < 0
+  int restart_period = 0;  // Restart every N iterations (0 = disabled)
+  bool restart_on_non_descent = false;  // Restart if search direction is not descent
 };
 
 /**

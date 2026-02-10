@@ -32,9 +32,12 @@
  */
 
 #include "linesearch/linesearch_utils.cuh"
-#include "linesearcher.cuh"  // For LineSearcher class definition
+#include "linesearch/linesearcher.cuh"  // For LineSearcher class definition
+#include "linesearch/linesearch_kernels.cuh"
+#include "reduction/reduction_host.cuh"
+#include "optimizers/optimizer_host.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel
 
 extern bool nopositivity;

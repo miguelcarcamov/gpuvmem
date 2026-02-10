@@ -2,7 +2,7 @@
 #define TOTALSQUAREDVARIATION_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class TotalSquaredVariationP : public Fi {
  public:

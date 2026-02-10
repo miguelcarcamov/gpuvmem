@@ -1,7 +1,7 @@
 #ifndef VISIBILITIES_CUH
 #define VISIBILITIES_CUH
 
-#include "MSFITSIO.cuh"
+#include "io/MSFITSIO.cuh"
 #include "weightingscheme.cuh"
 
 class Visibilities {

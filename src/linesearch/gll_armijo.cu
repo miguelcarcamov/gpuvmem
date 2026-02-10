@@ -33,8 +33,9 @@
 
 #include "linesearch/gll_armijo.cuh"
 #include "linesearch/linesearch_utils.cuh"
+#include "reduction/reduction_host.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel declaration
 #include "factory.cuh"
 #include <iostream>

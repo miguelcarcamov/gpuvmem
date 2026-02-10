@@ -32,7 +32,9 @@
  */
 
 #include "optimizers/lbfgs.cuh"
-#include "linesearcher.cuh"  // Include here to avoid circular dependency
+#include "optimizers/optimizer_kernels.cuh"
+#include "reduction/reduction_host.cuh"
+#include "linesearch/linesearcher.cuh"  // Include here to avoid circular dependency
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
 #include <iostream>
@@ -108,7 +110,7 @@ __host__ void LBFGS::allocateMemoryGpu() {
 }
 
 __host__ LBFGS::LBFGS() {
-  // Default to Brent line search (current implementation)
+  // Default to Brent line search
   linesearcher_ptr = new Brent();
   // Note: prev_step_size is initialized in Optimizer base class constructor
   // Note: Image object will be set in setLineSearcher() or performIteration()

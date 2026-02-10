@@ -2,7 +2,7 @@
 #define GENTROPY_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class GEntropy : public Fi {
  private:

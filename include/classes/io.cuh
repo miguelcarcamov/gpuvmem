@@ -1,7 +1,7 @@
 #ifndef IO_CUH
 #define IO_CUH
 
-#include "MSFITSIO.cuh"
+#include "io/MSFITSIO.cuh"
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>

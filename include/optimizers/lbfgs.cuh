@@ -1,10 +1,10 @@
 #ifndef LBFGS_CUH
 #define LBFGS_CUH
 
-#include "linmin.cuh"
+// linmin.cuh removed - replaced by LineSearcher infrastructure
 #include "classes/optimizer.cuh"
-#include "functions.cuh"
-#include "linesearcher.cuh"
+#include "framework.cuh"
+#include "linesearch/linesearcher.cuh"
 #include "linesearch/brent.cuh"
 #include <string>
 #include <memory>
@@ -148,12 +148,19 @@ class LBFGS : public Optimizer {
   float* d_q;           // Temporary storage for first loop
   float* aux_vector;    // Temporary storage for dot products
 
-  // LBFGS-specific optimization state
+  // Optimization state
+  float fret = 0.0f;    // Function value after line search
+  float fp = 0.0f;      // Previous function value
   float max_per_it = 0.0f;  // Maximum gradient component
-  int K = 100;               // Maximum number of correction pairs (memory limit)
+  int configured = 1;   // Configuration flag (1 = needs configuration)
+  int K = 100;          // Maximum number of correction pairs (memory limit)
   
-  // Note: fret, fp, configured, prev_step_size, and linesearcher_ptr are now
-  // inherited from Optimizer base class
+  // Line search (opaque pointer to avoid circular dependency in header)
+  void* linesearcher_ptr;  // Line search algorithm (LineSearcher*)
+                          // Note: LineSearcher owns its own seeder internally
+  
+  // Previous step size (used as fallback initial_alpha for line search)
+  float prev_step_size;   // Previous step size
 
  private:
   /**

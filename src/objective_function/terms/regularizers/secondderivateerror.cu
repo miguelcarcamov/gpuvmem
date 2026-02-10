@@ -1,6 +1,7 @@
 #include "classes/objectivefunction.cuh"
 #include "objective_function/terms/regularizers/secondderivateerror.cuh"
-#include "functions.cuh"
+#include "errors/errors_host.cuh"
+#include "framework.cuh"
 
 void SecondDerivateError::calculateErrorImage(Image* I, Visibilities* v) {
   (void)v;

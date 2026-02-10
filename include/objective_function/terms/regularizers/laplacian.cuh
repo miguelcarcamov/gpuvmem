@@ -2,7 +2,7 @@
 #define LAPLACIAN_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class Laplacian : public Fi {
  public:

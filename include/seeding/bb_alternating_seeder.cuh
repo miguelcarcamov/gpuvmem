@@ -1,7 +1,7 @@
 #ifndef BB_ALTERNATING_SEEDER_CUH
 #define BB_ALTERNATING_SEEDER_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Barzilai-Borwein Alternating step size seeder.

@@ -1,7 +1,7 @@
 #ifndef BACKTRACKING_ARMijo_LINESEARCH_CUH
 #define BACKTRACKING_ARMijo_LINESEARCH_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Backtracking Armijo line search.

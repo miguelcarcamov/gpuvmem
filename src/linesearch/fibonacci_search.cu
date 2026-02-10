@@ -33,10 +33,10 @@
 
 #include "linesearch/fibonacci_search.cuh"
 #include "linesearch/linesearch_utils.cuh"
-#include "f1dim.cuh"
-#include "mnbrak.cuh"
+#include "linesearch/f1dim.cuh"
+#include "linesearch/mnbrak.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "factory.cuh"
 #include <iostream>
 #include <vector>

@@ -33,8 +33,9 @@
 
 #include "seeding/bb_min1_seeder.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct and computeGradientDifference kernels
+#include "reduction/reduction_host.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "factory.cuh"
 #include "classes/objectivefunction.cuh"
 #include <cmath>
