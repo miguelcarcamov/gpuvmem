@@ -52,6 +52,12 @@ FitsHeader read_fits_header(const std::string& path);
 /** Read full 2D image as float from first HDU. Returns row-major M*N floats. */
 std::vector<float> read_fits_image_float(const std::string& path);
 
+/** Read full 2D image as double from first HDU. Returns row-major M*N doubles. */
+std::vector<double> read_fits_image_double(const std::string& path);
+
+/** Read full 2D image as int from first HDU. Returns row-major M*N ints. */
+std::vector<int> read_fits_image_int(const std::string& path);
+
 /** Write one 2D slice to a new FITS file: copy header from template, then write data (optionally normalized). */
 void write_fits_image_slice(const WriteFitsImageOptions& opts);
 

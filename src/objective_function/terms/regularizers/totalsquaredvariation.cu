@@ -1,4 +1,6 @@
 #include "objective_function/terms/regularizers/totalsquaredvariation.cuh"
+#include "regularizers/regularizers_host.cuh"
+#include "chi2/chi2_host.cuh"  // For linkAddToDPhi
 
 extern long M, N;
 extern int image_count;

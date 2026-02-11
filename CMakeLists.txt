@@ -151,9 +151,30 @@ file(GLOB_RECURSE CUDA_SOURCE_FILES
      ${CMAKE_CURRENT_SOURCE_DIR}/src/fits/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/regularizers/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/chi2/*.cu
-     ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/regularizers/*.cu)
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/regularizers/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/beam/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/chi2/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/errors/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/fft/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/gridding/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/idft/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/measurement_operator/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/visibility/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/reduction/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/image_processing/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernels/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/weighting/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/io/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/mfs/*.cu)
+
+# Exclude MSFITSIO.cu (removed, functionality migrated to new FITS API)
+# Exclude functions.cu (all functions migrated to modular structure, only redundant extern declarations remained)
+list(FILTER CUDA_SOURCE_FILES EXCLUDE REGEX ".*MSFITSIO\\.cu$")
+list(FILTER CUDA_SOURCE_FILES EXCLUDE REGEX ".*functions\\.cu$")
 
 # Add all C++ source files (.cc) - compiled with g++
 file(GLOB_RECURSE CPP_SOURCE_FILES 
@@ -195,8 +216,24 @@ target_include_directories(
          ${CMAKE_CURRENT_SOURCE_DIR}/include/io
          ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
          ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/beam
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/chi2
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/errors
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/fft
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/gridding
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/idft
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/measurement_operator
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/visibility
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/reduction
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/image_processing
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/weighting
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/mfs
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/rng
          ${Boost_INCLUDE_DIRS} # Boost headers
          ${CUDAToolkit_LIBRARY_ROOT}/samples/common/inc # CUDA samples headers
 )

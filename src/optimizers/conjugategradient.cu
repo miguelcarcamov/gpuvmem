@@ -32,11 +32,13 @@
  */
 
 #include "optimizers/conjugategradient.cuh"
-#include "linesearcher.cuh"  // Include here to avoid circular dependency
+#include "linesearch/linesearcher.cuh"  // Include here to avoid circular dependency
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "factory.cuh"
+#include "reduction/reduction_host.cuh"
+#include "optimizers/optimizer_kernels.cuh"
 #include <iostream>
 #include <iomanip>
 #include <string>

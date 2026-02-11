@@ -32,7 +32,9 @@
  */
 
 #include "optimizers/lbfgs.cuh"
-#include "linesearcher.cuh"  // Include here to avoid circular dependency
+#include "optimizers/optimizer_kernels.cuh"
+#include "reduction/reduction_host.cuh"
+#include "linesearch/linesearcher.cuh"  // Include here to avoid circular dependency
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
 #include <iostream>

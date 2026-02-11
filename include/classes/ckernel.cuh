@@ -2,6 +2,8 @@
 #define CKERNEL_CUH
 
 #include "io.cuh"
+#include <iostream>
+#include <helper_cuda.h>
 
 class CKernel {
  public:

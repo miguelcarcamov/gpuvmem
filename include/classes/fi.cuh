@@ -2,6 +2,7 @@
 #define FI_CUH
 
 #include <cuda_runtime.h>
+#include <helper_cuda.h>
 
 #include "ckernel.cuh"
 

@@ -34,8 +34,9 @@
 #include "seeding/cubic_interpolation_seeder.cuh"
 #include "optimizers/conjugategradient.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "factory.cuh"
+#include "reduction/reduction_host.cuh"
 #include "classes/objectivefunction.cuh"
 #include <cmath>
 #include <algorithm>

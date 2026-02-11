@@ -2,7 +2,7 @@
 #define TVVECTOR_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class IsotropicTVariation : public Fi {
  private:

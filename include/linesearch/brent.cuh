@@ -1,7 +1,7 @@
 #ifndef BRENT_LINESEARCH_CUH
 #define BRENT_LINESEARCH_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Brent's method for line search.
@@ -19,5 +19,13 @@ class Brent : public LineSearcher {
  protected:
   float tolerance = 1e-4f;  // Tolerance for convergence
 };
+
+// Forward declaration of the Numerical Recipes brent function
+__host__ float brent(float ax,
+                     float bx,
+                     float cx,
+                     float tol,
+                     float* xmin,
+                     float (*f)(float));
 
 #endif  // BRENT_LINESEARCH_CUH

@@ -2,7 +2,7 @@
 #define ENTROPY_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class Entropy : public Fi {
  private:

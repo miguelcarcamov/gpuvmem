@@ -2,7 +2,7 @@
 #define L1NORM_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class L1norm : public Fi {
  private:

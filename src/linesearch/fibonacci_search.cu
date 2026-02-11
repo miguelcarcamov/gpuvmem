@@ -33,10 +33,10 @@
 
 #include "linesearch/fibonacci_search.cuh"
 #include "linesearch/linesearch_utils.cuh"
-#include "f1dim.cuh"
-#include "mnbrak.cuh"
+#include "linesearch/f1dim.cuh"
+#include "linesearch/mnbrak.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "factory.cuh"
 #include <iostream>
 #include <vector>
@@ -53,8 +53,7 @@ extern Image* I;
 extern ObjectiveFunction* testof;
 
 // Global variables for f1dim (used by evaluateLineFunction)
-extern float* device_pcom;
-extern float *device_xicom, (*nrfunc)(float*);
+#include "linesearch/linesearch_globals.cuh"
 
 std::pair<float, float> FibonacciSearch::search(
     float* current_point, float* search_direction,

@@ -9,6 +9,7 @@
 #include <string>
 #include <iostream>
 #include <cuda_runtime.h>
+#include <helper_cuda.h>
 
 // Forward declarations for extern variables
 extern long M, N;

@@ -32,10 +32,12 @@
  */
 
 #include "linesearch/linesearch_utils.cuh"
-#include "linesearcher.cuh"  // For LineSearcher class definition
+#include "linesearch/linesearch_kernels.cuh"
+#include "linesearch/linesearcher.cuh"  // For LineSearcher class definition
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel
+#include "reduction/reduction_host.cuh"
 
 extern bool nopositivity;
 // Image object is accessed through LineSearcher member (this->image) instead of extern global
@@ -56,9 +58,7 @@ __host__ Image* getCurrentImage() {
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-// Global variables for f1dim (used by Brent and other methods)
-extern float* device_pcom;
-extern float *device_xicom, (*nrfunc)(float*);
+#include "linesearch/linesearch_globals.cuh"
 
 // Helper function to evaluate function along line
 // Uses current_line_searcher's image member instead of extern Image* I
@@ -285,4 +285,64 @@ __host__ float computeDirectionalDerivative(float* gradient, float* search_direc
   
   cudaFree(dot_result);
   return dir_deriv;
+}
+
+// Host wrappers for line search kernels (moved from functions.cu)
+
+__host__ void defaultNewP(float* p, float* xi, float xmin, int image) {
+  // Ensure we're on firstgpu before launching kernel
+  extern int firstgpu;
+  extern long N, M;
+  extern dim3 numBlocksNN, threadsPerBlockNN;
+  cudaSetDevice(firstgpu);
+  newPNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(p, xi, xmin, N, M, image);
+  checkCudaErrors(cudaDeviceSynchronize());
+}
+
+__host__ void defaultEvaluateXt(float* xt,
+                                float* pcom,
+                                float* xicom,
+                                float x,
+                                int image) {
+  extern long N, M;
+  extern dim3 numBlocksNN, threadsPerBlockNN;
+  evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(xt, pcom, xicom, x, N, M, image);
+  checkCudaErrors(cudaDeviceSynchronize());
+}
+
+__host__ void particularNewP(float* p, float* xi, float xmin, int image) {
+  // Ensure we're on firstgpu before launching kernel
+  extern int firstgpu;
+  extern float eta;
+  extern long N, M;
+  extern float MINPIX;
+  extern dim3 numBlocksNN, threadsPerBlockNN;
+  
+  // Access Image object through thread-local variable set in updatePoint()
+  Image* current_image = getCurrentImage();
+
+  cudaSetDevice(firstgpu);
+
+  // Get dimensions and minimal pixel value from Image object instead of extern variables
+  long M_local = current_image ? current_image->getM() : M;  // Fallback to extern M if not set
+  long N_local = current_image ? current_image->getN() : N;   // Fallback to extern N if not set
+  float min_pixel_value = current_image ? current_image->getMinimalPixelValue(image) : MINPIX;  // Use Image's minimal pixel value
+
+  newP<<<numBlocksNN, threadsPerBlockNN>>>(p, xi, xmin, N_local, M_local,
+                                           min_pixel_value, eta, image);
+  checkCudaErrors(cudaDeviceSynchronize());
+}
+
+__host__ void particularEvaluateXt(float* xt,
+                                   float* pcom,
+                                   float* xicom,
+                                   float x,
+                                   int image) {
+  extern long N, M;
+  extern float* initial_values;
+  extern float eta;
+  extern dim3 numBlocksNN, threadsPerBlockNN;
+  evaluateXt<<<numBlocksNN, threadsPerBlockNN>>>(
+      xt, pcom, xicom, x, N, M, initial_values[image], eta, image);
+  checkCudaErrors(cudaDeviceSynchronize());
 }

@@ -1,7 +1,7 @@
 #ifndef GOLDEN_SECTION_SEARCH_LINESEARCH_CUH
 #define GOLDEN_SECTION_SEARCH_LINESEARCH_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Golden section search for line search.

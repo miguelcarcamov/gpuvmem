@@ -1,7 +1,7 @@
 #ifndef QUADRATIC_INTERPOLATION_SEEDER_CUH
 #define QUADRATIC_INTERPOLATION_SEEDER_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Quadratic interpolation step size seeder.

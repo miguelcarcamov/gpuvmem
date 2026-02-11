@@ -37,4 +37,10 @@ __host__ void updatePoint(ObjectiveFunction* objective_function, Image* image,
  */
 __host__ float computeDirectionalDerivative(float* gradient, float* search_direction);
 
+// Host wrappers for line search kernels (moved from functions.cu)
+__host__ void defaultNewP(float* p, float* xi, float xmin, int image);
+__host__ void defaultEvaluateXt(float* xt, float* pcom, float* xicom, float x, int image);
+__host__ void particularNewP(float* p, float* xi, float xmin, int image);
+__host__ void particularEvaluateXt(float* xt, float* pcom, float* xicom, float x, int image);
+
 #endif  // LINESEARCH_UTILS_CUH

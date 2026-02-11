@@ -1,4 +1,7 @@
 #include "objective_function/terms/regularizers/gl1norm.cuh"
+#include "regularizers/regularizers_host.cuh"
+#include "chi2/chi2_host.cuh"  // For linkAddToDPhi
+#include "image_processing/image_processing_host.cuh"
 
 extern long M, N;
 extern int image_count;

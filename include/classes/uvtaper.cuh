@@ -1,6 +1,8 @@
 #ifndef UVTAPER_CUH
 #define UVTAPER_CUH
 
+#include "utils/constants.hh"  // For PI
+
 class UVTaper {
  public:
   __host__ UVTaper() {

@@ -1,10 +1,10 @@
 #ifndef LBFGS_CUH
 #define LBFGS_CUH
 
-#include "linmin.cuh"
+// linmin.cuh removed - replaced by LineSearcher infrastructure
 #include "classes/optimizer.cuh"
-#include "functions.cuh"
-#include "linesearcher.cuh"
+#include "framework.cuh"
+#include "linesearch/linesearcher.cuh"
 #include "linesearch/brent.cuh"
 #include <string>
 #include <memory>

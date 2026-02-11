@@ -32,141 +32,94 @@
  */
 
 #include "linesearch/brent.cuh"
-#include "linesearch/linesearch_utils.cuh"
-#include "brent.cuh"
-#include "mnbrak.cuh"
-#include "error.cuh"
-#include "functions.cuh"
-#include "factory.cuh"
-#include <iostream>
+#include "linesearch/nrutil.h"
+#define ITMAX 500
+#define CGOLD 0.3819660
+#define ZEPS 1.0e-10
+#define SHFT(a, b, c, d) \
+  (a) = (b);             \
+  (b) = (c);             \
+  (c) = (d);
+__host__ float brent(float ax,
+                     float bx,
+                     float cx,
+                     float tol,
+                     float* xmin,
+                     float (*f)(float)) {
+  float a, b, d, etemp, fu, fv, fw, fx, p, q, r, tol1, tol2, u, v, w, x, xm;
+  float e = 0.0;
 
-// Forward declaration for wrapper function
-extern LineSearcher* current_line_searcher;
-__host__ float evaluateLineFunctionWrapper(float alpha);
-
-extern long M;
-extern long N;
-extern int image_count;
-extern float MINPIX, eta;
-extern bool nopositivity;
-extern dim3 threadsPerBlockNN;
-extern dim3 numBlocksNN;
-extern int verbose_flag;
-extern Image* I;
-extern ObjectiveFunction* testof;
-
-// Global variables for f1dim
-extern float* device_pcom;
-extern float *device_xicom, (*nrfunc)(float*);
-
-std::pair<float, float> Brent::search(float* current_point,
-                                      float* search_direction,
-                                      ObjectiveFunction* objective_function,
-                                      float* mask) {
-  float xmin, fx, fb, fa, bx, ax;
-
-  // Get Image object from line searcher member instead of extern Image* I
-  Image* image_to_use = this->image;
-  if (image_to_use == nullptr) {
-    // Fallback to extern I for backward compatibility
-    extern Image* I;
-    image_to_use = I;
-  }
-  if (image_to_use == nullptr) {
-    std::cerr << "ERROR: Brent::search: No Image object available!" << std::endl;
-    return std::make_pair(0.0f, 0.0f);
-  }
-  
-  long M_local = image_to_use->getM();
-  long N_local = image_to_use->getN();
-  int image_count_local = image_to_use->getImageCount();
-
-  // Allocate device memory for line search (temporary, freed at end)
-  float* local_device_pcom;
-  float* local_device_xicom;
-  
-  checkCudaErrors(
-      cudaMalloc((void**)&local_device_pcom, sizeof(float) * M_local * N_local * image_count_local));
-  checkCudaErrors(
-      cudaMalloc((void**)&local_device_xicom, sizeof(float) * M_local * N_local * image_count_local));
-  checkCudaErrors(cudaMemset(local_device_pcom, 0,
-                             sizeof(float) * M_local * N_local * image_count_local));
-  checkCudaErrors(cudaMemset(local_device_xicom, 0,
-                             sizeof(float) * M_local * N_local * image_count_local));
-  
-  // Set global pointers for f1dim to use
-  device_pcom = local_device_pcom;
-  device_xicom = local_device_xicom;
-
-  // Copy current point and search direction
-  checkCudaErrors(cudaMemcpy(device_pcom, current_point,
-                             sizeof(float) * M_local * N_local * image_count_local,
-                             cudaMemcpyDeviceToDevice));
-  checkCudaErrors(cudaMemcpy(device_xicom, search_direction,
-                             sizeof(float) * M_local * N_local * image_count_local,
-                             cudaMemcpyDeviceToDevice));
-
-  // Set global objective function for f1dim (used internally by evaluateLineFunction)
-  testof = objective_function;
-  nrfunc = nullptr;  // Not used, f1dim uses testof directly
-  
-  // Set current line searcher for wrapper function (uses evaluateLineFunction internally)
-  extern LineSearcher* current_line_searcher;
-  LineSearcher* prev_searcher = current_line_searcher;
-  current_line_searcher = this;
-
-  // Get initial step size from seeder/history/initial_step_size_value
-  float initial_alpha = computeInitialAlpha(objective_function, current_point, search_direction);
-  if (initial_alpha <= 0.0f) {
-    initial_alpha = initial_step_size_value;  // Fallback to initial_step_size_value
-  }
-
-  // Bracket the minimum using wrapper function (calls evaluateLineFunction internally)
-  ax = 0.0f;
-  float xx = initial_alpha;
-  mnbrak(&ax, &xx, &bx, &fa, &fx, &fb, evaluateLineFunctionWrapper);
-
-  // Find minimum using Brent's method with wrapper function
-  float fret = brent(ax, xx, bx, tolerance, &xmin, evaluateLineFunctionWrapper);
-  
-  // Restore the previous line searcher pointer (in case of nested calls)
-  current_line_searcher = prev_searcher;
-
-  if (verbose_flag) {
-    printf("Alpha for linear minimization = %f\n\n", xmin);
-  }
-
-  // Update current point: p = p + xmin * search_direction
-  // Reuse image_to_use and dimensions from earlier in function
-  imageMap* auxPtr = image_to_use->getFunctionMapping();
-  if (!nopositivity) {
-    for (int i = 0; i < image_count_local; i++) {
-      (auxPtr[i].newP)(current_point, search_direction, xmin, i);
-      checkCudaErrors(cudaDeviceSynchronize());
+  a = (ax < cx ? ax : cx);
+  b = (ax > cx ? ax : cx);
+  x = w = v = bx;
+  fw = fv = fx = (*f)(x);
+  for (int iter = 1; iter <= ITMAX; iter++) {
+    xm = 0.5 * (a + b);
+    tol2 = 2.0 * (tol1 = tol * fabs(x) + ZEPS);
+    if (fabs(x - xm) <= (tol2 - 0.5 * (b - a))) {
+      *xmin = x;
+      return fx;
     }
-  } else {
-    for (int i = 0; i < image_count_local; i++) {
-      newPNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(
-          current_point, search_direction, xmin, N_local, M_local, i);
-      checkCudaErrors(cudaDeviceSynchronize());
+    if (fabs(e) > tol1) {
+      r = (x - w) * (fx - fv);
+      q = (x - v) * (fx - fw);
+      p = (x - v) * q - (x - w) * r;
+      q = 2.0 * (q - r);
+
+      if (q > 0.0) {
+        p = -p;
+      }
+
+      q = fabs(q);
+      etemp = e;
+      e = d;
+
+      if (fabs(p) >= fabs(0.5 * q * etemp) || p <= q * (a - x) ||
+          p >= q * (b - x))
+        d = CGOLD * (e = (x >= xm ? a - x : b - x));
+      else {
+        d = p / q;
+        u = x + d;
+        if (u - a < tol2 || b - u < tol2) {
+          d = SIGN(tol1, xm - x);
+        }
+      }
+    } else {
+      d = CGOLD * (e = (x >= xm ? a - x : b - x));
+    }
+    u = (fabs(d) >= tol1 ? x + d : x + SIGN(tol1, d));
+    fu = (*f)(u);
+    if (fu <= fx) {
+      if (u >= x) {
+        a = x;
+      } else {
+        b = x;
+      }
+      SHFT(v, w, x, u)
+      SHFT(fv, fw, fx, fu)
+    } else {
+      if (u < x) {
+        a = u;
+      } else {
+        b = u;
+      }
+
+      if (fu <= fw || w == x) {
+        v = w;
+        w = u;
+        fv = fw;
+        fw = fu;
+      } else if (fu <= fv || v == x || v == w) {
+        v = u;
+        fv = fu;
+      }
     }
   }
-
-  // Free temporary memory
-  cudaFree(local_device_xicom);
-  cudaFree(local_device_pcom);
-  device_pcom = nullptr;
-  device_xicom = nullptr;
-
-  return std::make_pair(fret, xmin);
+  printf("Too many iterations in brent\n");
+  *xmin = x;
+  return fx;
 }
-
-namespace {
-LineSearcher* CreateBrent() {
-  return new Brent();
-}
-
-const std::string name = "Brent";
-const bool RegisteredBrent =
-    registerCreationFunction<LineSearcher, std::string>(name, CreateBrent);
-}  // namespace
+#undef ITMAX
+#undef CGOLD
+#undef ZEPS
+#undef SHFT

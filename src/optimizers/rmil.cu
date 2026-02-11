@@ -33,8 +33,9 @@
 
 #include "optimizers/conjugategradient.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "factory.cuh"
+#include "reduction/reduction_host.cuh"
 
 float RMIL::computeConjugateGradientParameter(
     float* grad, float* grad_prev, float* dir_prev, float norm2_grad_prev) {

@@ -89,6 +89,48 @@ std::vector<float> read_fits_image_float(const std::string& path) {
   return {};
 }
 
+std::vector<double> read_fits_image_double(const std::string& path) {
+  FitsHeader h = read_fits_header(path);
+  if (h.naxis1 <= 0 || h.naxis2 <= 0)
+    throw std::runtime_error("read_fits_image_double: invalid dimensions");
+  try {
+    CCfits::FITS fits(path, CCfits::Read, true);
+    ::fitsfile* fp = fits.fitsPointer();
+    const long elements = h.naxis1 * h.naxis2;
+    std::vector<double> data(static_cast<size_t>(elements));
+    double nullval = 0.0;
+    int anynul = 0, status = 0;
+    fits_read_img(fp, TDOUBLE, 1, elements, &nullval, data.data(), &anynul, &status);
+    if (status)
+      throw std::runtime_error("read_fits_image_double: fits_read_img failed");
+    return data;
+  } catch (const CCfits::FitsException& e) {
+    throw_from_ccfits(e);
+  }
+  return {};
+}
+
+std::vector<int> read_fits_image_int(const std::string& path) {
+  FitsHeader h = read_fits_header(path);
+  if (h.naxis1 <= 0 || h.naxis2 <= 0)
+    throw std::runtime_error("read_fits_image_int: invalid dimensions");
+  try {
+    CCfits::FITS fits(path, CCfits::Read, true);
+    ::fitsfile* fp = fits.fitsPointer();
+    const long elements = h.naxis1 * h.naxis2;
+    std::vector<int> data(static_cast<size_t>(elements));
+    int nullval = 0;
+    int anynul = 0, status = 0;
+    fits_read_img(fp, TINT, 1, elements, &nullval, data.data(), &anynul, &status);
+    if (status)
+      throw std::runtime_error("read_fits_image_int: fits_read_img failed");
+    return data;
+  } catch (const CCfits::FitsException& e) {
+    throw_from_ccfits(e);
+  }
+  return {};
+}
+
 void write_fits_image_slice(const WriteFitsImageOptions& opts) {
   if (!opts.data || opts.naxis1 <= 0 || opts.naxis2 <= 0)
     throw std::runtime_error("write_fits_image_slice: invalid data or dimensions");

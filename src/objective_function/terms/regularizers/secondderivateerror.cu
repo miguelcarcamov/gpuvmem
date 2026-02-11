@@ -1,4 +1,7 @@
-#include "functions.cuh"
+#include "regularizers/regularizers_host.cuh"
+#include "chi2/chi2_host.cuh"  // For linkAddToDPhi
+#include "errors/errors_host.cuh"
+#include "framework.cuh"
 #include "objective_function/terms/regularizers/secondderivateerror.cuh"
 
 extern long N, M;

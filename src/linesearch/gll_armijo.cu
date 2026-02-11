@@ -34,8 +34,9 @@
 #include "linesearch/gll_armijo.cuh"
 #include "linesearch/linesearch_utils.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel declaration
+#include "reduction/reduction_host.cuh"
 #include "factory.cuh"
 #include <iostream>
 #include <algorithm>
@@ -54,8 +55,7 @@ extern Image* I;
 extern ObjectiveFunction* testof;
 
 // Global variables for f1dim
-extern float* device_pcom;
-extern float *device_xicom, (*nrfunc)(float*);
+#include "linesearch/linesearch_globals.cuh"
 
 std::pair<float, float> GLLArmijo::search(float* current_point,
                                           float* search_direction,

@@ -1,9 +1,9 @@
 #ifndef CONJUGATEGRADIENT_CUH
 #define CONJUGATEGRADIENT_CUH
 
-#include "linmin.cuh"
+// linmin.cuh removed - replaced by LineSearcher infrastructure
 #include "classes/optimizer.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 #include <string>
 #include <memory>
 

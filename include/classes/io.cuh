@@ -1,7 +1,8 @@
 #ifndef IO_CUH
 #define IO_CUH
 
-#include "MSFITSIO.cuh"
+#include "fits/fits_io.h"
+#include <fitsio.h>  // For fitsfile forward declaration
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
@@ -37,9 +38,9 @@ class Io {
   virtual void setNormalizationFactor(int normalization_factor){};
   virtual void setPrintImages(bool print_images){};
 
-  virtual headerValues readHeader(){};
-  virtual headerValues readHeader(char* header_name){};
-  virtual headerValues readHeader(std::string header_name){};
+  virtual gpuvmem::fits::FitsHeader readHeader(){};
+  virtual gpuvmem::fits::FitsHeader readHeader(char* header_name){};
+  virtual gpuvmem::fits::FitsHeader readHeader(std::string header_name){};
   virtual std::vector<float> read_data_float_FITS(){};
   virtual std::vector<float> read_data_float_FITS(char* filename){};
   virtual std::vector<float> read_data_float_FITS(std::string filename){};
@@ -198,30 +199,30 @@ class Io {
                                    float equinox,
                                    bool isInGPU){};
   virtual void printcuFFTComplex(cufftComplex* I,
-                                 fitsfile* canvas,
+                                 fitsfile* /*canvas*/,
                                  char* out_image,
-                                 char* mempath,
+                                 char* /*mempath*/,
                                  int iteration,
-                                 float fg_scale,
+                                 float /*fg_scale*/,
                                  long M,
                                  long N,
                                  int option,
                                  bool isInGPU){};
   virtual void printcuFFTComplex(cufftComplex* I,
-                                 fitsfile* canvas,
+                                 fitsfile* /*canvas*/,
                                  char* out_image,
-                                 char* mempath,
+                                 char* /*mempath*/,
                                  int iteration,
                                  int option,
                                  bool isInGPU){};
   virtual void printcuFFTComplex(cufftComplex* I,
                                  char* input,
                                  char* path,
-                                 fitsfile* canvas,
+                                 fitsfile* /*canvas*/,
                                  char* out_image,
-                                 char* mempath,
+                                 char* /*mempath*/,
                                  int iteration,
-                                 float fg_scale,
+                                 float /*fg_scale*/,
                                  long M,
                                  long N,
                                  int option,

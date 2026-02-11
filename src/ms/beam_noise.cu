@@ -4,7 +4,7 @@
 #include "ms/measurement_set_metadata.h"
 #include "ms/time_sample.h"
 
-#include "MSFITSIO.cuh"
+#include "utils/physics_utils.cuh"
 
 #include <cmath>
 

@@ -2,7 +2,7 @@
 #define L2CONSTANTPRIOR_CUH
 
 #include "framework.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
 
 class L2ConstantPrior : public Fi {
  private:

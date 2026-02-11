@@ -1,7 +1,7 @@
 #ifndef CUBIC_INTERPOLATION_SEEDER_CUH
 #define CUBIC_INTERPOLATION_SEEDER_CUH
 
-#include "linesearcher.cuh"
+#include "linesearch/linesearcher.cuh"
 
 /**
  * @brief Cubic interpolation step size seeder.

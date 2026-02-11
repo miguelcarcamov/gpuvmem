@@ -34,7 +34,8 @@
 #include "linesearch/fixed.cuh"
 #include "linesearch/linesearch_utils.cuh"
 #include "error.cuh"
-#include "functions.cuh"
+#include "framework.cuh"
+#include "linesearch/linesearch_kernels.cuh"
 #include "factory.cuh"
 #include <iostream>
 
@@ -50,8 +51,7 @@ extern Image* I;
 extern ObjectiveFunction* testof;
 
 // Global variables for f1dim (used by evaluateLineFunction)
-extern float* device_pcom;
-extern float *device_xicom, (*nrfunc)(float*);
+#include "linesearch/linesearch_globals.cuh"
 
 std::pair<float, float> Fixed::search(float* current_point,
                                       float* search_direction,
