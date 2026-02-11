@@ -149,7 +149,6 @@ file(GLOB_RECURSE CUDA_SOURCE_FILES
      ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/ms/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/fits/*.cu
-     ${CMAKE_CURRENT_SOURCE_DIR}/src/io/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu
