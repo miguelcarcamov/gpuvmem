@@ -5,12 +5,12 @@
 #include "fits/fits_io.h"
 #include <CCfits/FITS.h>
 #include <CCfits/PHDU.h>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fitsio.h>
 #include <helper_cuda.h>
 #include <stdexcept>
-#include <valarray>
 #include <vector>
 
 namespace gpuvmem {
@@ -74,12 +74,14 @@ std::vector<float> read_fits_image_float(const std::string& path) {
     throw std::runtime_error("read_fits_image_float: invalid dimensions");
   try {
     CCfits::FITS fits(path, CCfits::Read, true);
-    CCfits::PHDU& phdu = fits.pHDU();
-    std::valarray<float> contents;
-    phdu.read(contents);
-    std::vector<float> data(contents.size());
-    for (size_t i = 0; i < data.size(); i++)
-      data[i] = contents[i];
+    ::fitsfile* fp = fits.fitsPointer();
+    const long elements = h.naxis1 * h.naxis2;
+    std::vector<float> data(static_cast<size_t>(elements));
+    float nullval = 0.0f;
+    int anynul = 0, status = 0;
+    fits_read_img(fp, TFLOAT, 1, elements, &nullval, data.data(), &anynul, &status);
+    if (status)
+      throw std::runtime_error("read_fits_image_float: fits_read_img failed");
     return data;
   } catch (const CCfits::FitsException& e) {
     throw_from_ccfits(e);
@@ -145,10 +147,73 @@ void write_fits_image_slice(const WriteFitsImageOptions& opts) {
     if (status) status = 0;
     fits_update_key(fp, TDOUBLE, "CRVAL2", &crval2_val, "Changed by gpuvmem", &status);
     if (status) status = 0;
-    std::valarray<float> arr(static_cast<size_t>(elements));
-    for (long i = 0; i < elements; i++)
-      arr[static_cast<size_t>(i)] = write_ptr[static_cast<size_t>(i)];
-    outFits.pHDU().write(1, elements, arr);
+    int write_status = 0;
+    fits_write_img(fp, TFLOAT, 1, elements, const_cast<float*>(write_ptr), &write_status);
+    if (write_status)
+      throw std::runtime_error("write_fits_image_slice: fits_write_img failed");
+  } catch (const CCfits::FitsException& e) {
+    throw_from_ccfits(e);
+  }
+}
+
+void write_fits_image_complex(const WriteFitsComplexImageOptions& opts) {
+  if (!opts.data || opts.naxis1 <= 0 || opts.naxis2 <= 0)
+    throw std::runtime_error("write_fits_image_complex: invalid data or dimensions");
+  const long elements = opts.naxis1 * opts.naxis2;
+  std::vector<cufftComplex> host_buf;
+  const cufftComplex* read_ptr = nullptr;
+  if (opts.data_on_device) {
+    host_buf.resize(static_cast<size_t>(elements));
+    checkCudaErrors(cudaMemcpy(host_buf.data(), opts.data,
+                               elements * sizeof(cufftComplex), cudaMemcpyDeviceToHost));
+    read_ptr = host_buf.data();
+  } else {
+    read_ptr = opts.data;
+  }
+  // Convert complex to float based on output_type
+  std::vector<float> image2D(static_cast<size_t>(elements));
+  for (long i = 0; i < elements; i++) {
+    const cufftComplex& z = read_ptr[static_cast<size_t>(i)];
+    switch (opts.output_type) {
+      case WriteFitsComplexImageOptions::AMPLITUDE:
+        image2D[static_cast<size_t>(i)] = std::sqrt(z.x * z.x + z.y * z.y);
+        break;
+      case WriteFitsComplexImageOptions::PHASE:
+        image2D[static_cast<size_t>(i)] = std::atan2(z.y, z.x) * 180.0f / M_PI;
+        break;
+      case WriteFitsComplexImageOptions::REAL:
+        image2D[static_cast<size_t>(i)] = z.x;
+        break;
+      case WriteFitsComplexImageOptions::IMAG:
+        image2D[static_cast<size_t>(i)] = z.y;
+        break;
+    }
+  }
+  try {
+    CCfits::FITS templateFits(opts.header_template, CCfits::Read, false);
+    std::string out_path = opts.output_path;
+    if (out_path.empty() || out_path[0] != '!')
+      out_path = "!" + out_path;
+    CCfits::FITS outFits(out_path, templateFits);
+    ::fitsfile* fp = outFits.fitsPointer();
+    int status = 0;
+    char bunit_buf[32] = "";
+    if (opts.bunit) snprintf(bunit_buf, sizeof(bunit_buf), "%s", opts.bunit);
+    fits_update_key(fp, TSTRING, "BUNIT", bunit_buf, "Unit of measurement", &status);
+    if (status) status = 0;
+    int niter_val = opts.niter;
+    fits_update_key(fp, TINT, "NITER", &niter_val,
+                    "Number of iteration in gpuvmem software", &status);
+    if (status) status = 0;
+    long na1 = opts.naxis1, na2 = opts.naxis2;
+    fits_update_key(fp, TINT, "NAXIS1", &na1, "", &status);
+    if (status) status = 0;
+    fits_update_key(fp, TINT, "NAXIS2", &na2, "", &status);
+    if (status) status = 0;
+    int write_status = 0;
+    fits_write_img(fp, TFLOAT, 1, elements, image2D.data(), &write_status);
+    if (write_status)
+      throw std::runtime_error("write_fits_image_complex: fits_write_img failed");
   } catch (const CCfits::FitsException& e) {
     throw_from_ccfits(e);
   }

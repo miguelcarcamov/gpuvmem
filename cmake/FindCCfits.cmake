@@ -20,12 +20,12 @@ if(NOT CCfits_FOUND)
 
   # Look for CCfits/FITS.h (standard install has include/CCfits/FITS.h)
   find_path(CCfits_INCLUDE_DIR CCfits/FITS.h
-    HINTS ${CCfits_ROOT_DIR} ${CMAKE_PREFIX_PATH}
+    HINTS ${CCfits_ROOT_DIR} ${CMAKE_PREFIX_PATH} /usr/local
     PATH_SUFFIXES include)
 
-  # Library name is typically CCfits (libCCfits.so or libCCfits.a)
-  find_library(CCfits_LIBRARY CCfits
-    HINTS ${CCfits_ROOT_DIR} ${CMAKE_PREFIX_PATH}
+  # Library name is typically CCfits (libCCfits.so or libCCfits.a); some builds use ccfits (lowercase)
+  find_library(CCfits_LIBRARY NAMES CCfits ccfits
+    HINTS ${CCfits_ROOT_DIR} ${CMAKE_PREFIX_PATH} /usr/local
     PATH_SUFFIXES lib lib64)
 
   mark_as_advanced(CCfits_INCLUDE_DIR CCfits_LIBRARY)

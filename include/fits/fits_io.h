@@ -1,6 +1,7 @@
 #ifndef GPUVMEM_FITS_FITS_IO_H
 #define GPUVMEM_FITS_FITS_IO_H
 
+#include <cufft.h>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,27 @@ std::vector<float> read_fits_image_float(const std::string& path);
 
 /** Write one 2D slice to a new FITS file: copy header from template, then write data (optionally normalized). */
 void write_fits_image_slice(const WriteFitsImageOptions& opts);
+
+/** Options for writing a complex image (cufftComplex) to FITS. */
+struct WriteFitsComplexImageOptions {
+  std::string output_path;      /**< Full path for output file (e.g. "mem/MEM_0.fits"). */
+  std::string header_template; /**< FITS file to copy header from (e.g. mod_in). */
+  cufftComplex* data{nullptr};  /**< Complex image buffer (host or device; see data_on_device). */
+  long naxis1{0};               /**< NAXIS1: image width (columns). */
+  long naxis2{0};               /**< NAXIS2: image height (rows). */
+  const char* bunit{"JY/PIXEL"}; /**< BUNIT: physical units. */
+  int niter{0};                 /**< NITER: iteration number (written to header). */
+  enum OutputType {
+    AMPLITUDE = 0,  /**< Write amplitude |z| = sqrt(real² + imag²). */
+    PHASE = 1,      /**< Write phase in degrees. */
+    REAL = 2,       /**< Write real part. */
+    IMAG = 3        /**< Write imaginary part. */
+  } output_type{AMPLITUDE}; /**< What to write from complex data. */
+  bool data_on_device{false};   /**< If true, data is on GPU; implementation copies to host. */
+};
+
+/** Write complex image (cufftComplex) to FITS: copy header from template, convert to amplitude/phase/real/imag, then write. */
+void write_fits_image_complex(const WriteFitsComplexImageOptions& opts);
 
 }  // namespace fits
 }  // namespace gpuvmem

@@ -55,90 +55,6 @@ const float LIGHTSPEED = 2.99792458E8;
 
 enum { AIRYDISK, GAUSSIAN };
 
-typedef struct MSData {
-  int n_internal_frequencies;
-  std::vector<int> n_internal_frequencies_ids;
-  int total_frequencies;
-  std::vector<int> channels;
-  int nfields;
-  int nsamples;
-  int nstokes;
-  int nantennas;
-  int nbaselines;
-  float ref_freq;
-  float min_freq;
-  float max_freq;
-  float max_blength;
-  float min_blength;
-  double uvmax_wavelength;
-  std::string telescope_name;
-  std::vector<int> corr_type;
-
-  int max_number_visibilities_in_channel_and_stokes;
-  int max_number_vis;
-} MSData;
-
-typedef struct host_visibilities {
-  std::vector<double3> uvw;
-  std::vector<float> weight;
-  std::vector<cufftComplex> Vo;
-  std::vector<cufftComplex> Vm;
-  std::vector<cufftComplex> Vr;
-  std::vector<int> S;
-} HVis;
-
-typedef struct device_visibilities {
-  double3* uvw;
-  float* weight;
-  cufftComplex* Vo;
-  cufftComplex* Vm;
-  cufftComplex* Vr;
-  int* S;
-
-  int threadsPerBlockUV;
-  int numBlocksUV;
-} DVis;
-
-typedef struct field {
-  int id;
-  int valid_frequencies;
-  double ref_ra, ref_dec;
-  double phs_ra, phs_dec;
-  float ref_xobs_cartesian, ref_yobs_cartesian;
-  float phs_xobs_cartesian, phs_yobs_cartesian;
-  float ref_xobs_pix, ref_yobs_pix;
-  float phs_xobs_pix, phs_yobs_pix;
-  float* atten_image;
-  std::vector<float> nu;
-  std::vector<std::vector<long>> numVisibilitiesPerFreqPerStoke;
-  std::vector<long> numVisibilitiesPerFreq;
-  std::vector<std::vector<long>> backup_numVisibilitiesPerFreqPerStoke;
-  std::vector<long> backup_numVisibilitiesPerFreq;
-  std::vector<std::vector<HVis>> visibilities;
-  std::vector<std::vector<DVis>> device_visibilities;
-  std::vector<std::vector<HVis>> backup_visibilities;
-  std::vector<std::vector<float>>
-      N_eff_perFreqPerStoke;  // Pre-computed effective number of samples
-} Field;
-
-typedef struct MSAntenna {
-  std::string antenna_id;
-  std::string station;
-  double3 position;
-  float antenna_diameter;
-  float pb_factor;
-  float pb_cutoff;
-  int primary_beam;
-} MSAntenna;
-
-typedef struct MSDataset {
-  char* name;
-  char* oname;
-  std::vector<Field> fields;
-  std::vector<MSAntenna> antennas;
-  MSData data;
-} MSDataset;
-
 typedef struct header_values {
   double DELTAX, DELTAY;
   double ra, dec;
@@ -201,38 +117,8 @@ __host__ headerValues open_fits(T** data, const char* filename, int datatype) {
   return h_values;
 }
 
-__host__ void readMS(const char* MS_name,
-                     std::vector<MSAntenna>& antennas,
-                     std::vector<Field>& fields,
-                     MSData* data,
-                     bool noise,
-                     bool W_projection,
-                     float random_prob,
-                     int gridding);
-__host__ void readMS(const char* MS_name,
-                     std::string data_column,
-                     std::vector<MSAntenna>& antennas,
-                     std::vector<Field>& fields,
-                     MSData* data,
-                     bool noise,
-                     bool W_projection,
-                     float random_prob,
-                     int gridding);
 __host__ void MScopy(const char* in_dir, const char* in_dir_dest);
 
-__host__ void modelToHost(std::vector<Field>& fields,
-                          MSData data,
-                          int num_gpus,
-                          int firstgpu,
-                          bool apply_hermitian_conjugation = true);
-__host__ void writeMS(const char* outfile,
-                      const char* out_col,
-                      std::vector<Field> fields,
-                      MSData data,
-                      float random_probability,
-                      bool sim,
-                      bool noise,
-                      bool W_projection);
 __host__ void OCopyFITS(float* I,
                         const char* original_filename,
                         const char* path,

@@ -144,15 +144,35 @@ endif()
 # Create executable target
 add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
 
-# Add all CUDA source files (including subdirectories)
-file(GLOB_RECURSE SOURCE_FILES 
+# Add all CUDA source files (.cu) - compiled with nvcc
+file(GLOB_RECURSE CUDA_SOURCE_FILES 
      ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/ms/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/fits/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/io/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/optimizers/*.cu
      ${CMAKE_CURRENT_SOURCE_DIR}/src/linesearch/*.cu
-     ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu)
-target_sources(gpuvmem PRIVATE ${SOURCE_FILES})
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/seeding/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/chi2/*.cu
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/objective_function/terms/regularizers/*.cu)
+
+# Add all C++ source files (.cc) - compiled with g++
+file(GLOB_RECURSE CPP_SOURCE_FILES 
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/src/rng/*.cc)
+
+# Add CUDA files (compiled with nvcc)
+target_sources(gpuvmem PRIVATE ${CUDA_SOURCE_FILES})
+
+# Add C++ files (compiled with g++)
+if(CPP_SOURCE_FILES)
+  target_sources(gpuvmem PRIVATE ${CPP_SOURCE_FILES})
+  # Set language property for .cc files to ensure they're compiled with g++
+  foreach(CC_FILE ${CPP_SOURCE_FILES})
+    set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
+  endforeach()
+endif()
 
 # Set C++ compile features based on standard
 target_compile_features(gpuvmem PUBLIC cxx_std_${CMAKE_CXX_STANDARD})
@@ -171,9 +191,13 @@ target_include_directories(
          ${CFITSIO_INCLUDE_DIR} # CFITSIO headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include # Project headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/ms
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/fits
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/io
          ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
          ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
          ${Boost_INCLUDE_DIRS} # Boost headers
          ${CUDAToolkit_LIBRARY_ROOT}/samples/common/inc # CUDA samples headers
 )
@@ -497,15 +521,23 @@ set(CUDA_LIBS ${CUDA_cuda_LIBRARY} ${CUDA_cudart_LIBRARY} ${CUDA_cufft_LIBRARY})
 target_include_directories(gpuvmem PUBLIC ${CCfits_INCLUDE_DIRS})
 set(EXTERNAL_LIBS ${CASACORE_LIBRARIES} ${CCfits_LIBRARIES} ${CFITSIO_LIBRARIES} ${Boost_LIBRARIES})
 message(STATUS "FITS I/O: CCfits (mandatory)")
+message(STATUS "CCfits_LIBRARY=${CCfits_LIBRARY}")
+if(CCfits_LIBRARY)
+  get_filename_component(CCfits_LIBRARY_DIR "${CCfits_LIBRARY}" DIRECTORY)
+  target_link_directories(gpuvmem PRIVATE "${CCfits_LIBRARY_DIR}")
+endif()
 
-# Link all libraries
+# Link all libraries (CCfits and CFITSIO explicitly so host linker sees them when linking CUDA object files)
 target_link_libraries(
   gpuvmem
   PRIVATE m # Math library
           stdc++ # C++ standard library
           gomp # OpenMP (GNU implementation)
           ${CUDA_LIBS}
-          ${EXTERNAL_LIBS})
+          ${CCfits_LIBRARIES}
+          ${CFITSIO_LIBRARIES}
+          ${CASACORE_LIBRARIES}
+          ${Boost_LIBRARIES})
 
 # ============================================================================
 # Installation

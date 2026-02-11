@@ -80,14 +80,6 @@ __host__ void getNumBlocksAndThreads(int n,
 __host__ Vars getOptions(int argc, char** argv);
 __host__ float chiCuadrado(float* I);
 __host__ void dchiCuadrado(float* I, float* dxi2);
-__host__ void do_gridding(std::vector<Field>& fields,
-                          MSData* data,
-                          double deltau,
-                          double deltav,
-                          int M,
-                          int N,
-                          CKernel* ckernel,
-                          int gridding);
 /** New MS model: grid from MeasurementSet (host); upload to gpu; returns
  * gridded MeasurementSet for legacy view. */
 __host__ gpuvmem::ms::MeasurementSet do_gridding(
