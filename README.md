@@ -325,7 +325,7 @@ If you use gpuvmem in research, please cite **Cárcamo et al.**:
 
 ## Contributors
 
-- **Miguel Cárcamo** — The University of Manchester — miguel.carcamo@postgrad.manchester.ac.uk  
+- **Miguel Cárcamo** — Universidad de Santiago de Chile (USACH) — [github.com/miguelcarcamov](https://github.com/miguelcarcamov/) — [miguel.carcamo@usach.cl](mailto:miguel.carcamo@usach.cl)  
 - **Nicolás Muñoz** — Universidad de Santiago de Chile  
 - **Fernando Rannou** — Universidad de Santiago de Chile  
 - **Pablo Román** — Universidad de Santiago de Chile  
