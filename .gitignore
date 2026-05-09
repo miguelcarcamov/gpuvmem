@@ -7,6 +7,8 @@
 *.bin
 bin
 bin/*
+lib
+lib/*
 build
 build/*
 *.o

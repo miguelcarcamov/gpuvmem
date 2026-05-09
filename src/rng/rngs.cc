@@ -145,10 +145,21 @@ void PutSeed(long x)
   if (x == 0)
     while (!ok) {
       printf("\nEnter a positive integer seed (9 digits or less) >> ");
-      (void)scanf("%ld", &x);  // Explicitly ignore return value
-      ok = (0 < x) && (x < MODULUS);
-      if (!ok)
-        printf("\nInput out of range ... try again\n");
+      int rc = scanf("%ld", &x);
+      if (rc == EOF) {
+        x = DEFAULT;
+        ok = 1;
+        printf("\nEnd of input; using default seed.\n");
+      } else if (rc != 1) {
+        int c;
+        while ((c = getchar()) != '\n' && c != EOF) {
+        }
+        printf("\nInvalid input ... try again\n");
+      } else {
+        ok = (0 < x) && (x < MODULUS);
+        if (!ok)
+          printf("\nInput out of range ... try again\n");
+      }
     }
   seed[stream] = x;
 }
