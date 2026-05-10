@@ -39,6 +39,7 @@
 #include "utils/physics_utils.cuh"
 #include "utils/complexOps.cuh"
 #include "measurement_operator/measurement_operator_host.cuh"
+#include "framework/cuda_grid.cuh"
 #include <cufft.h>
 #include <cuda_runtime.h>
 #include <vector>
@@ -48,6 +49,7 @@
 #include <omp.h>
 
 // Extern variables
+extern Vars variables;
 extern varsPerGPU* vars_gpu;
 extern int image_count;
 extern long M, N;
@@ -55,7 +57,6 @@ extern double deltau, deltav;
 extern double crpix1, crpix2;
 extern dim3 threadsPerBlockNN, numBlocksNN;
 extern int num_gpus, firstgpu;
-extern int iDivUp(int a, int b);
 extern unsigned int NearestPowerOf2(unsigned int x);
 
 // Scatter degridded values (one per chunk) to chunk.Vm; ptrs point to chan start.
@@ -260,7 +261,6 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
                             CKernel* ckernel,
                             float* I,
                             VirtualImageProcessor* ip) {
-  (void)blockSizeV;
   if (!gpu || !ckernel || !I || !ip) return;
   if (gpu->num_fields() == 0) {
     if (!gpu->upload(ms)) return;
@@ -304,7 +304,8 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
       int npol = dd->npol();
       if (nchan <= 0 || npol <= 0) continue;
 
-      const bool stokes_imaging = (image_count == npol);
+      const bool stokes_imaging =
+          !variables.stokes.empty() && image_count == npol;
 
       for (int chan = 0; chan < nchan; chan++) {
         float nu = static_cast<float>(spw.frequency(chan));
@@ -341,12 +342,15 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
 
         int nvis = static_cast<int>(num_chunks);
         UVpow2 = static_cast<long>(NearestPowerOf2(static_cast<unsigned int>(nvis)));
-        int threadsV = 512;
-        int blocksV = iDivUp(static_cast<int>(UVpow2), threadsV);
-        if (blockSizeV > 0) {
-          threadsV = blockSizeV;
-          blocksV = iDivUp(static_cast<int>(UVpow2), blockSizeV);
-        }
+        cudaDeviceProp dev_prop{};
+        checkCudaErrors(
+            cudaGetDeviceProperties(&dev_prop, gpu_idx + firstgpu));
+        const gpuvmem::CudaGrid<1> vis1d =
+            (blockSizeV >= 0)
+                ? gpuvmem::CudaGrid<1>::from_total(UVpow2, blockSizeV)
+                : gpuvmem::CudaGrid<1>::from_auto(UVpow2, dev_prop);
+        const dim3 blocks_vis = vis1d.blocks();
+        const dim3 threads_vis = vis1d.threads();
 
         if (stokes_imaging) {
           for (int pol = 0; pol < npol; pol++) {
@@ -359,7 +363,7 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
             cufftComplex* d_Vm_out = nullptr;
             checkCudaErrors(
                 cudaMalloc(&d_Vm_out, num_chunks * sizeof(cufftComplex)));
-            degriddingGPU<<<blocksV, threadsV>>>(
+            degriddingGPU<<<blocks_vis, threads_vis>>>(
                 d_uvw, d_Vm_out, vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
                 deltau, deltav, nvis, M, N, ckernel->getm(), ckernel->getn(),
                 ckernel->getSupportX(), ckernel->getSupportY());
@@ -391,7 +395,7 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
           cufftComplex* d_Vm_out = nullptr;
           checkCudaErrors(
               cudaMalloc(&d_Vm_out, num_chunks * sizeof(cufftComplex)));
-          degriddingGPU<<<blocksV, threadsV>>>(
+          degriddingGPU<<<blocks_vis, threads_vis>>>(
               d_uvw, d_Vm_out, vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
               deltau, deltav, nvis, M, N, ckernel->getm(), ckernel->getn(),
               ckernel->getSupportX(), ckernel->getSupportY());

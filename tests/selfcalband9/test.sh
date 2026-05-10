@@ -13,5 +13,4 @@ valid $test
 #Comment the following lines to see the results of the test
 rm -rf $2/residuals.ms
 rm -rf $2/mem/
-rm $2/alpha.fits
-rm $2/mod_out.fits
+rm -f "$2/alpha.fits" "$2/mod_out.fits"

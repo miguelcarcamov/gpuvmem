@@ -59,7 +59,9 @@ class CKernel {
   };
   __host__ virtual void createMemberGCF(){};
   __host__ virtual void setGCF(CKernel* gcf) { this->gcf = gcf; };
-  __host__ virtual float* getGCFGPU() { return this->gcf->getGPUKernel(); };
+  __host__ virtual float* getGCFGPU() {
+    return this->gcf != nullptr ? this->gcf->getGPUKernel() : nullptr;
+  };
   __host__ virtual std::vector<float> getGCFCPU() {
     return this->gcf->getKernel();
   };

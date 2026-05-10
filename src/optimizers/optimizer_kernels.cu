@@ -134,6 +134,25 @@ __global__ void calculateSandY(float* d_y,
       p[M * N * image + N * i + j] - p_old[M * N * image + N * i + j];
 }
 
+__global__ void calculateSandYScratch(float* scratch_y,
+                                      float* scratch_s,
+                                      float* p,
+                                      float* xi,
+                                      float* p_old,
+                                      float* xi_old,
+                                      int M,
+                                      int N,
+                                      int image) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  scratch_y[M * N * image + N * i + j] =
+      xi[M * N * image + N * i + j] -
+      (-1.0f * xi_old[M * N * image + N * i + j]);
+  scratch_s[M * N * image + N * i + j] =
+      p[M * N * image + N * i + j] - p_old[M * N * image + N * i + j];
+}
+
 __global__ void searchDirection(float* g,
                                 float* xi,
                                 float* h,

@@ -45,6 +45,21 @@ class LBFGS : public Optimizer {
    */
   __host__ void setLineSearcher(std::unique_ptr<LineSearcher> searcher);
 
+  __host__ void setProjection(std::unique_ptr<Projection> projection) override;
+
+  /**
+   * @brief If true, a failed curvature test (y^T s <= 0) clears all L-BFGS pairs
+   *        (Pyralysis `clear_on_curvature_failure`). If false, the bad step is only
+   *        skipped for history (default, like Pyralysis default).
+   */
+  __host__ void setClearHistoryOnCurvatureFailure(bool v) {
+    clear_history_on_curvature_failure_ = v;
+  }
+
+  __host__ bool getClearHistoryOnCurvatureFailure() const {
+    return clear_history_on_curvature_failure_;
+  }
+
  protected:
   /**
    * @brief Compute the descent direction using two-loop recursion.
@@ -86,9 +101,10 @@ class LBFGS : public Optimizer {
 
   /**
    * @brief Compute gamma scaling factor for Hessian approximation.
-   * 
-   * Computes the BFGS scaling factor: gamma = (s^T y) / (y^T y)
-   * 
+   *
+   * Computes gamma = (s^T y) / (y^T y) using the most recent correction pair
+   * in the active L-BFGS window (same convention as Pyralysis / Nocedal & Wright).
+   *
    * @param par_M Number of correction pairs to use
    * @param lbfgs_it Current iteration index in circular buffer
    * @return Gamma scaling factor
@@ -96,14 +112,12 @@ class LBFGS : public Optimizer {
   __host__ float computeScalingFactor(int par_M, int lbfgs_it);
 
   /**
-   * @brief Update LBFGS iteration history.
-   * 
-   * Updates the correction pairs where:
-   * s_k = x_{k+1} - x_k and y_k = g_{k+1} - g_k
-   * 
-   * @param iteration Current iteration number
+   * @brief Update L-BFGS history with the latest (s, y) pair if curvature y^T s > 0.
+   *
+   * Skips storing the pair when the curvature test fails (Pyralysis-style).
+   * Optionally clears all history when `setClearHistoryOnCurvatureFailure(true)`.
    */
-  __host__ void updateHistory(int iteration);
+  __host__ void updateHistory();
 
   /**
    * @brief Perform a single optimization iteration.
@@ -147,6 +161,8 @@ class LBFGS : public Optimizer {
   float* d_r;           // Temporary storage for second loop
   float* d_q;           // Temporary storage for first loop
   float* aux_vector;    // Temporary storage for dot products
+  float* lbfgs_scratch_s = nullptr;  // Staged s for curvature check (M*N*image_count)
+  float* lbfgs_scratch_y = nullptr;  // Staged y for curvature check
 
   // Optimization state
   float fret = 0.0f;    // Function value after line search
@@ -161,6 +177,10 @@ class LBFGS : public Optimizer {
   
   // Previous step size (used as fallback initial_alpha for line search)
   float prev_step_size;   // Previous step size
+
+  /** Number of correction pairs successfully stored (drives two-loop window). */
+  int lbfgs_stored_pairs = 0;
+  bool clear_history_on_curvature_failure_ = false;
 
  private:
   /**

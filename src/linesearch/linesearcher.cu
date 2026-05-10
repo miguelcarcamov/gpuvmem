@@ -32,14 +32,24 @@
  */
 
 #include "linesearch/linesearcher.cuh"
-#include "linesearch/f1dim.cuh"
+#include "linesearch/line_search_1d_eval.cuh"
+#include "optimization/projection.hh"
 #include "error.cuh"
+#include <iostream>
 #include "framework.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel
 
-extern long M;
-extern long N;
-extern int image_count;
+LineSearcher::LineSearcher()
+    : tolerance(1.0e-7f),
+      initial_step_size_value(1.0f),
+      image(nullptr),
+      objective_function_(nullptr),
+      active_line_1d_eval_(nullptr),
+      projection_(std::make_unique<NoProjection>()),
+      seeder_ptr(nullptr),
+      prev_point(nullptr),
+      prev_gradient(nullptr),
+      prev_step_size(1.0f) {}
 
 LineSearcher::~LineSearcher() {
   if (seeder_ptr != nullptr) {
@@ -54,6 +64,39 @@ LineSearcher::~LineSearcher() {
     cudaFree(prev_gradient);
     prev_gradient = nullptr;
   }
+}
+
+void LineSearcher::setImage(Image* im) { image = im; }
+
+Image* LineSearcher::getImage() const { return image; }
+
+StepSizeSeeder* LineSearcher::getStepSizeSeeder() const { return seeder_ptr; }
+
+void LineSearcher::setTolerance(float tol) { tolerance = tol; }
+
+float LineSearcher::getTolerance() const { return tolerance; }
+
+void LineSearcher::setInitialStepSize(float initial_step_size) {
+  initial_step_size_value = initial_step_size;
+}
+
+float LineSearcher::getInitialStepSize() const { return initial_step_size_value; }
+
+void LineSearcher::setObjectiveFunction(ObjectiveFunction* of) { objective_function_ = of; }
+
+ObjectiveFunction* LineSearcher::getObjectiveFunction() const { return objective_function_; }
+
+const Projection* LineSearcher::getProjection() const { return projection_.get(); }
+
+void LineSearcher::setProjection(std::unique_ptr<Projection> projection) {
+  projection_ = std::move(projection);
+  if (projection_ == nullptr) {
+    projection_ = std::make_unique<NoProjection>();
+  }
+}
+
+std::unique_ptr<Projection> LineSearcher::releaseProjection() {
+  return std::move(projection_);
 }
 
 void LineSearcher::setStepSizeSeeder(std::unique_ptr<StepSizeSeeder> seeder) {
@@ -180,18 +223,47 @@ void LineSearcher::updateHistory(ObjectiveFunction* objective_function,
 }
 
 float LineSearcher::evaluateLineFunction(float alpha) {
-  // Use f1dim internally for consistency with Brent and other Numerical Recipes methods
-  return f1dim(alpha);
+  if (active_line_1d_eval_ != nullptr) {
+    return lineSearch1dEval(active_line_1d_eval_, alpha);
+  }
+  std::cerr << "ERROR: evaluateLineFunction: no active LineSearch1dEval (missing "
+               "ScopedSearchContext with line_eval in LineSearcher::search?)."
+            << std::endl;
+  return 0.0f;
 }
 
 // Global pointer for wrapper function (used by Brent and other Numerical Recipes routines)
 // that need a C-style function pointer
+namespace {
 LineSearcher* current_line_searcher = nullptr;
+}  // namespace
+
+LineSearcher* lineSearchGetCurrent() {
+  return current_line_searcher;
+}
 
 __host__ float evaluateLineFunctionWrapper(float alpha) {
-  if (current_line_searcher != nullptr) {
-    return current_line_searcher->evaluateLineFunction(alpha);
+  LineSearcher* cur = lineSearchGetCurrent();
+  if (cur != nullptr) {
+    return cur->evaluateLineFunction(alpha);
   }
-  // Fallback to f1dim if no line searcher is set
-  return f1dim(alpha);
+  std::cerr << "ERROR: evaluateLineFunctionWrapper: no active LineSearcher." << std::endl;
+  return 0.0f;
+}
+
+LineSearcher::ScopedSearchContext::ScopedSearchContext(LineSearcher* owner,
+                                                      ObjectiveFunction* of,
+                                                      const LineSearch1dEval* line_eval)
+    : owner_(owner),
+      prev_current_(current_line_searcher),
+      prev_line_eval_(owner->active_line_1d_eval_) {
+  current_line_searcher = owner_;
+  owner_->setObjectiveFunction(of);
+  owner_->active_line_1d_eval_ = line_eval;
+}
+
+LineSearcher::ScopedSearchContext::~ScopedSearchContext() {
+  current_line_searcher = prev_current_;
+  owner_->active_line_1d_eval_ = prev_line_eval_;
+  owner_->setObjectiveFunction(nullptr);
 }

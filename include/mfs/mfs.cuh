@@ -21,14 +21,20 @@ class MFS : public Synthesizer {
   void unSetDevice();
   std::vector<std::string> countAndSeparateStrings(std::string long_str,
                                                    std::string sep);
-  void configure(int argc, char** argv);
+  __host__ void configure(const GpuvmemCliConfig& config) override;
   void applyFilter(Filter* filter) {
     if (this->getDatasets())
       filter->applyCriteria(*this->getDatasets());
   }
-  
+
+  const GpuvmemCliConfig& cliConfig() const { return cli_config_; }
+
  protected:
   std::vector<float> minimal_pixel_values;  // Store minimal pixel values for Image object
+
+ private:
+  GpuvmemCliConfig cli_config_;
+  void syncLegacyGlobalsFromCli_(const GpuvmemCliConfig& cfg);
 };
 
 #endif

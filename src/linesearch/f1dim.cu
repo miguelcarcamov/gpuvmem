@@ -31,38 +31,26 @@
  * -------------------------------------------------------------------------
  */
 
-#include "linesearch/f1dim.cuh"
-#include "linesearch/linesearcher.cuh"  // For LineSearcher class definition
-#include "linesearch/linesearch_globals.cuh"
+#include "linesearch/line_search_1d_eval.cuh"
+#include "linesearch/linesearcher.cuh"
+#include "linesearch/linesearch_utils.cuh"
 #include "framework.cuh"
 #include "linesearch/linesearch_kernels.cuh"
-extern long M;
-extern long N;
-extern float MINPIX, eta;
-extern dim3 threadsPerBlockNN;
-extern dim3 numBlocksNN;
-extern bool nopositivity;
-extern float* initial_values;
-extern int image_count;
+#include "classes/image.cuh"
+#include "classes/objectivefunction.cuh"
+#include "cli/gpuvmem_cli_config.hh"
+#include <iostream>
 
-extern ObjectiveFunction* testof;
-extern Image* I;  // Fallback for backward compatibility
-extern LineSearcher* current_line_searcher;  // Set by Brent, used to get Image object
-
-__host__ float f1dim(float x) {
-  float* device_xt;
-  float f;
-
-  // Get Image object from current_line_searcher (set by Brent) instead of extern Image* I
-  Image* image_to_use = (current_line_searcher != nullptr) ? current_line_searcher->getImage() : I;
-  
-  // Fallback to extern I if line searcher doesn't have image set (for backward compatibility)
-  if (image_to_use == nullptr) {
-    image_to_use = I;
+__host__ float lineSearch1dEval(const LineSearch1dEval* ctx, float x) {
+  if (ctx == nullptr || ctx->device_pcom == nullptr || ctx->device_xicom == nullptr ||
+      ctx->objective_function == nullptr) {
+    std::cerr << "ERROR: lineSearch1dEval: invalid LineSearch1dEval context." << std::endl;
+    return 0.0f;
   }
-  
+
+  Image* image_to_use = ctx->image;
   if (image_to_use == nullptr) {
-    std::cerr << "ERROR: f1dim: No Image object available!" << std::endl;
+    std::cerr << "ERROR: lineSearch1dEval: No Image in context." << std::endl;
     return 0.0f;
   }
 
@@ -70,31 +58,41 @@ __host__ float f1dim(float x) {
   long N_local = image_to_use->getN();
   int image_count_local = image_to_use->getImageCount();
 
+  float* device_xt = nullptr;
   checkCudaErrors(
       cudaMalloc((void**)&device_xt, sizeof(float) * M_local * N_local * image_count_local));
   checkCudaErrors(
       cudaMemset(device_xt, 0, sizeof(float) * M_local * N_local * image_count_local));
 
+  ObjectiveFunction* objective_function = ctx->objective_function;
+  cudaSetDevice(objective_function->getPrimaryCudaDevice());
   imageMap* auxPtr = image_to_use->getFunctionMapping();
-  // xt = pcom+x*xicom;
-  if (!nopositivity) {
+  dim3 threads_launch = objective_function->getThreadsPerBlockNN();
+  dim3 blocks_launch = objective_function->getNumBlocksNN();
+  if (!gpuvmem_cli_nopositivity()) {
     for (int i = 0; i < image_count_local; i++) {
-      (auxPtr[i].evaluateXt)(device_xt, device_pcom, device_xicom, x, i);
+      (auxPtr[i].evaluateXt)(device_xt, ctx->device_pcom, ctx->device_xicom, x, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
   } else {
+    LineSearcher* ls = lineSearchGetCurrent();
+    const Projection* proj = ls != nullptr ? ls->getProjection() : nullptr;
     for (int i = 0; i < image_count_local; i++) {
-      evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(
-          device_xt, device_pcom, device_xicom, x, N_local, M_local, i);
+      evaluateXtNoPositivity<<<blocks_launch, threads_launch>>>(
+          device_xt, ctx->device_pcom, ctx->device_xicom, x, N_local, M_local, i);
       checkCudaErrors(cudaDeviceSynchronize());
+      applyProjectionToImagePlane(proj, device_xt, N_local, M_local, i,
+                                       static_cast<unsigned>(blocks_launch.x),
+                                       static_cast<unsigned>(blocks_launch.y),
+                                       static_cast<unsigned>(threads_launch.x),
+                                       static_cast<unsigned>(threads_launch.y));
     }
-    /*evaluateXtNoPositivity<<<numBlocksNN, threadsPerBlockNN>>>(device_xt,
-       device_pcom, device_xicom, x, N, M, 0);
-       checkCudaErrors(cudaDeviceSynchronize());*/
   }
-
-  // f = (*nrfunc)(device_xt);
-  f = testof->calcFunction(device_xt);
+  float f = objective_function->calcFunction(device_xt);
   cudaFree(device_xt);
   return f;
+}
+
+__host__ float lineSearch1dEvalThunk(float x, void* user) {
+  return lineSearch1dEval(static_cast<const LineSearch1dEval*>(user), x);
 }

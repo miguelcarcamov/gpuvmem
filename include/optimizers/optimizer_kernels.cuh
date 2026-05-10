@@ -52,6 +52,17 @@ __global__ void calculateSandY(float* d_y,
                                int N,
                                int image);
 
+/** Staged s,y (flat M*N*image + …) for curvature check before writing history slots. */
+__global__ void calculateSandYScratch(float* scratch_y,
+                                      float* scratch_s,
+                                      float* p,
+                                      float* xi,
+                                      float* p_old,
+                                      float* xi_old,
+                                      int M,
+                                      int N,
+                                      int image);
+
 __global__ void searchDirection(float* g,
                                 float* xi,
                                 float* h,

@@ -47,16 +47,17 @@ __host__ void mnbrak(float* ax,
                      float* fa,
                      float* fb,
                      float* fc,
-                     float (*func)(float)) {
+                     LineSearch1dFloatFunc func,
+                     void* user) {
   float ulim, u, r, q, fu, dum;
-  *fa = (*func)(*ax);
-  *fb = (*func)(*bx);
+  *fa = (*func)(*ax, user);
+  *fb = (*func)(*bx, user);
   if (*fb > *fa) {
     SHFT(dum, *ax, *bx, dum)
     SHFT(dum, *fb, *fa, dum)
   }
   *cx = (*bx) + GOLD * (*bx - *ax);
-  *fc = (*func)(*cx);
+  *fc = (*func)(*cx, user);
   while (*fb > *fc) {
     r = (*bx - *ax) * (*fb - *fc);
     q = (*bx - *cx) * (*fb - *fa);
@@ -64,7 +65,7 @@ __host__ void mnbrak(float* ax,
                     (2.0 * SIGN(FMAX(fabs(q - r), TINY), q - r));
     ulim = (*bx) + GLIMIT * (*cx - *bx);
     if ((*bx - u) * (u - *cx) > 0.0) {
-      fu = (*func)(u);
+      fu = (*func)(u, user);
       if (fu < *fc) {
         *ax = (*bx);
         *bx = u;
@@ -78,19 +79,19 @@ __host__ void mnbrak(float* ax,
       }
 
       u = (*cx) + GOLD * (*cx - *bx);
-      fu = (*func)(u);
+      fu = (*func)(u, user);
     } else if ((*cx - u) * (u - ulim) > 0.0) {
-      fu = (*func)(u);
+      fu = (*func)(u, user);
       if (fu < *fc) {
         SHFT(*bx, *cx, u, *cx + GOLD * (*cx - *bx))
-        SHFT(*fb, *fc, fu, (*func)(u))
+        SHFT(*fb, *fc, fu, (*func)(u, user))
       }
     } else if ((u - ulim) * (ulim - *cx) >= 0.0) {
       u = ulim;
-      fu = (*func)(u);
+      fu = (*func)(u, user);
     } else {
       u = (*cx) + GOLD * (*cx - *bx);
-      fu = (*func)(u);
+      fu = (*func)(u, user);
     }
     SHFT(*ax, *bx, *cx, u)
     SHFT(*fa, *fb, *fc, fu)

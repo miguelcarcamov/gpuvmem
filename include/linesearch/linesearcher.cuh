@@ -3,6 +3,7 @@
 
 #include "image.cuh"
 #include "objectivefunction.cuh"
+#include "optimization/projection.hh"
 #include <string>
 #include <utility>  // for std::pair
 #include <memory>   // for std::unique_ptr
@@ -10,9 +11,7 @@
 // Forward declarations
 class Image;
 class ObjectiveFunction;
-
-// Forward declaration
-class ObjectiveFunction;
+struct LineSearch1dEval;
 
 /**
  * @brief Base class for step size seeding strategies.
@@ -67,21 +66,14 @@ class QuadraticInterpolationSeeder;
  */
 class LineSearcher {
  public:
+  LineSearcher();
   virtual ~LineSearcher();
 
-  /**
-   * @brief Set the Image object (used by updatePoint and evaluateLineFunction).
-   * 
-   * @param image Image object pointer
-   */
-  void setImage(Image* image) { this->image = image; }
+  /** Set the Image object (used by updatePoint and evaluateLineFunction). */
+  void setImage(Image* image);
 
-  /**
-   * @brief Get the Image object.
-   * 
-   * @return Image object pointer
-   */
-  Image* getImage() const { return this->image; }
+  /** @return Image object pointer */
+  Image* getImage() const;
 
   /**
    * @brief Perform line search along the search direction.
@@ -111,12 +103,8 @@ class LineSearcher {
    */
   void setStepSizeSeeder(std::unique_ptr<StepSizeSeeder> seeder);
 
-  /**
-   * @brief Get the step size seeder (if set).
-   * 
-   * @return Pointer to seeder, or nullptr if not set
-   */
-  StepSizeSeeder* getStepSizeSeeder() const { return seeder_ptr; }
+  /** @return Pointer to seeder, or nullptr if not set */
+  StepSizeSeeder* getStepSizeSeeder() const;
 
   /**
    * @brief Return the name of the line search method.
@@ -125,40 +113,12 @@ class LineSearcher {
    */
   virtual const char* methodName() const = 0;
 
-  /**
-   * @brief Set tolerance for line search convergence.
-   * 
-   * @param tol Tolerance value
-   */
-  virtual void setTolerance(float tol) { tolerance = tol; }
+  virtual void setTolerance(float tol);
+  virtual float getTolerance() const;
 
-  /**
-   * @brief Get current tolerance.
-   * 
-   * @return Tolerance value
-   */
-  virtual float getTolerance() const { return tolerance; }
-  
-  /**
-   * @brief Set the initial step size for the first iteration.
-   * 
-   * @param initial_step_size Initial step size (default: 1.0)
-   * 
-   * This sets the initial alpha used when no history or seeder estimates
-   * are available. The line searcher will use this value as a fallback.
-   */
-  void setInitialStepSize(float initial_step_size) {
-    initial_step_size_value = initial_step_size;
-  }
-  
-  /**
-   * @brief Get the initial step size.
-   * 
-   * @return Initial step size value
-   */
-  float getInitialStepSize() const {
-    return initial_step_size_value;
-  }
+  /** Initial alpha when no history or seeder (default 1.0). */
+  void setInitialStepSize(float initial_step_size);
+  float getInitialStepSize() const;
 
   /**
    * @brief Update history after line search completes.
@@ -193,29 +153,52 @@ class LineSearcher {
 
   /**
    * @brief Evaluate the objective function along a line.
-   * 
-   * Computes f(x + α*d) where x is stored in device_pcom and d is stored in device_xicom.
-   * This is a wrapper around f1dim for consistency across all line searchers.
-   * 
+   *
+   * Uses the active LineSearch1dEval from ScopedSearchContext (x, d on device in that bundle).
+   *
    * @param alpha Step size along the search direction
    * @return Function value at the new point
    */
   float evaluateLineFunction(float alpha);
 
+  /**
+   * RAII: sets active LineSearcher (see lineSearchGetCurrent()), objective_function_, and optional 1D line-eval bundle
+   * for evaluateLineFunction / mnbrak-style callbacks. Nest at the start of search().
+   */
+  class ScopedSearchContext {
+   public:
+    explicit ScopedSearchContext(LineSearcher* owner, ObjectiveFunction* of,
+                                 const LineSearch1dEval* line_eval = nullptr);
+    ~ScopedSearchContext();
+    ScopedSearchContext(const ScopedSearchContext&) = delete;
+    ScopedSearchContext& operator=(const ScopedSearchContext&) = delete;
+
+   private:
+    LineSearcher* owner_;
+    LineSearcher* prev_current_;
+    const LineSearch1dEval* prev_line_eval_;
+  };
+
+  void setObjectiveFunction(ObjectiveFunction* of);
+  ObjectiveFunction* getObjectiveFunction() const;
+
+  void setProjection(std::unique_ptr<Projection> projection);
+  const Projection* getProjection() const;
+
+  /** Move projection out (e.g. when replacing the line searcher). */
+  std::unique_ptr<Projection> releaseProjection();
+
  protected:
-  float tolerance = 1.0e-7f;  // Default tolerance for line search
-  float initial_step_size_value = 1.0f;  // Initial step size (fallback when no seeder/history)
-  
-  // Image object (set by optimizer, used by updatePoint and evaluateLineFunction)
-  Image* image = nullptr;
-  
-  // Step size seeder (owned by LineSearcher)
-  StepSizeSeeder* seeder_ptr = nullptr;  // Optional seeder for initial step size
-  
-  // History for step size seeders (maintained by LineSearcher)
-  float* prev_point = nullptr;      // Previous parameter point (for BB seeders)
-  float* prev_gradient = nullptr;   // Previous gradient (for BB seeders)
-  float prev_step_size = 1.0f;      // Previous step size
+  float tolerance;
+  float initial_step_size_value;
+  Image* image;
+  ObjectiveFunction* objective_function_;
+  const LineSearch1dEval* active_line_1d_eval_;
+  std::unique_ptr<Projection> projection_;
+  StepSizeSeeder* seeder_ptr;
+  float* prev_point;
+  float* prev_gradient;
+  float prev_step_size;
   
   /**
    * @brief Compute initial step size using seeder or previous step size from history.
@@ -233,6 +216,9 @@ class LineSearcher {
   float computeInitialAlpha(ObjectiveFunction* objective_function,
                            float* current_point, float* search_direction);
 };
+
+/** Active LineSearcher while `LineSearcher::ScopedSearchContext` is alive (no extern). */
+LineSearcher* lineSearchGetCurrent();
 
 // Forward declarations for line searcher classes (defined in separate headers)
 class GLLArmijo;

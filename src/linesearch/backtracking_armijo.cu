@@ -38,22 +38,11 @@
 #include "framework.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel declaration
 #include "factory.cuh"
+#include "cli/gpuvmem_cli_config.hh"
 #include <iostream>
 #include <cmath>
 
-extern long M;
-extern long N;
-extern int image_count;
-extern float MINPIX, eta;
-extern bool nopositivity;
-extern dim3 threadsPerBlockNN;
-extern dim3 numBlocksNN;
-extern int verbose_flag;
-extern Image* I;
-extern ObjectiveFunction* testof;
-
-// Global variables for f1dim
-#include "linesearch/linesearch_globals.cuh"
+#include "linesearch/line_search_1d_eval.cuh"
 
 std::pair<float, float> BacktrackingArmijo::search(
     float* current_point, float* search_direction,
@@ -91,12 +80,11 @@ std::pair<float, float> BacktrackingArmijo::search(
                              cudaMemcpyDeviceToDevice));
   checkCudaErrors(cudaMemcpy(local_device_xicom, search_direction, array_size,
                              cudaMemcpyDeviceToDevice));
-  
-  device_pcom = local_device_pcom;
-  device_xicom = local_device_xicom;
-  testof = objective_function;
-  nrfunc = nullptr;
-  
+
+  LineSearch1dEval line_eval{local_device_pcom, local_device_xicom, this->image,
+                             objective_function};
+  LineSearcher::ScopedSearchContext _ls_ctx(this, objective_function, &line_eval);
+
   // Compute function value at current point
   float f0 = objective_function->calcFunction(current_point);
   
@@ -107,24 +95,26 @@ std::pair<float, float> BacktrackingArmijo::search(
     std::cerr << "The optimizer must call calcGradient before calling line search." << std::endl;
     return std::make_pair(f0, 0.0f);
   }
-  
+
   // Compute directional derivative ∇f(x)^T*d
   
   float* dot_result;
+  dim3 threads_bb = objective_function->getThreadsPerBlockNN();
+  dim3 blocks_bb = objective_function->getNumBlocksNN();
   // computeDotProduct kernel accesses result[M * N * image + N * i + j]
   // So we need to allocate for all images, not just one
-  checkCudaErrors(cudaMalloc((void**)&dot_result, sizeof(float) * M * N * image_count));
-  checkCudaErrors(cudaMemset(dot_result, 0, sizeof(float) * M * N * image_count));
+  checkCudaErrors(cudaMalloc((void**)&dot_result, array_size));
+  checkCudaErrors(cudaMemset(dot_result, 0, array_size));
   
-  for (int i = 0; i < image_count; i++) {
-    computeDotProduct<<<numBlocksNN, threadsPerBlockNN>>>(
-        dot_result, gradient, search_direction, N, M, i);
+  for (int i = 0; i < image_count_local; i++) {
+    computeDotProduct<<<blocks_bb, threads_bb>>>(
+        dot_result, gradient, search_direction, N_local, M_local, i);
     checkCudaErrors(cudaDeviceSynchronize());
   }
   
   // Reduce across all images: sum dot products from all images
-  float dir_deriv = deviceReduce<float>(
-      dot_result, M * N * image_count, threadsPerBlockNN.x * threadsPerBlockNN.y);
+  const long dot_elems = M_local * N_local * static_cast<long>(image_count_local);
+  float dir_deriv = deviceReduce<float>(dot_result, dot_elems, threads_bb.x * threads_bb.y);
   
   cudaFree(dot_result);
   
@@ -152,10 +142,8 @@ std::pair<float, float> BacktrackingArmijo::search(
       cudaFree(local_device_xicom);
       cudaFree(local_device_pcom);
       // Don't free gradient - it's owned by the optimizer, not allocated here
-      device_pcom = nullptr;
-      device_xicom = nullptr;
       
-      if (verbose_flag) {
+      if (gpuvmem_cli_verbose()) {
         printf("Alpha for linear minimization = %f\n\n", alpha);
       }
       
@@ -171,7 +159,7 @@ std::pair<float, float> BacktrackingArmijo::search(
   float f_final = this->evaluateLineFunction(alpha);
   checkCudaErrors(cudaMemcpy(temp_point, current_point, array_size,
                              cudaMemcpyDeviceToDevice));
-  updatePoint(objective_function, I, temp_point, search_direction, alpha);
+  updatePoint(objective_function, this->image, temp_point, search_direction, alpha);
   checkCudaErrors(cudaMemcpy(current_point, temp_point, array_size,
                              cudaMemcpyDeviceToDevice));
   
@@ -185,10 +173,8 @@ std::pair<float, float> BacktrackingArmijo::search(
   cudaFree(temp_point);
   cudaFree(local_device_xicom);
   cudaFree(local_device_pcom);
-  device_pcom = nullptr;
-  device_xicom = nullptr;
-  
-  if (verbose_flag) {
+
+  if (gpuvmem_cli_verbose()) {
     printf("Alpha for linear minimization = %f\n\n", alpha);
   }
   

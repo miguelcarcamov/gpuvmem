@@ -7,8 +7,9 @@
 #include "ms/polarization.h"
 #include "objective_function/terms/chi2/chi2.cuh"
 #include "objective_function/terms/regularizers/secondderivateerror.cuh"
+#include "cli/gpuvmem_cli_config.hh"
 #include "framework.cuh"  // Still needed for many kernels and utilities
-#include "main.cuh"       // getOptions, print_help, goToError
+#include "main.cuh"       // print_help, goToError
 #include "linesearch/linesearch_utils.cuh"  // For defaultNewP, defaultEvaluateXt, particularNewP, particularEvaluateXt
 #include "utils/physics_utils.cuh"
 #include "utils/constants.hh"
@@ -17,8 +18,13 @@
 #include "fft/fft_host.cuh"      // initFFT
 #include "beam/beam_kernels.cuh" // total_attenuation, weight_image, distance_image, noise_image
 #include "errors/errors_host.cuh"  // precomputeNeff
+#include "framework/cuda_grid.cuh"
 
 #include <algorithm>
+#include <cmath>
+#include <memory>
+
+#include "optimization/projection.hh"
 
 long M, N, numVisibilities;
 
@@ -50,7 +56,12 @@ std::string radesys;
 
 float equinox;
 
-std::vector<float> initial_values;
+// Per-image seed / bound values used when filling host_I (MFS / Stokes).
+std::vector<float> mfs_initial_pixel_values;
+// Legacy TU's (beam_host, line search / linesearch_utils) expect `float* initial_values`;
+// must not reuse the symbol name for a std::vector (ODR / ABI clash → segfault).
+static std::vector<float> g_legacy_initial_values_storage;
+float* initial_values = nullptr;
 std::vector<gpuvmem::ms::MSWithGPU> datasets;
 std::vector<gpuvmem::ms::MSWithGPU>* g_datasets = nullptr;
 
@@ -65,8 +76,6 @@ clock_t t;
 double start, end;
 
 float noise_min = 1E32;
-
-Flags flags;
 
 inline bool IsGPUCapableP2P(cudaDeviceProp* pProp) {
 #ifdef _WIN32
@@ -100,7 +109,21 @@ std::vector<std::string> MFS::countAndSeparateStrings(std::string long_str,
   return ret;
 }
 
-void MFS::configure(int argc, char** argv) {
+void MFS::syncLegacyGlobalsFromCli_(const GpuvmemCliConfig& cfg) {
+  cli_config_ = cfg;
+  gpuvmem_cli_runtime_bind(&cli_config_.runtime);
+  variables = cfg.vars;
+  verbose_flag = cfg.runtime.verbose;
+  nopositivity = cfg.runtime.nopositivity;
+  apply_noise = cfg.runtime.apply_noise;
+  print_images = cfg.runtime.print_images;
+  print_errors = cfg.runtime.print_errors;
+  save_model_input = cfg.runtime.save_model_input;
+  radius_mask = cfg.runtime.radius_mask;
+  modify_weights = cfg.runtime.modify_weights;
+}
+
+void MFS::configure(const GpuvmemCliConfig& config) {
   if (ioImageHandler == NULL) {
     ioImageHandler = createObject<Io, std::string>("IoFITS");
   }
@@ -110,7 +133,7 @@ void MFS::configure(int argc, char** argv) {
   }
 
   total_visibilities = 0;
-  variables = getOptions(argc, argv);
+  syncLegacyGlobalsFromCli_(config);
   msinput = variables.input;
   msoutput = variables.output;
   modinput = variables.modin;
@@ -199,6 +222,7 @@ void MFS::configure(int argc, char** argv) {
   // These will be stored in Image object
   // Store as member variable so it's accessible in setDevice() where Image object is created
   this->minimal_pixel_values.clear();
+  mfs_initial_pixel_values.clear();
   for (int i = 0; i < image_count; i++) {
     if (i == 0) {
       // Set MINPIX from the first initial value (before eta multiplication)
@@ -207,10 +231,10 @@ void MFS::configure(int argc, char** argv) {
       // Store MINPIX * -1.0f * eta in minimal_pixel_values (same as initial_values)
       this->minimal_pixel_values.push_back(MINPIX * -1.0f * eta);
       // Store value after eta multiplication in initial_values
-      initial_values.push_back(MINPIX * -1.0f * eta);
+      mfs_initial_pixel_values.push_back(MINPIX * -1.0f * eta);
     } else {
       this->minimal_pixel_values.push_back(std::stof(string_values[i]));
-      initial_values.push_back(std::stof(string_values[i]));
+      mfs_initial_pixel_values.push_back(std::stof(string_values[i]));
     }
   }
 
@@ -226,14 +250,25 @@ void MFS::configure(int argc, char** argv) {
     // Ensure minimal_pixel_values and initial_values have image_count entries (pad with 0.0f)
     while (static_cast<int>(this->minimal_pixel_values.size()) < image_count)
       this->minimal_pixel_values.push_back(0.0f);
-    while (static_cast<int>(initial_values.size()) < image_count)
-      initial_values.push_back(0.0f);
+    while (static_cast<int>(mfs_initial_pixel_values.size()) < image_count)
+      mfs_initial_pixel_values.push_back(0.0f);
   } else if (image_count == 1) {
-    initial_values.push_back(0.0f);
+    mfs_initial_pixel_values.push_back(0.0f);
     this->minimal_pixel_values.push_back(0.0f);  // Add default minimal pixel value for second image
     image_count++;
     imagesChanged = 1;
   }
+
+  while (static_cast<int>(mfs_initial_pixel_values.size()) < image_count)
+    mfs_initial_pixel_values.push_back(0.0f);
+  g_legacy_initial_values_storage = mfs_initial_pixel_values;
+  {
+    const size_t min_len =
+        std::max<size_t>(2u, static_cast<size_t>(image_count));
+    if (g_legacy_initial_values_storage.size() < min_len)
+      g_legacy_initial_values_storage.resize(min_len, 0.0f);
+  }
+  initial_values = g_legacy_initial_values_storage.data();
 
   /*
      Read FITS header
@@ -287,30 +322,27 @@ void MFS::configure(int argc, char** argv) {
 
   // Declaring block size and number of blocks for Image
   if (variables.blockSizeX == -1 && variables.blockSizeY == -1) {
-    int maxGridSizeX, maxGridSizeY;
-    int numblocksX, numblocksY;
-    int threadsX, threadsY;
-    maxGridSizeX = iDivUp(M, sqrt(256));
-    maxGridSizeY = iDivUp(N, sqrt(256));
-    getNumBlocksAndThreads(M, maxGridSizeX, sqrt(256), numblocksX, threadsX,
-                           false);
-    getNumBlocksAndThreads(N, maxGridSizeY, sqrt(256), numblocksY, threadsY,
-                           false);
-    numBlocksNN.x = numblocksX;
-    numBlocksNN.y = numblocksY;
-    threadsPerBlockNN.x = threadsX;
-    threadsPerBlockNN.y = threadsY;
+    const gpuvmem::CudaGrid<2> grid2d_auto =
+        gpuvmem::CudaGrid<2>::from_auto(M, N, dprop[0]);
+    numBlocksNN = grid2d_auto.blocks();
+    threadsPerBlockNN = grid2d_auto.threads();
     printf("Your 2D grid is [%d,%d] blocks and each has [%d,%d] threads\n",
            numBlocksNN.x, numBlocksNN.y, threadsPerBlockNN.x,
            threadsPerBlockNN.y);
   } else {
     if (variables.blockSizeX * variables.blockSizeY >
-            dprop[0].maxThreadsPerBlock ||
-        variables.blockSizeV > dprop[0].maxThreadsPerBlock) {
+            dprop[0].maxThreadsPerBlock) {
       printf("Block size X: %d\n", variables.blockSizeX);
       printf("Block size Y: %d\n", variables.blockSizeY);
       printf("Block size X*Y: %d\n",
              variables.blockSizeX * variables.blockSizeY);
+      printf("Block size V: %d\n", variables.blockSizeV);
+      printf("ERROR. The maximum threads per block cannot be greater than %d\n",
+             dprop[0].maxThreadsPerBlock);
+      exit(-1);
+    }
+    if (variables.blockSizeV >= 0 &&
+        variables.blockSizeV > dprop[0].maxThreadsPerBlock) {
       printf("Block size V: %d\n", variables.blockSizeV);
       printf("ERROR. The maximum threads per block cannot be greater than %d\n",
              dprop[0].maxThreadsPerBlock);
@@ -328,11 +360,12 @@ void MFS::configure(int argc, char** argv) {
           dprop[0].maxThreadsDim[2]);
       exit(-1);
     }
-    threadsPerBlockNN.x = variables.blockSizeX;
-    threadsPerBlockNN.y = variables.blockSizeY;
-
-    numBlocksNN.x = iDivUp(M, threadsPerBlockNN.x);
-    numBlocksNN.y = iDivUp(N, threadsPerBlockNN.y);
+    const dim3 tb(static_cast<unsigned int>(variables.blockSizeX),
+                    static_cast<unsigned int>(variables.blockSizeY), 1u);
+    const gpuvmem::CudaGrid<2> grid2d =
+        gpuvmem::CudaGrid<2>::from_extents(M, N, tb);
+    threadsPerBlockNN = grid2d.threads();
+    numBlocksNN = grid2d.blocks();
   }
 
   if (verbose_flag)
@@ -434,11 +467,10 @@ void MFS::configure(int argc, char** argv) {
       "is ~%f arcsec\n",
       resolution_arcsec / 7.0f);
 
-  if (nu_0 < 0.0) {
+  if (nu_0 <= 0.0f) {
     printf(
-        "WARNING: Reference frequency not provided. It will be calculated as "
-        "the middle"
-        " of the frequency range.\n");
+        "WARNING: Reference frequency not provided (or nu_0<=0). It will be "
+        "calculated as the middle of the frequency range.\n");
     nu_0 = 0.5f * (max_freq + min_freq);
   }
   printf("Reference frequency: %e Hz\n", nu_0);
@@ -480,8 +512,12 @@ void MFS::configure(int argc, char** argv) {
   firstgpu = 0;
   int count_gpus;
 
-  string_values = countAndSeparateStrings(variables.gpus, ",");
-  count_gpus = string_values.size();
+  if (variables.gpus == "NULL" || variables.gpus.empty()) {
+    string_values.clear();
+  } else {
+    string_values = countAndSeparateStrings(variables.gpus, ",");
+  }
+  count_gpus = static_cast<int>(string_values.size());
 
   if (count_gpus == 0) {
     multigpu = 0;
@@ -569,7 +605,7 @@ void MFS::configure(int argc, char** argv) {
       if (canAccessPeer0_x == 0 || canAccessPeerx_0 == 0) {
         printf("Number of GPUs: %d\n", num_gpus);
         printf("Two or more SM 2.0 class GPUs are required for %s to run.\n",
-               argv[0]);
+               cli_config_.argv0.empty() ? "gpuvmem" : cli_config_.argv0.c_str());
         printf("Support for UVA requires a GPU with SM 2.0 capabilities.\n");
         printf(
             "Peer to Peer access is not available between GPU%d <-> GPU%d, "
@@ -749,13 +785,15 @@ void MFS::setDevice() {
       dcosines_m_pix_phs;
   for (int d = 0; d < nMeasurementSets; d++) {
     if (verbose_flag)
-      printf("Dataset: %s\n", datasets[d].name);
+      printf("Dataset: %s\n", datasets[d].name.c_str());
     gpuvmem::ms::MeasurementSet& ms = datasets[d].ms;
     for (size_t f = 0; f < ms.num_fields(); f++) {
       gpuvmem::ms::Field& field = ms.field(f);
       gpuvmem::ms::FieldMetadata& fmeta = field.metadata();
       direccos(field.reference_dir()[0], field.reference_dir()[1],
                raimage, decimage, &lobs, &mobs);
+      dcosines_l_pix_ref = lobs / deltax;
+      dcosines_m_pix_ref = mobs / deltay;
       direccos(field.phase_dir()[0], field.phase_dir()[1],
                raimage, decimage, &lphs, &mphs);
 
@@ -814,7 +852,7 @@ void MFS::setDevice() {
   for (int k = 0; k < image_count; k++) {
     for (int i = 0; i < M; i++) {
       for (int j = 0; j < N; j++) {
-        host_I[N * M * k + N * i + j] = initial_values[k];
+        host_I[N * M * k + N * i + j] = mfs_initial_pixel_values[k];
       }
     }
   }
@@ -872,16 +910,19 @@ void MFS::setDevice() {
   // Set minimal pixel values from initial_values (before eta multiplication)
   // minimal_pixel_values was declared in configure() and stored as member variable
   image->setMinimalPixelValues(this->minimal_pixel_values);
+  if (this->optimizer != nullptr) {
+    if (nopositivity) {
+      this->optimizer->setProjection(std::make_unique<NoProjection>());
+    } else {
+      this->optimizer->setProjection(std::make_unique<PositivityProjection>(
+          eta, g_legacy_initial_values_storage));
+    }
+  }
   // Set global I pointer for backward compatibility (used as fallback in line searchers)
   // Note: Line searchers prefer using this->image from optimizer, but fall back to extern I if needed
   I = image;
-  // Configure Chi2's ImageProcessor from Image geometry (so ip uses image->getM(), getN(), getImageCount())
-  if (this->getOptimizator() && this->getOptimizator()->getObjectiveFunction()) {
-    Fi* chi2_fi = this->getOptimizator()->getObjectiveFunction()->getFiByName("Chi2");
-    Chi2* chi2_term = (chi2_fi ? dynamic_cast<Chi2*>(chi2_fi) : nullptr);
-    if (chi2_term)
-      chi2_term->configureImage(image);
-  }
+  // Chi2::configureImage is called from MFS::run() after main adds Chi2 to the
+  // objective function; getFiByName here would still be null during setDevice().
   imageMap* functionPtr = (imageMap*)malloc(sizeof(imageMap) * image_count);
   image->setFunctionMapping(functionPtr);
 
@@ -974,6 +1015,14 @@ void MFS::setDevice() {
                                M * N, cudaMemcpyDeviceToHost));
   float noise_min =
       *std::min_element(host_noise_image, host_noise_image + (M * N));
+  if (!std::isfinite(noise_min) || noise_min <= 0.0f) {
+    if (verbose_flag) {
+      fprintf(stderr,
+              "WARNING: invalid noise map minimum (%e); using fg_scale=1.0\n",
+              static_cast<double>(noise_min));
+    }
+    noise_min = 1.0f;
+  }
 
   this->fg_scale = noise_min;
   noise_cut = noise_cut * noise_min;
@@ -1032,8 +1081,13 @@ void MFS::clearRun() {
 
 void MFS::run() {
   optimizer->getObjectiveFunction()->setIo(ioImageHandler);
+  optimizer->getObjectiveFunction()->setPrimaryCudaDevice(firstgpu);
 
   Fi* chi2 = optimizer->getObjectiveFunction()->getFiByName("Chi2");
+  // Use static_cast: CUDA builds often compile without RTTI, so dynamic_cast
+  // would fail and skip configureImage (Chi2 is the concrete Fi for "Chi2").
+  if (chi2 != nullptr && image != nullptr)
+    static_cast<Chi2*>(chi2)->configureImage(image);
 
   if (NULL != chi2 && chi2->getNormalize())
     this->fg_scale = 1.0f;

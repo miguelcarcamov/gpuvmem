@@ -1,6 +1,7 @@
 #ifndef SYNTHESIZER_CUH
 #define SYNTHESIZER_CUH
 
+#include "cli/gpuvmem_cli_config.hh"
 #include "ms/ms_with_gpu.h"
 #include "weightingscheme.cuh"
 
@@ -15,7 +16,7 @@ class Synthesizer {
   __host__ virtual std::vector<std::string> countAndSeparateStrings(
       std::string long_str,
       std::string sep) = 0;
-  __host__ virtual void configure(int argc, char** argv) = 0;
+  __host__ virtual void configure(const GpuvmemCliConfig& config) = 0;
   __host__ virtual void applyFilter(Filter* filter) = 0;
   __host__ virtual void writeImages() = 0;
   __host__ virtual void clearRun() = 0;

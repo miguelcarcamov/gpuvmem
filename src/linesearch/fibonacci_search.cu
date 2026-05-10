@@ -32,28 +32,16 @@
  */
 
 #include "linesearch/fibonacci_search.cuh"
+#include "classes/image.cuh"
 #include "linesearch/linesearch_utils.cuh"
-#include "linesearch/f1dim.cuh"
+#include "linesearch/line_search_1d_eval.cuh"
 #include "linesearch/mnbrak.cuh"
 #include "error.cuh"
 #include "framework.cuh"
 #include "factory.cuh"
+#include "cli/gpuvmem_cli_config.hh"
 #include <iostream>
 #include <vector>
-
-extern long M;
-extern long N;
-extern int image_count;
-extern float MINPIX, eta;
-extern bool nopositivity;
-extern dim3 threadsPerBlockNN;
-extern dim3 numBlocksNN;
-extern int verbose_flag;
-extern Image* I;
-extern ObjectiveFunction* testof;
-
-// Global variables for f1dim (used by evaluateLineFunction)
-#include "linesearch/linesearch_globals.cuh"
 
 std::pair<float, float> FibonacciSearch::search(
     float* current_point, float* search_direction,
@@ -62,26 +50,27 @@ std::pair<float, float> FibonacciSearch::search(
   // Fibonacci search algorithm
   // Requires bracketed interval [a, b] with minimum inside
   
+  const long M = objective_function->getM();
+  const long N = objective_function->getN();
+  const int image_count = objective_function->getImageCount();
+  const size_t vec_bytes = sizeof(float) * static_cast<size_t>(M) * static_cast<size_t>(N) *
+                           static_cast<size_t>(image_count);
+
   // Allocate temporary memory
   float* local_device_pcom;
   float* local_device_xicom;
   
-  checkCudaErrors(
-      cudaMalloc((void**)&local_device_pcom, sizeof(float) * M * N * image_count));
-  checkCudaErrors(
-      cudaMalloc((void**)&local_device_xicom, sizeof(float) * M * N * image_count));
+  checkCudaErrors(cudaMalloc((void**)&local_device_pcom, vec_bytes));
+  checkCudaErrors(cudaMalloc((void**)&local_device_xicom, vec_bytes));
   
-  checkCudaErrors(cudaMemcpy(local_device_pcom, current_point,
-                             sizeof(float) * M * N * image_count,
+  checkCudaErrors(cudaMemcpy(local_device_pcom, current_point, vec_bytes,
                              cudaMemcpyDeviceToDevice));
-  checkCudaErrors(cudaMemcpy(local_device_xicom, search_direction,
-                             sizeof(float) * M * N * image_count,
+  checkCudaErrors(cudaMemcpy(local_device_xicom, search_direction, vec_bytes,
                              cudaMemcpyDeviceToDevice));
-  
-  device_pcom = local_device_pcom;
-  device_xicom = local_device_xicom;
-  testof = objective_function;
-  nrfunc = nullptr;
+
+  LineSearch1dEval line_eval{local_device_pcom, local_device_xicom, this->image,
+                             objective_function};
+  LineSearcher::ScopedSearchContext _ls_ctx(this, objective_function, &line_eval);
   
   // Get initial step size from seeder/history/initial_step_size_value
   float initial_alpha = computeInitialAlpha(objective_function, current_point, search_direction);
@@ -93,7 +82,7 @@ std::pair<float, float> FibonacciSearch::search(
   float ax = 0.0f;
   float xx = initial_alpha;
   float bx, fa, fx, fb;
-  mnbrak(&ax, &xx, &bx, &fa, &fx, &fb, f1dim);
+  mnbrak(&ax, &xx, &bx, &fa, &fx, &fb, lineSearch1dEvalThunk, &line_eval);
   
   // Generate Fibonacci numbers
   std::vector<long long> fib(max_iterations + 2);
@@ -148,10 +137,8 @@ std::pair<float, float> FibonacciSearch::search(
   // Cleanup
   cudaFree(local_device_xicom);
   cudaFree(local_device_pcom);
-  device_pcom = nullptr;
-  device_xicom = nullptr;
   
-  if (verbose_flag) {
+  if (gpuvmem_cli_verbose()) {
     printf("Alpha for linear minimization = %f\n\n", xmin);
   }
   

@@ -1,10 +1,7 @@
 #ifndef MAIN_CUH
 #define MAIN_CUH
 
-#include "framework.cuh"  // Vars
-
-/** Parse command-line options (used by MFS synthesizer). */
-Vars getOptions(int argc, char** argv);
+#include "cli/gpuvmem_cli_config.hh"
 
 /** Print usage and exit (used on missing/invalid options). */
 void print_help();

@@ -59,6 +59,8 @@ class ConjugateGradient : public Optimizer {
    */
   __host__ void setLineSearcher(std::unique_ptr<LineSearcher> searcher);
 
+  __host__ void setProjection(std::unique_ptr<Projection> projection) override;
+
  protected:
   /**
    * @brief Compute the conjugate gradient parameter β_k.

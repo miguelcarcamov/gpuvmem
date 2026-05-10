@@ -4,11 +4,13 @@
 #include "classes/objectivefunction.cuh"
 #include "classes/image.cuh"
 
+class Projection;
+
 /**
- * @brief Evaluate the objective function along a line.
- * 
- * Computes f(x + α*d) where x is stored in device_pcom and d is stored in device_xicom.
- * 
+ * @brief Evaluate the objective function along a line (delegates to current LineSearcher).
+ *
+ * Requires LineSearcher::ScopedSearchContext with a LineSearch1dEval bundle during search.
+ *
  * @param alpha Step size along the search direction
  * @return Function value at the new point
  */
@@ -42,5 +44,10 @@ __host__ void defaultNewP(float* p, float* xi, float xmin, int image);
 __host__ void defaultEvaluateXt(float* xt, float* pcom, float* xicom, float x, int image);
 __host__ void particularNewP(float* p, float* xi, float xmin, int image);
 __host__ void particularEvaluateXt(float* xt, float* pcom, float* xicom, float x, int image);
+
+/** Extra projection pass on one image plane (Pyralysis `projection(parameter)` after trial). */
+__host__ void applyProjectionToImagePlane(const Projection* proj, float* buffer, long N, long M,
+                                          int image, unsigned blocks_x, unsigned blocks_y,
+                                          unsigned threads_x, unsigned threads_y);
 
 #endif  // LINESEARCH_UTILS_CUH

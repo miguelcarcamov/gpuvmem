@@ -167,8 +167,9 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 file(GLOB APP_CORE_SOURCES ${SRC_DIR}/options.cu)
 file(GLOB MFS_SOURCES ${SRC_DIR}/mfs/*.cu)
-file(GLOB OPTIMIZER_SOURCES ${SRC_DIR}/optimizers/*.cu)
-file(GLOB LINESEARCH_SOURCES ${SRC_DIR}/linesearch/*.cu ${SRC_DIR}/seeding/*.cu)
+file(GLOB OPTIMIZER_SOURCES CONFIGURE_DEPENDS ${SRC_DIR}/optimizers/*.cu)
+file(GLOB LINESEARCH_SOURCES ${SRC_DIR}/linesearch/*.cu ${SRC_DIR}/seeding/*.cu
+                              ${SRC_DIR}/optimization/*.cu)
 file(
   GLOB
   REGULARIZER_SOURCES
@@ -257,6 +258,7 @@ target_include_directories(
          ${CMAKE_CURRENT_SOURCE_DIR}/include/io
          ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/optimization
          ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
          ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
@@ -288,6 +290,7 @@ foreach(TGT ${GPUVMEM_INTERNAL_TARGETS})
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/io
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/optimization
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizers
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
@@ -700,7 +703,8 @@ enable_testing()
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
 # Test cases
-set(TEST_CASES antennae co65 freq78 m87 selfcalband9)
+# Directory names are case-sensitive on Linux (FREQ78, M87).
+set(TEST_CASES antennae co65 FREQ78 M87 selfcalband9)
 
 # Add all test cases
 foreach(TEST_NAME ${TEST_CASES})

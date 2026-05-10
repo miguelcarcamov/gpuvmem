@@ -37,6 +37,7 @@
 #include "utils/cuda_utils.cuh"
 #include "utils/complexOps.cuh"
 #include "framework.cuh"
+#include "framework/cuda_grid.cuh"
 #include "error.cuh"
 #include <cufft.h>
 #include <cuda_runtime.h>
@@ -215,21 +216,43 @@ __host__ TD* convolutionComplexRealFFT(TD* data,
   checkCudaErrors(
       cudaMemset(padded_data_complex, 0, sizeof(TD) * padding_M * padding_N));
 
-  // Calculate thread blocks to execute kernel
-  dim3 threads(variables.blockSizeX, variables.blockSizeY);
-
-  dim3 blocks_kernel(iDivUp(m, threads.x), iDivUp(n, threads.y));
-
-  dim3 blocks_data(iDivUp(padding_M, threads.x), iDivUp(padding_N, threads.y));
+  // Calculate thread blocks to execute kernel (2D tiling; -1/-1 = device-aware auto)
+  dim3 threads_kernel;
+  dim3 blocks_kernel;
+  dim3 threads_data;
+  dim3 blocks_data;
+  if (variables.blockSizeX == -1 && variables.blockSizeY == -1) {
+    int pad_dev = 0;
+    checkCudaErrors(cudaGetDevice(&pad_dev));
+    cudaDeviceProp pad_prop{};
+    checkCudaErrors(cudaGetDeviceProperties(&pad_prop, pad_dev));
+    const gpuvmem::CudaGrid<2> gk = gpuvmem::CudaGrid<2>::from_auto(
+        static_cast<long>(m), static_cast<long>(n), pad_prop);
+    const gpuvmem::CudaGrid<2> gd = gpuvmem::CudaGrid<2>::from_auto(
+        static_cast<long>(padding_M), static_cast<long>(padding_N), pad_prop);
+    threads_kernel = gk.threads();
+    blocks_kernel = gk.blocks();
+    threads_data = gd.threads();
+    blocks_data = gd.blocks();
+  } else {
+    threads_kernel = dim3(static_cast<unsigned int>(variables.blockSizeX),
+                          static_cast<unsigned int>(variables.blockSizeY), 1u);
+    threads_data = threads_kernel;
+    blocks_kernel =
+        dim3(iDivUp(m, static_cast<int>(threads_kernel.x)),
+             iDivUp(n, static_cast<int>(threads_kernel.y)), 1u);
+    blocks_data = dim3(iDivUp(padding_M, static_cast<int>(threads_data.x)),
+                       iDivUp(padding_N, static_cast<int>(threads_data.y)), 1u);
+  }
 
   // Padding the kernel
-  paddingKernel<TD><<<blocks_kernel, threads>>>(
+  paddingKernel<TD><<<blocks_kernel, threads_kernel>>>(
       padded_kernel_complex, kernel_complex_device, padding_M, padding_N, m, n,
       ckernel_x, ckernel_y);
   checkCudaErrors(cudaDeviceSynchronize());
 
   // Padding the data
-  paddingData<TD><<<blocks_data, threads>>>(padded_data_complex, data_device,
+  paddingData<TD><<<blocks_data, threads_data>>>(padded_data_complex, data_device,
                                             padding_M, padding_N, M, N, m, n,
                                             ckernel_x, ckernel_y);
   checkCudaErrors(cudaDeviceSynchronize());
@@ -248,7 +271,7 @@ __host__ TD* convolutionComplexRealFFT(TD* data,
   FFT2D(kernel_spectrum_device, padded_kernel_complex, fftPlan, padding_M,
         padding_N, fftfwd, false);
 
-  mulArrayComplexComplex<<<blocks_data, threads>>>(
+  mulArrayComplexComplex<<<blocks_data, threads_data>>>(
       data_spectrum_device, kernel_spectrum_device, padding_M, padding_N);
   checkCudaErrors(cudaDeviceSynchronize());
 

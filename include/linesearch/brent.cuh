@@ -2,6 +2,7 @@
 #define BRENT_LINESEARCH_CUH
 
 #include "linesearch/linesearcher.cuh"
+#include "linesearch/mnbrak.cuh"  // LineSearch1dFloatFunc
 
 /**
  * @brief Brent's method for line search.
@@ -26,6 +27,7 @@ __host__ float brent(float ax,
                      float cx,
                      float tol,
                      float* xmin,
-                     float (*f)(float));
+                     LineSearch1dFloatFunc f,
+                     void* user);
 
 #endif  // BRENT_LINESEARCH_CUH

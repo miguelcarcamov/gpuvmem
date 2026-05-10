@@ -35,6 +35,7 @@
 
 #include "utils/direction_cosines.cuh"
 #include "utils/fixed_point.cuh"
+#include "main.cuh"
 #include "framework.cuh"
 #include "kernels/gaussian2D.cuh"
 #include "kernels/gaussianSinc2D.cuh"
@@ -54,10 +55,6 @@
 // their respective .cu files are compiled and linked.
 
 extern Vars variables;
-extern int firstgpu;
-extern Flags flags;
-extern bool verbose_flag, nopositivity, apply_noise, print_images, print_errors,
-    save_model_input, radius_mask, modify_weights;
 
 int num_gpus;
 
@@ -227,7 +224,11 @@ __host__ int main(int argc, char** argv) {
   sy->setWeightingScheme(scheme);
   sy->setGriddingKernel(sc);
   sy->setOptimizator(cg);
-  sy->configure(argc, argv);
+  GpuvmemCliConfig cli{};
+  if (!parse_gpuvmem_cli(argc, argv, cli, std::cerr)) {
+    print_help();
+  }
+  sy->configure(cli);
   cg->setObjectiveFunction(of);
 
   // Filter *g = Singleton<FilterFactory>::Instance().CreateFilter(Gridding);

@@ -234,8 +234,9 @@ Help excerpt (see also **`--help`** on the binary):
       Comma-separated GPU indices
   -R --robust_parameter [default: 2]
       Robust weighting: -2 uniform, 2 natural, 0 tradeoff
-  -X --blockSizeX [default: -1]   -Y --blockSizeY   -V --blockSizeV
-      GPU block sizes (-1 = auto)
+  -X --blockSizeX [default: -1]   -Y --blockSizeY   -V --blockSizeV [default: -1]
+      GPU block sizes: omit or pass -1 for auto (2D image tiling vs 1D visibility work,
+      chosen from device limits; FFT padding uses the same 2D auto when X/Y are -1).
   -t --iterations [default: 500]
       Optimization iterations
   -g --gridding [default: 0]

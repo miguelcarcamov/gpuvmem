@@ -44,6 +44,7 @@
 #include "utils/constants.hh"
 #include "utils/physics_utils.cuh"
 #include "error.cuh"
+#include "framework/cuda_grid.cuh"
 #include <cufft.h>
 #include <cuda_runtime.h>
 #include <vector>
@@ -51,6 +52,7 @@
 #include <cmath>
 
 // Extern variables
+extern Vars variables;
 extern varsPerGPU* vars_gpu;
 extern int nMeasurementSets, num_gpus, firstgpu, max_number_vis, flag_opt, image_count;
 extern long M, N;
@@ -59,7 +61,6 @@ extern float noise_cut, nu_0;
 extern float* device_noise_image;
 extern dim3 threadsPerBlockNN, numBlocksNN;
 extern std::vector<gpuvmem::ms::MSWithGPU>* g_datasets;
-extern int iDivUp(int a, int b);
 extern unsigned int NearestPowerOf2(unsigned int x);
 
 // Shared gather buffers for chi2_chunked and calculateErrors_chunked.
@@ -113,6 +114,8 @@ __host__ float chi2_chunked(float* I,
                             float fg_scale) {
   bool fft_shift = true;
   cudaSetDevice(firstgpu);
+  cudaDeviceProp chi2_dev_prop{};
+  checkCudaErrors(cudaGetDeviceProperties(&chi2_dev_prop, firstgpu));
   float reduced_chi2 = 0.0f;
 
   static PillBox2D* degrid_kernel = NULL;
@@ -178,7 +181,11 @@ __host__ float chi2_chunked(float* I,
           int gpu_idx = chan % num_gpus;
           cudaSetDevice(gpu_idx + firstgpu);
 
-          const bool stokes_imaging = (image_count == npol);
+          /* Stokes mode only when user set -S/--stokes; otherwise MFS can have
+             image_count==npol by coincidence (e.g. 2 terms + RR/LL) and must
+             use the joint forward model, not per-pol image slices. */
+          const bool stokes_imaging =
+              !variables.stokes.empty() && image_count == npol;
           if (!stokes_imaging)
             computeImageToVisibilityGrid(
                 I, ip, vars_gpu, gpu_idx, M, N, nu, ref_xobs, ref_yobs, phs_xobs,
@@ -256,37 +263,41 @@ __host__ float chi2_chunked(float* I,
                                       cudaMemcpyHostToDevice));
 
             long UVpow2 = NearestPowerOf2(nch);
-            int threadsV = 512;
-            int blocksV = iDivUp(UVpow2, threadsV);
+            const gpuvmem::CudaGrid<1> vis1d =
+                (variables.blockSizeV >= 0)
+                    ? gpuvmem::CudaGrid<1>::from_total(UVpow2,
+                                                       variables.blockSizeV)
+                    : gpuvmem::CudaGrid<1>::from_auto(UVpow2, chi2_dev_prop);
             if (use_gridding && degrid_kernel) {
-              degriddingGPU<<<blocksV, threadsV>>>(
+              degriddingGPU<<<vis1d.blocks(), vis1d.threads()>>>(
                   d_uvw_gather[gpu_idx], d_Vm_gather[gpu_idx],
                   vars_gpu[gpu_idx].device_V, degrid_kernel->getGPUKernel(),
                   deltau, deltav, nch, M, N, degrid_kernel->getm(),
                   degrid_kernel->getn(), degrid_kernel->getSupportX(),
                   degrid_kernel->getSupportY());
             } else {
-              bilinearInterpolateVisibility<<<blocksV, threadsV>>>(
+              bilinearInterpolateVisibility<<<vis1d.blocks(), vis1d.threads()>>>(
                   d_Vm_gather[gpu_idx], vars_gpu[gpu_idx].device_V,
                   d_uvw_gather[gpu_idx], d_weight_gather[gpu_idx], deltau, deltav,
                   nch, M, N, fft_shift);
             }
             checkCudaErrors(cudaDeviceSynchronize());
 
-            residual<<<blocksV, threadsV>>>(
+            residual<<<vis1d.blocks(), vis1d.threads()>>>(
                 d_Vr_gather[gpu_idx], d_Vm_gather[gpu_idx], d_Vo_gather[gpu_idx],
                 static_cast<long>(nch));
             checkCudaErrors(cudaDeviceSynchronize());
 
             checkCudaErrors(cudaMemset(vars_gpu[gpu_idx].device_chi2, 0,
                                       sizeof(float) * max_number_vis));
-            chi2Vector<<<blocksV, threadsV>>>(
+            chi2Vector<<<vis1d.blocks(), vis1d.threads()>>>(
                 vars_gpu[gpu_idx].device_chi2, d_Vr_gather[gpu_idx],
                 d_weight_gather[gpu_idx], static_cast<long>(nch));
             checkCudaErrors(cudaDeviceSynchronize());
 
+            const int threads_v = static_cast<int>(vis1d.threads().x);
             float result = deviceReduce<float>(
-                vars_gpu[gpu_idx].device_chi2, nch, threadsV);
+                vars_gpu[gpu_idx].device_chi2, nch, threads_v);
             float N_eff = normalize ? static_cast<float>(nch) : 0.0f;
             if (normalize && N_eff > 0.0f) result /= N_eff;
             reduced_chi2 += result;
@@ -308,6 +319,8 @@ __host__ void dchi2_chunked(float* I,
                             float fg_scale) {
   bool fft_shift = true;
   cudaSetDevice(firstgpu);
+  cudaDeviceProp chi2_dev_prop{};
+  checkCudaErrors(cudaGetDeviceProperties(&chi2_dev_prop, firstgpu));
 
   static PillBox2D* degrid_kernel = NULL;
   static bool degrid_kernel_initialized = false;
@@ -389,7 +402,8 @@ __host__ void dchi2_chunked(float* I,
             if (ch.data_desc_id == dd_id && ch.count > 0)
               chunks_with_dd.push_back(&ch);
 
-        const bool stokes_imaging = (image_count == npol);
+        const bool stokes_imaging =
+            !variables.stokes.empty() && image_count == npol;
         for (int chan = 0; chan < nchan; chan++) {
           float nu = static_cast<float>(spw->frequency(chan));
           int gpu_idx = chan % num_gpus;
@@ -472,24 +486,27 @@ __host__ void dchi2_chunked(float* I,
                                       cudaMemcpyHostToDevice));
 
             long UVpow2 = NearestPowerOf2(nch);
-            int threadsV = 512;
-            int blocksV = iDivUp(UVpow2, threadsV);
+            const gpuvmem::CudaGrid<1> vis1d =
+                (variables.blockSizeV >= 0)
+                    ? gpuvmem::CudaGrid<1>::from_total(UVpow2,
+                                                       variables.blockSizeV)
+                    : gpuvmem::CudaGrid<1>::from_auto(UVpow2, chi2_dev_prop);
             if (use_gridding && degrid_kernel) {
-              degriddingGPU<<<blocksV, threadsV>>>(
+              degriddingGPU<<<vis1d.blocks(), vis1d.threads()>>>(
                   d_uvw_gather[gpu_idx], d_Vm_gather[gpu_idx],
                   vars_gpu[gpu_idx].device_V, degrid_kernel->getGPUKernel(),
                   deltau, deltav, nch, M, N, degrid_kernel->getm(),
                   degrid_kernel->getn(), degrid_kernel->getSupportX(),
                   degrid_kernel->getSupportY());
             } else {
-              bilinearInterpolateVisibility<<<blocksV, threadsV>>>(
+              bilinearInterpolateVisibility<<<vis1d.blocks(), vis1d.threads()>>>(
                   d_Vm_gather[gpu_idx], vars_gpu[gpu_idx].device_V,
                   d_uvw_gather[gpu_idx], d_weight_gather[gpu_idx], deltau, deltav,
                   nch, M, N, fft_shift);
             }
             checkCudaErrors(cudaDeviceSynchronize());
 
-            residual<<<blocksV, threadsV>>>(d_Vr_gather[gpu_idx],
+            residual<<<vis1d.blocks(), vis1d.threads()>>>(d_Vr_gather[gpu_idx],
                                             d_Vm_gather[gpu_idx],
                                             d_Vo_gather[gpu_idx],
                                             static_cast<long>(nch));

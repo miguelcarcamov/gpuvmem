@@ -104,14 +104,12 @@ class ObjectiveFunction {
   std::vector<Fi*> getFi() { return this->fis; };
 
   Fi* getFiByName(std::string fi_name) {
-    Fi* found_fi;
+    Fi* found_fi = NULL;
     for (std::vector<Fi*>::iterator it = this->fis.begin();
          it != this->fis.end(); it++) {
       if ((*it)->getName() == fi_name) {
         found_fi = (*it);
         break;
-      } else {
-        found_fi = NULL;
       }
     }
     return found_fi;
@@ -132,6 +130,10 @@ class ObjectiveFunction {
   dim3 getThreadsPerBlockNN() const { return this->threadsPerBlockNN; }
   dim3 getNumBlocksNN() const { return this->numBlocksNN; }
   void setIo(Io* i) { this->io = i; };
+
+  /** Primary CUDA device for line-search / gradient kernels (replaces `extern firstgpu` there). */
+  void setPrimaryCudaDevice(int device) { primary_cuda_device_ = device; }
+  int getPrimaryCudaDevice() const { return primary_cuda_device_; }
 
   void setIoOrderIterations(void (*func)(float* I, Io* io)) {
     this->IoOrderIterations = func;
@@ -171,6 +173,7 @@ class ObjectiveFunction {
   int image_count = 1;
   dim3 threadsPerBlockNN = dim3(0, 0, 0);  // CUDA launch configuration
   dim3 numBlocksNN = dim3(0, 0, 0);        // CUDA launch configuration
+  int primary_cuda_device_{0};
 };
 
 namespace {

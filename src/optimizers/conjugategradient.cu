@@ -35,6 +35,7 @@
 #include "linesearch/linesearcher.cuh"  // Include here to avoid circular dependency
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
+#include "cli/gpuvmem_cli_config.hh"
 #include "framework.cuh"
 #include "factory.cuh"
 #include "reduction/reduction_host.cuh"
@@ -44,16 +45,9 @@
 #include <string>
 #include <omp.h>
 
-// M, N, image_count are now accessed through Image object (image->getM(), getN(), getImageCount())
-// Removed extern declarations to encourage using Image object
-
-ObjectiveFunction* testof;
-// Removed Image* I; - now using optimizer's image member instead
-
 extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
-extern int verbose_flag;
 int flag_opt;
 
 #define EPS 1.0e-10
@@ -125,13 +119,29 @@ __host__ ConjugateGradient::ConjugateGradient() {
 }
 
 __host__ void ConjugateGradient::setLineSearcher(std::unique_ptr<LineSearcher> searcher) {
+  std::unique_ptr<Projection> saved;
+  if (linesearcher_ptr != nullptr) {
+    saved = static_cast<LineSearcher*>(linesearcher_ptr)->releaseProjection();
+  }
   if (linesearcher_ptr != nullptr) {
     delete static_cast<LineSearcher*>(linesearcher_ptr);
   }
   linesearcher_ptr = searcher.release();
   // Set Image object in line searcher so it can use this->image instead of extern Image* I
   if (linesearcher_ptr != nullptr && image != nullptr) {
-    static_cast<LineSearcher*>(linesearcher_ptr)->setImage(image);
+    LineSearcher* ls = static_cast<LineSearcher*>(linesearcher_ptr);
+    ls->setImage(image);
+    if (saved) {
+      ls->setProjection(std::move(saved));
+    } else {
+      ls->setProjection(std::make_unique<NoProjection>());
+    }
+  }
+}
+
+__host__ void ConjugateGradient::setProjection(std::unique_ptr<Projection> projection) {
+  if (linesearcher_ptr != nullptr) {
+    static_cast<LineSearcher*>(linesearcher_ptr)->setProjection(std::move(projection));
   }
 }
 
@@ -222,10 +232,9 @@ __host__ float ConjugateGradient::initializeOptimizationState() {
     static_cast<LineSearcher*>(linesearcher_ptr)->setImage(image);
   }
   flag_opt = this->flag;
-  testof = of;
 
   float initial_function_value = of->calcFunction(image->getImage());
-  if (verbose_flag) {
+  if (gpuvmem_cli_verbose()) {
     std::cout << "Starting function value = " << std::setprecision(4)
               << std::fixed << initial_function_value << std::endl;
   }
@@ -322,7 +331,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   double start = omp_get_wtime();
   this->current_iteration = iteration;
 
-  if (verbose_flag) {
+  if (gpuvmem_cli_verbose()) {
     std::cout << "\n\n********** Iteration " << iteration << " **********\n"
               << std::endl;
   }
@@ -355,7 +364,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   float alpha_step = result.second;
   fret = new_function_value;
 
-  if (verbose_flag) {
+  if (gpuvmem_cli_verbose()) {
     std::cout << "Function value = " << std::setprecision(4) << std::fixed
               << new_function_value << std::endl;
   }
@@ -393,7 +402,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
     checkCudaErrors(cudaDeviceSynchronize());
   }
 
-  if (verbose_flag) {
+  if (gpuvmem_cli_verbose()) {
     double end = omp_get_wtime();
     std::cout << "Time: " << std::setprecision(4) << (end - start)
               << " seconds" << std::endl;
@@ -403,7 +412,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
 }
 
 __host__ void ConjugateGradient::optimize() {
-  if (verbose_flag) {
+  if (gpuvmem_cli_verbose()) {
     std::cout << "\n\nStarting " << methodName()
               << " method (Conj. Grad.)\n\n";
   }
@@ -427,7 +436,7 @@ __host__ void ConjugateGradient::optimize() {
       new_function_value = performIteration(iteration, prev_function_value);
     } catch (const GradientNormError&) {
       // Zero gradient norm detected - optimization converged
-      if (verbose_flag) {
+      if (gpuvmem_cli_verbose()) {
         std::cout << methodName() << " converged due to zero gradient norm (gg = 0) after " 
                   << iteration << " iterations" << std::endl;
       }
@@ -439,7 +448,7 @@ __host__ void ConjugateGradient::optimize() {
 
     // Check for function convergence
     if (checkFunctionConvergence(new_function_value, prev_function_value)) {
-      if (verbose_flag) {
+      if (gpuvmem_cli_verbose()) {
         std::cout << methodName() << " converged after " << iteration
                   << " iterations" << std::endl;
       }
@@ -451,7 +460,7 @@ __host__ void ConjugateGradient::optimize() {
 
     // Check for gradient convergence (device_g holds current gradient; xi holds search direction)
     if (checkGradientConvergence(device_g, new_function_value)) {
-      if (verbose_flag) {
+      if (gpuvmem_cli_verbose()) {
         std::cout << methodName() << " converged due to gradient tolerance after " 
                   << iteration << " iterations" << std::endl;
       }
@@ -464,7 +473,7 @@ __host__ void ConjugateGradient::optimize() {
     prev_function_value = new_function_value;
   }
 
-  if (verbose_flag) {
+  if (gpuvmem_cli_verbose()) {
     std::cout << methodName() << " reached maximum iterations ("
               << this->total_iterations << ")" << std::endl;
   }

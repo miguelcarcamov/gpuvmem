@@ -45,14 +45,15 @@ __host__ float brent(float ax,
                      float cx,
                      float tol,
                      float* xmin,
-                     float (*f)(float)) {
+                     LineSearch1dFloatFunc f,
+                     void* user) {
   float a, b, d, etemp, fu, fv, fw, fx, p, q, r, tol1, tol2, u, v, w, x, xm;
   float e = 0.0;
 
   a = (ax < cx ? ax : cx);
   b = (ax > cx ? ax : cx);
   x = w = v = bx;
-  fw = fv = fx = (*f)(x);
+  fw = fv = fx = (*f)(x, user);
   for (int iter = 1; iter <= ITMAX; iter++) {
     xm = 0.5 * (a + b);
     tol2 = 2.0 * (tol1 = tol * fabs(x) + ZEPS);
@@ -88,7 +89,7 @@ __host__ float brent(float ax,
       d = CGOLD * (e = (x >= xm ? a - x : b - x));
     }
     u = (fabs(d) >= tol1 ? x + d : x + SIGN(tol1, d));
-    fu = (*f)(u);
+    fu = (*f)(u, user);
     if (fu <= fx) {
       if (u >= x) {
         a = x;

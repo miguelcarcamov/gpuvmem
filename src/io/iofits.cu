@@ -29,7 +29,10 @@ void write_slice(float* I, const char* path, const char* name_image,
   try {
     gpuvmem::fits::write_fits_image_slice(opts);
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS write failed: %s\n", e.what());
+    fprintf(stderr,
+            "FITS output failed (writes clone the header from the model FITS; "
+            "see message for read vs write): %s\n",
+            e.what());
     std::exit(1);
   }
 }

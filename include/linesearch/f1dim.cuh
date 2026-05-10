@@ -1,6 +1,6 @@
 #ifndef F1DIM_CUH
 #define F1DIM_CUH
-#include "framework.cuh"
 
-__host__ float f1dim(float x);
-#endif
+#include "linesearch/line_search_1d_eval.cuh"
+
+#endif  // F1DIM_CUH

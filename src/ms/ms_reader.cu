@@ -10,11 +10,14 @@
 #include <tables/Tables/ScalarColumn.h>
 #include <tables/Tables/Table.h>
 
+#include <casa/BasicSL.h>
+
 #include <cstdio>
 #include <memory>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace gpuvmem {
 namespace ms {
@@ -26,6 +29,105 @@ static std::string column_name_for_read(DataColumn col) {
 
 static bool table_has_column(const casacore::Table& tab, const std::string& name) {
   return tab.tableDesc().isColumn(name);
+}
+
+/** Read POLARIZATION.CORR_TYPE for one row; MS / TaQL variants use different element types. */
+static std::vector<int> read_corr_type_row(const casacore::Table& pol_tab,
+                                           casacore::rownr_t row) {
+  std::vector<int> out;
+  if (!table_has_column(pol_tab, "CORR_TYPE")) return out;
+
+  const casacore::ColumnDesc& cdesc = pol_tab.tableDesc().columnDesc("CORR_TYPE");
+  const casacore::DataType dt = cdesc.dataType();
+
+  auto append_from_int_vector = [&out](const casacore::Vector<casacore::Int>& vec) {
+    out.resize(static_cast<size_t>(vec.size()));
+    for (size_t k = 0; k < out.size(); k++) out[k] = static_cast<int>(vec(k));
+  };
+
+  try {
+    switch (dt) {
+      case casacore::TpArrayInt: {
+        casacore::ROArrayColumn<casacore::Int> col(pol_tab, "CORR_TYPE");
+        append_from_int_vector(col(row));
+        return out;
+      }
+      case casacore::TpArrayShort: {
+        casacore::ROArrayColumn<casacore::Short> col(pol_tab, "CORR_TYPE");
+        casacore::Vector<casacore::Short> vec = col(row);
+        out.resize(static_cast<size_t>(vec.size()));
+        for (size_t k = 0; k < out.size(); k++) out[k] = static_cast<int>(vec(k));
+        return out;
+      }
+      case casacore::TpArrayUInt: {
+        casacore::ROArrayColumn<casacore::uInt> col(pol_tab, "CORR_TYPE");
+        casacore::Vector<casacore::uInt> vec = col(row);
+        out.resize(static_cast<size_t>(vec.size()));
+        for (size_t k = 0; k < out.size(); k++) out[k] = static_cast<int>(vec(k));
+        return out;
+      }
+      case casacore::TpArrayInt64: {
+        casacore::ROArrayColumn<casacore::Int64> col(pol_tab, "CORR_TYPE");
+        casacore::Vector<casacore::Int64> vec = col(row);
+        out.resize(static_cast<size_t>(vec.size()));
+        for (size_t k = 0; k < out.size(); k++) out[k] = static_cast<int>(vec(k));
+        return out;
+      }
+      case casacore::TpInt: {
+        casacore::ROScalarColumn<casacore::Int> col(pol_tab, "CORR_TYPE");
+        out.push_back(static_cast<int>(col(row)));
+        return out;
+      }
+      case casacore::TpShort: {
+        casacore::ROScalarColumn<casacore::Short> col(pol_tab, "CORR_TYPE");
+        out.push_back(static_cast<int>(col(row)));
+        return out;
+      }
+      default:
+        break;
+    }
+  } catch (const std::exception& e) {
+    std::fprintf(stderr,
+                 "MSReader: CORR_TYPE read failed (declared type=%d): %s\n",
+                 static_cast<int>(dt), e.what());
+    return {};
+  }
+
+  /* Declared type unknown or switch missed: try common storage forms in order. */
+  try {
+    casacore::ROArrayColumn<casacore::Int> col(pol_tab, "CORR_TYPE");
+    append_from_int_vector(col(row));
+    if (!out.empty()) return out;
+  } catch (...) {
+  }
+  try {
+    casacore::ROArrayColumn<casacore::Short> col(pol_tab, "CORR_TYPE");
+    casacore::Vector<casacore::Short> vec = col(row);
+    out.resize(static_cast<size_t>(vec.size()));
+    for (size_t k = 0; k < out.size(); k++) out[k] = static_cast<int>(vec(k));
+    if (!out.empty()) return out;
+  } catch (...) {
+  }
+  try {
+    casacore::ROScalarColumn<casacore::Int> col(pol_tab, "CORR_TYPE");
+    out.push_back(static_cast<int>(col(row)));
+    return out;
+  } catch (...) {
+  }
+  try {
+    casacore::ROArrayColumn<casacore::Int64> col(pol_tab, "CORR_TYPE");
+    casacore::Vector<casacore::Int64> vec = col(row);
+    out.resize(static_cast<size_t>(vec.size()));
+    for (size_t k = 0; k < out.size(); k++) out[k] = static_cast<int>(vec(k));
+    if (!out.empty()) return out;
+  } catch (...) {
+  }
+
+  std::fprintf(stderr,
+               "MSReader: unsupported CORR_TYPE storage (DataType=%d); "
+               "continuing with empty correlation type list\n",
+               static_cast<int>(dt));
+  return {};
 }
 
 constexpr float LIGHTSPEED_MS = 2.99792458e8f;
@@ -216,23 +318,10 @@ class CasacoreMSReader : public MSReader {
     if (pol_tab.nrow() > 0) {
       casacore::ROScalarColumn<casacore::Int64> ncorr_col(pol_tab, "NUM_CORR");
       casacore::ROScalarColumn<casacore::Int64> pol_id_col(pol_tab, "ID");
-      const bool has_corr_type = pol_tab.tableDesc().isColumn("CORR_TYPE");
-      std::unique_ptr<casacore::ROArrayColumn<casacore::Int>> corr_type_col_ptr;
-      if (has_corr_type) {
-        corr_type_col_ptr =
-            std::make_unique<casacore::ROArrayColumn<casacore::Int>>(pol_tab,
-                                                                   "CORR_TYPE");
-      }
       for (size_t r = 0; r < pol_tab.nrow(); r++) {
         int pol_id = static_cast<int>(pol_id_col(r));
         int num_corr = static_cast<int>(ncorr_col(r));
-        std::vector<int> corr_type;
-        if (corr_type_col_ptr) {
-          casacore::Vector<casacore::Int> vec = (*corr_type_col_ptr)(r);
-          corr_type.resize(vec.size());
-          for (size_t k = 0; k < vec.size(); k++)
-            corr_type[k] = static_cast<int>(vec(k));
-        }
+        std::vector<int> corr_type = read_corr_type_row(pol_tab, static_cast<casacore::rownr_t>(r));
         out.metadata().add_polarization(
             Polarization(pol_id, num_corr, std::move(corr_type)));
       }
