@@ -36,6 +36,7 @@ where practical. Earlier history is preserved in git and in the
 - README positioning: project described as an **RML-style C++/CUDA framework** (data term + modular regularizers) while keeping **MEM** origins and the 2018 paper in context.
 - README: extra badges (stars, commits, issues, PRs, contributors, repo size, pre-commit, C++/CUDA, Pyralysis); **Pyralysis** roadmap note (GPU gap today; deprecation when Pyralysis is CPU+GPU+Dask).
 - **README (usage):** Cheat sheet and defaults for **`-Z`** (weight layout; default **Fi** in `main.cu`), **`-L`** / **`-B`** (Brent; no seeder), behavior when **`-Z`** is omitted (χ² + TSV only), **`--help`** empty **`[default: ]`**, and short-option parsing for **`-O`** / **`-m`**.
+- **README (header):** Restored centered **wiki logo** and **shields.io / GitHub badge** rows (they had been dropped in a later README trim).
 
 ### Fixed
 

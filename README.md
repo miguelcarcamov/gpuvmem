@@ -1,11 +1,38 @@
+<h1 align="center">
+  <img src="https://github.com/miguelcarcamov/gpuvmem/wiki/images/logos/logo2.png" height="320" alt="gpuvmem logo">
+</h1>
 
-**Multi-GPU regularized imaging for radio astronomy**  
-**C++/CUDA framework (RML-style: data term + regularizers)**  
-*Originally maximum-entropy (MEM) synthesis — see paper below.*
+<p align="center">
+  <strong>Multi-GPU regularized imaging for radio astronomy</strong><br>
+  <strong>C++/CUDA framework (RML-style: data term + regularizers)</strong><br>
+  <em>Originally maximum-entropy (MEM) synthesis — see paper below.</em>
+</p>
 
-**In one line:** turn measurement sets and a sky grid into an image by minimizing **data fidelity + priors** on the GPU, with optimizers and regularizers you can swap like LEGO bricks.
+<p align="center">
+  <em>In one line:</em> turn measurement sets and a sky grid into an image by minimizing <strong>data fidelity + priors</strong> on the GPU, with optimizers and regularizers you can swap like LEGO bricks.
+</p>
 
-
+<p align="center">
+  <a href="https://doi.org/10.1016/j.ascom.2017.11.003"><img src="https://img.shields.io/badge/A%26C-Paper-006599?logo=academia&logoColor=white" alt="Paper"></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
+  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/CMake-%E2%89%A53.18-064F8C?logo=cmake&logoColor=white" alt="CMake"></a>
+  <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/C%2B%2B-17-00599C?logo=c%2B%2B&logoColor=white" alt="C++17"></a>
+  <a href="https://developer.nvidia.com/cuda-zone"><img src="https://img.shields.io/badge/CUDA-GPU-76B900?logo=nvidia&logoColor=white" alt="CUDA GPU"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/miguelcarcamov/gpuvmem/actions/workflows/workflow.yml"><img src="https://github.com/miguelcarcamov/gpuvmem/actions/workflows/workflow.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/pkgs/container/gpuvmem"><img src="https://img.shields.io/badge/ghcr.io-container-2496ED?logo=github" alt="Container"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/stargazers"><img src="https://img.shields.io/github/stars/miguelcarcamov/gpuvmem?style=social&logo=github" alt="GitHub stars"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/commits/master"><img src="https://img.shields.io/github/last-commit/miguelcarcamov/gpuvmem?logo=github&logoColor=white&label=last%20commit" alt="Last commit"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/miguelcarcamov/gpuvmem/issues"><img src="https://img.shields.io/github/issues/miguelcarcamov/gpuvmem?logo=github" alt="Issues"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/pulls"><img src="https://img.shields.io/github/issues-pr/miguelcarcamov/gpuvmem?logo=github" alt="Pull requests"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/graphs/contributors"><img src="https://img.shields.io/github/contributors/miguelcarcamov/gpuvmem?logo=github" alt="Contributors"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem"><img src="https://img.shields.io/github/repo-size/miguelcarcamov/gpuvmem?logo=github&label=repo%20size" alt="Repo size"></a>
+  <a href="https://github.com/pre-commit/pre-commit"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white" alt="pre-commit"></a>
+  <a href="https://gitlab.com/clirai/pyralysis"><img src="https://img.shields.io/badge/Pyralysis-GitLab-FC6D26?logo=gitlab&logoColor=white" alt="Pyralysis on GitLab"></a>
+</p>
 
 ---
 
