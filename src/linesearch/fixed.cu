@@ -33,6 +33,7 @@
 
 #include "linesearch/fixed.cuh"
 #include "linesearch/linesearch_utils.cuh"
+#include "classes/objectivefunction.cuh"
 #include "error.cuh"
 #include "framework.cuh"
 #include "linesearch/linesearch_kernels.cuh"
@@ -57,7 +58,9 @@ std::pair<float, float> Fixed::search(float* current_point,
   long M_local = image_to_use->getM();
   long N_local = image_to_use->getN();
   int image_count_local = image_to_use->getImageCount();
-  
+
+  checkCudaErrors(cudaSetDevice(objective_function->getPrimaryCudaDevice()));
+
   // Allocate temporary memory
   float* local_device_pcom;
   float* local_device_xicom;

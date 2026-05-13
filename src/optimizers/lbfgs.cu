@@ -39,10 +39,11 @@
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
 #include "cli/gpuvmem_cli_config.hh"
+#include <cmath>
 #include <iostream>
 #include <iomanip>
 #include <omp.h>
-#include <cstring>
+#include <vector>
 
 // M, N, image_count are now accessed through Image object (image->getM(), getN(), getImageCount())
 // Removed extern declarations to encourage using Image object
@@ -51,6 +52,7 @@ extern dim3 threadsPerBlockNN;
 extern dim3 numBlocksNN;
 
 extern int flag_opt;
+extern int firstgpu;
 
 #define EPS 1.0e-10
 #define MIN_Y_NORM 1e-10f  // Minimum value for ||y||^2 to avoid division by zero
@@ -65,7 +67,13 @@ extern int flag_opt;
   cudaFree(xi);              \
   cudaFree(xi_old);          \
   cudaFree(p_old);           \
-  cudaFree(norm_vector);
+  cudaFree(norm_vector);     \
+  cudaFree(aux_vector);     \
+  aux_vector = nullptr;      \
+  cudaFree(d_q);             \
+  d_q = nullptr;             \
+  cudaFree(d_r);             \
+  d_r = nullptr;
 
 __host__ int LBFGS::getK() {
   return this->K;
@@ -76,6 +84,7 @@ __host__ void LBFGS::setK(int K) {
 }
 
 __host__ void LBFGS::allocateMemoryGpu() {
+  checkCudaErrors(cudaSetDevice(firstgpu));
   // Get dimensions from Image object instead of extern variables
   long M_local = image->getM();
   long N_local = image->getN();
@@ -110,6 +119,16 @@ __host__ void LBFGS::allocateMemoryGpu() {
                              sizeof(float) * M_local * N_local * image_count_local));
   checkCudaErrors(cudaMemset(norm_vector, 0,
                              sizeof(float) * M_local * N_local * image_count_local));
+
+  const size_t plane_bytes =
+      sizeof(float) * static_cast<size_t>(M_local) * static_cast<size_t>(N_local);
+  const size_t vol_bytes = plane_bytes * static_cast<size_t>(image_count_local);
+  checkCudaErrors(cudaMalloc((void**)&aux_vector, plane_bytes));
+  checkCudaErrors(cudaMemset(aux_vector, 0, plane_bytes));
+  checkCudaErrors(cudaMalloc((void**)&d_q, vol_bytes));
+  checkCudaErrors(cudaMalloc((void**)&d_r, vol_bytes));
+  checkCudaErrors(cudaMemset(d_q, 0, vol_bytes));
+  checkCudaErrors(cudaMemset(d_r, 0, vol_bytes));
 
   const size_t cube_bytes =
       sizeof(float) * static_cast<size_t>(M_local) * static_cast<size_t>(N_local) *
@@ -159,6 +178,7 @@ __host__ void LBFGS::setProjection(std::unique_ptr<Projection> projection) {
 // Use: linesearcher->setStepSizeSeeder(std::make_unique<BBMin1Seeder>());
 
 __host__ void LBFGS::deallocateMemoryGpu() {
+  checkCudaErrors(cudaSetDevice(firstgpu));
   FREEALL
   // Do NOT delete linesearcher_ptr here - it must persist across multiple
   // optimize() calls (e.g. block mode: I_nu_0 then alpha). Same as ConjugateGradient.
@@ -171,6 +191,7 @@ __host__ int LBFGS::mapToCircularBuffer(int k, int par_M, int lbfgs_it) {
 }
 
 __host__ float LBFGS::initializeOptimizationState() {
+  checkCudaErrors(cudaSetDevice(firstgpu));
   // Set Image object in line searcher so it can use this->image instead of extern Image* I
   if (linesearcher_ptr != nullptr && image != nullptr) {
     static_cast<LineSearcher*>(linesearcher_ptr)->setImage(image);
@@ -184,6 +205,9 @@ __host__ float LBFGS::initializeOptimizationState() {
   
   if (configured) {
     of->configure(N_local, M_local, image_count_local);
+    extern dim3 threadsPerBlockNN, numBlocksNN;
+    of->setThreadsPerBlockNN(threadsPerBlockNN);
+    of->setNumBlocksNN(numBlocksNN);
     configured = 0;
   }
 
@@ -193,12 +217,17 @@ __host__ float LBFGS::initializeOptimizationState() {
   float initial_function_value = of->calcFunction(image->getImage());
   
   if (gpuvmem_cli_verbose()) {
-    std::cout << "Starting function value = " << std::setprecision(4)
-              << std::fixed << initial_function_value << std::endl;
+    std::cout << "  Initial objective f(x): " << std::setprecision(4) << std::fixed
+              << initial_function_value << std::endl;
   }
 
   // Compute initial gradient
   of->calcGradient(image->getImage(), xi, 0);
+
+  const size_t image_bytes_init =
+      sizeof(float) * static_cast<size_t>(M_local) * static_cast<size_t>(N_local) *
+      static_cast<size_t>(image_count_local);
+  checkCudaErrors(cudaMemcpy(xi_old, xi, image_bytes_init, cudaMemcpyDeviceToDevice));
 
   // Initialize search direction as negative gradient (steepest descent)
   // Reuse dimensions from earlier in function (already declared at lines 149-151)
@@ -215,24 +244,44 @@ __host__ float LBFGS::initializeOptimizationState() {
 }
 
 __host__ bool LBFGS::checkFunctionConvergence(float new_value, float prev_value) {
-  return ((prev_value - new_value) / std::max({fabsf(new_value), fabsf(prev_value), 1.0f}) <= this->ftol);
+  return objectiveSequenceWithinTolerance(new_value, prev_value);
 }
 
 __host__ bool LBFGS::checkGradientConvergence() {
+  checkCudaErrors(cudaSetDevice(firstgpu));
   // Get dimensions from Image object
   long M_local = image->getM();
   long N_local = image->getN();
   int image_count_local = image->getImageCount();
-  
+
+  const size_t norm_elems = static_cast<size_t>(M_local) * static_cast<size_t>(N_local) *
+                            static_cast<size_t>(image_count_local);
+  checkCudaErrors(cudaMemset(norm_vector, 0, norm_elems * sizeof(float)));
+
+  const int Mi = static_cast<int>(M_local);
+  const int Ni = static_cast<int>(N_local);
   for (int i = 0; i < image_count_local; i++) {
-    normArray<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, M_local, N_local, i);
+    normArray<<<numBlocksNN, threadsPerBlockNN>>>(norm_vector, xi, Mi, Ni, i);
     checkCudaErrors(cudaDeviceSynchronize());
   }
 
   max_per_it = deviceMaxReduce(norm_vector, M_local * N_local * image_count_local,
                                threadsPerBlockNN.x * threadsPerBlockNN.y);
-  
-  return (max_per_it <= this->gtol);
+
+  if (max_per_it <= this->gtol) {
+    // If the objective is still O(1) or larger, an all-zero max|grad| is almost certainly
+    // wrong (wrong CUDA device, incomplete norm fill, or a broken gradient path).
+    if (max_per_it < 1e-30f && fabsf(this->last_objective_value_) > 1e-6f) {
+      if (gpuvmem_cli_verbose()) {
+        std::cerr << "L-BFGS: ignoring near-zero max|grad|=" << max_per_it << " at iteration "
+                  << this->current_iteration << " while |f|=" << fabsf(this->last_objective_value_)
+                  << " (likely numerical artefact).\n";
+      }
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 __host__ float LBFGS::computeScalingFactor(int par_M, int lbfgs_it) {
@@ -246,22 +295,22 @@ __host__ float LBFGS::computeScalingFactor(int par_M, int lbfgs_it) {
   const int latest_idx = mapToCircularBuffer(par_M - 1, par_M, lbfgs_it);
   float total_sy = 0.0f;
   float total_yy = 0.0f;
-  float* temp_aux;
 
-  checkCudaErrors(cudaMalloc((void**)&temp_aux, sizeof(float) * M_local * N_local));
-  checkCudaErrors(cudaMemset(temp_aux, 0, sizeof(float) * M_local * N_local));
+  if (aux_vector == nullptr) {
+    return 1.0f;
+  }
 
   for (int i = 0; i < image_count_local; i++) {
     getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(
-        temp_aux, d_y, d_s, latest_idx, latest_idx, M_local, N_local, i);
+        aux_vector, d_y, d_s, latest_idx, latest_idx, M_local, N_local, i);
     checkCudaErrors(cudaDeviceSynchronize());
-    const float sy = deviceReduce<float>(temp_aux, M_local * N_local,
+    const float sy = deviceReduce<float>(aux_vector, M_local * N_local,
                                          threadsPerBlockNN.x * threadsPerBlockNN.y);
 
     getDot_LBFGS_ff<<<numBlocksNN, threadsPerBlockNN>>>(
-        temp_aux, d_y, d_y, latest_idx, latest_idx, M_local, N_local, i);
+        aux_vector, d_y, d_y, latest_idx, latest_idx, M_local, N_local, i);
     checkCudaErrors(cudaDeviceSynchronize());
-    const float yy = deviceReduce<float>(temp_aux, M_local * N_local,
+    const float yy = deviceReduce<float>(aux_vector, M_local * N_local,
                                          threadsPerBlockNN.x * threadsPerBlockNN.y);
 
     if (isfinite(sy)) {
@@ -272,8 +321,6 @@ __host__ float LBFGS::computeScalingFactor(int par_M, int lbfgs_it) {
     }
   }
 
-  cudaFree(temp_aux);
-
   if (!(total_yy > MIN_Y_NORM) || !isfinite(total_sy) || !isfinite(total_yy)) {
     return 1.0f;
   }
@@ -282,9 +329,10 @@ __host__ float LBFGS::computeScalingFactor(int par_M, int lbfgs_it) {
 }
 
 __host__ void LBFGS::computeAlphaCoefficients(float* gradient, int par_M,
-                                              int lbfgs_it, float** alpha) {
-  // First loop: iterate backwards (newest to oldest)
-  // Note: aux_vector and d_q are allocated in computeDirection
+                                              int lbfgs_it,
+                                              std::vector<std::vector<float>>& alpha_coeffs) {
+  // First loop: iterate backwards (newest to oldest). Uses aux_vector, d_q from
+  // allocateMemoryGpu (one M×N scratch plane + full q vector).
   // Get dimensions from Image object
   long M_local = image->getM();
   long N_local = image->getN();
@@ -315,25 +363,25 @@ __host__ void LBFGS::computeAlphaCoefficients(float* gradient, int par_M,
       checkCudaErrors(cudaDeviceSynchronize());
       float dot_sq = deviceReduce<float>(aux_vector, M_local * N_local,
                                          threadsPerBlockNN.x * threadsPerBlockNN.y);
-      alpha[i][k] = rho * dot_sq;
+      alpha_coeffs[i][k] = rho * dot_sq;
       
       // Safety check: ensure alpha is finite
-      if (!isfinite(alpha[i][k])) {
-        alpha[i][k] = 0.0f;
+      if (!isfinite(alpha_coeffs[i][k])) {
+        alpha_coeffs[i][k] = 0.0f;
       }
       
       // Update q: q = q - alpha_k * y_k
-      updateQ<<<numBlocksNN, threadsPerBlockNN>>>(d_q, -alpha[i][k], d_y, hist_idx, M_local,
+      updateQ<<<numBlocksNN, threadsPerBlockNN>>>(d_q, -alpha_coeffs[i][k], d_y, hist_idx, M_local,
                                                   N_local, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
   }
 }
 
-__host__ void LBFGS::computeBetaCoefficients(float* r, float** alpha, int par_M,
-                                             int lbfgs_it) {
-  // Second loop: iterate forwards (oldest to newest)
-  // Note: aux_vector is allocated in computeDirection
+__host__ void LBFGS::computeBetaCoefficients(float* r,
+                                             std::vector<std::vector<float>>& alpha_coeffs,
+                                             int par_M, int lbfgs_it) {
+  // Second loop: iterate forwards (oldest to newest). Uses aux_vector from allocateMemoryGpu.
   const long M_local = image->getM();
   const long N_local = image->getN();
   float rho = 0.0f;
@@ -371,7 +419,7 @@ __host__ void LBFGS::computeBetaCoefficients(float* r, float** alpha, int par_M,
       }
       
       // Update r: r = r + s_k * (alpha_k - beta_k)
-      updateQ<<<numBlocksNN, threadsPerBlockNN>>>(r, alpha[i][k] - beta, d_s,
+      updateQ<<<numBlocksNN, threadsPerBlockNN>>>(r, alpha_coeffs[i][k] - beta, d_s,
                                                   hist_idx, M_local, N_local, i);
       checkCudaErrors(cudaDeviceSynchronize());
     }
@@ -399,19 +447,13 @@ __host__ void LBFGS::computeDirection(float* gradient) {
   const int lbfgs_it =
       (lbfgs_stored_pairs > 0) ? ((lbfgs_stored_pairs - 1) % this->K) : 0;
 
-  // Allocate alpha array
-  float** alpha = (float**)malloc(image_count_local * sizeof(float*));
-  for (int i = 0; i < image_count_local; i++) {
-    alpha[i] = (float*)malloc(par_M * sizeof(float));
-    memset(alpha[i], 0, par_M * sizeof(float));
-  }
+  std::vector<std::vector<float>> alpha_coeffs(
+      static_cast<size_t>(image_count_local),
+      std::vector<float>(static_cast<size_t>(par_M), 0.0f));
 
-  // Allocate temporary vectors
-  checkCudaErrors(cudaMalloc((void**)&aux_vector, sizeof(float) * M_local * N_local));
-  checkCudaErrors(cudaMalloc((void**)&d_q,
-                             sizeof(float) * M_local * N_local * image_count_local));
-  checkCudaErrors(cudaMalloc((void**)&d_r,
-                             sizeof(float) * M_local * N_local * image_count_local));
+  if (aux_vector == nullptr || d_q == nullptr || d_r == nullptr) {
+    return;
+  }
 
   checkCudaErrors(cudaMemset(aux_vector, 0, sizeof(float) * M_local * N_local));
   checkCudaErrors(cudaMemcpy(d_q, gradient,
@@ -419,7 +461,7 @@ __host__ void LBFGS::computeDirection(float* gradient) {
                              cudaMemcpyDeviceToDevice));
 
   // First loop: compute alpha coefficients
-  computeAlphaCoefficients(gradient, par_M, lbfgs_it, alpha);
+  computeAlphaCoefficients(gradient, par_M, lbfgs_it, alpha_coeffs);
 
   // Compute gamma scaling factor
   float gamma = computeScalingFactor(par_M, lbfgs_it);
@@ -431,7 +473,7 @@ __host__ void LBFGS::computeDirection(float* gradient) {
   }
 
   // Second loop: compute beta coefficients and update r
-  computeBetaCoefficients(d_r, alpha, par_M, lbfgs_it);
+  computeBetaCoefficients(d_r, alpha_coeffs, par_M, lbfgs_it);
 
   // Set search direction to negative of r
   for (int i = 0; i < image->getImageCount(); i++) {
@@ -444,15 +486,6 @@ __host__ void LBFGS::computeDirection(float* gradient) {
   checkCudaErrors(cudaMemcpy(gradient, d_r,
                              sizeof(float) * M_local * N_local * image_count_local,
                              cudaMemcpyDeviceToDevice));
-
-  // Cleanup
-  cudaFree(aux_vector);
-  cudaFree(d_q);
-  cudaFree(d_r);
-  for (int i = 0; i < image->getImageCount(); i++) {
-    free(alpha[i]);
-  }
-  free(alpha);
 }
 
 __host__ void LBFGS::updateHistory() {
@@ -485,8 +518,7 @@ __host__ void LBFGS::updateHistory() {
 
   if (!isfinite(total_sy) || total_sy <= 0.0f) {
     if (gpuvmem_cli_verbose()) {
-      std::cout << "L-BFGS: curvature test failed (y^T s <= 0); skipping correction pair."
-                << std::endl;
+      std::cout << "L-BFGS: curvature test y^T s <= 0; skipping this secant pair.\n";
     }
     if (clear_history_on_curvature_failure_) {
       const size_t hist_bytes =
@@ -496,8 +528,7 @@ __host__ void LBFGS::updateHistory() {
       checkCudaErrors(cudaMemset(d_y, 0, hist_bytes));
       lbfgs_stored_pairs = 0;
       if (gpuvmem_cli_verbose()) {
-        std::cout << "L-BFGS: cleared all correction pairs (clear_on_curvature_failure)."
-                  << std::endl;
+        std::cout << "L-BFGS: cleared stored secant pairs (clear_on_curvature_failure).\n";
       }
     }
     return;
@@ -516,56 +547,65 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
   double start = omp_get_wtime();
   this->current_iteration = iteration;
   this->max_per_it = 0.0f;
+  gradient_tolerance_met_ = false;
+
+  checkCudaErrors(cudaSetDevice(firstgpu));
+
+  const long M_local = image->getM();
+  const long N_local = image->getN();
+  const int image_count_local = image->getImageCount();
+  const size_t image_bytes =
+      sizeof(float) * static_cast<size_t>(M_local) * static_cast<size_t>(N_local) *
+      static_cast<size_t>(image_count_local);
 
   if (gpuvmem_cli_verbose()) {
-    std::cout << "\n\n********** Iteration " << iteration << " **********\n"
-              << std::endl;
+    std::cout << "\n--- L-BFGS iteration " << iteration << " ---\n";
   }
 
   // Save previous state before line search
-  checkCudaErrors(cudaMemcpy(p_old, image->getImage(),
-                             sizeof(float) * M * N * image->getImageCount(),
+  checkCudaErrors(cudaMemcpy(p_old, image->getImage(), image_bytes,
                              cudaMemcpyDeviceToDevice));
-  checkCudaErrors(cudaMemcpy(xi_old, xi,
-                             sizeof(float) * M * N * image->getImageCount(),
-                             cudaMemcpyDeviceToDevice));
+  /* xi_old keeps g_k from the end of the previous iteration (or init); do not overwrite with
+   * the search direction here — y must be g_{k+1} - g_k for a valid secant pair. */
 
   // Perform line search
   // LineSearcher now owns and manages its own seeder internally
   LineSearcher* searcher = static_cast<LineSearcher*>(linesearcher_ptr);
-  
+
   // Ensure line searcher has Image object set (use optimizer's image member)
   searcher->setImage(image);
-  
+
   // Line searcher manages its own initial step size internally
   auto result = searcher->search(image->getImage(), xi, of, nullptr);
   float new_function_value = result.first;
   float alpha_step = result.second;
-  fret = new_function_value;  // Store for compatibility
-  
+  last_objective_value_ = new_function_value;
+
   // Store step size for next iteration (as fallback initial_alpha)
   prev_step_size = alpha_step;
 
   // Check for function convergence
-  
+
   if (gpuvmem_cli_verbose()) {
-    std::cout << "Function value = " << std::setprecision(4) << std::fixed
-              << new_function_value << std::endl;
+    std::cout << "  Objective f(x_k): " << std::setprecision(4) << std::fixed << new_function_value
+              << std::endl;
   }
 
-  // Compute new gradient
+  // Compute new gradient (must check ||g|| before computeDirection overwrites `xi`)
   of->calcGradient(image->getImage(), xi, iteration);
+  gradient_tolerance_met_ = checkGradientConvergence();
 
   // Update history with correction pairs (curvature-gated)
   updateHistory();
 
-  // Compute new search direction using two-loop recursion
+  checkCudaErrors(cudaMemcpy(xi_old, xi, image_bytes, cudaMemcpyDeviceToDevice));
+
+  // Compute new search direction using two-loop recursion (overwrites `xi`)
   computeDirection(xi);
 
   if (gpuvmem_cli_verbose()) {
     double end = omp_get_wtime();
-    std::cout << "Time: " << std::setprecision(4) << (end - start)
-              << " seconds" << std::endl;
+    std::cout << "  Wall time this iteration: " << std::setprecision(4) << (end - start) << " s\n";
   }
 
   return new_function_value;
@@ -573,7 +613,7 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
 
 __host__ void LBFGS::optimize() {
   if (gpuvmem_cli_verbose()) {
-    std::cout << "\n\nStarting LBFGS method\n" << std::endl;
+    std::cout << "\n--- L-BFGS limited-memory quasi-Newton ---\n";
   }
 
   allocateMemoryGpu();
@@ -589,10 +629,16 @@ __host__ void LBFGS::optimize() {
   for (int iteration = 1; iteration <= this->total_iterations; iteration++) {
     float new_function_value = performIteration(iteration, prev_function_value);
 
-    // Check for function convergence
+    // Check for function convergence (includes stagnation: |df| == 0 in float)
     if (checkFunctionConvergence(new_function_value, prev_function_value)) {
       if (gpuvmem_cli_verbose()) {
-        std::cout << "Exit due to tolerance" << std::endl;
+        const float df = fabsf(new_function_value - prev_function_value);
+        if (!(df > 0.0f)) {
+          std::cout << "L-BFGS stopped at iteration " << iteration
+                    << ": objective unchanged at float precision (line search / plateau).\n";
+        } else {
+          std::cout << "L-BFGS converged: relative change in objective below ftol.\n";
+        }
       }
       // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
@@ -600,10 +646,12 @@ __host__ void LBFGS::optimize() {
       return;
     }
 
-    // Check for gradient convergence
-    if (checkGradientConvergence()) {
+    // Check for gradient convergence (uses true gradient before computeDirection)
+    if (gradient_tolerance_met_) {
       if (gpuvmem_cli_verbose()) {
-        std::cout << "Exit due to gnorm ~ 0" << std::endl;
+        std::cout << "L-BFGS converged: max|gradient| " << std::setprecision(6) << std::scientific
+                  << max_per_it << " <= gtol " << this->gtol << std::fixed << ".\n"
+                  << std::defaultfloat;
       }
       of->calcFunction(image->getImage());
       deallocateMemoryGpu();
@@ -615,7 +663,7 @@ __host__ void LBFGS::optimize() {
   }
 
   if (gpuvmem_cli_verbose()) {
-    std::cout << "Too many iterations in LBFGS" << std::endl;
+    std::cout << "L-BFGS: reached maximum iteration budget without meeting tolerances.\n";
   }
 
   of->calcFunction(image->getImage());
@@ -628,7 +676,7 @@ Optimizer* CreateLbfgs() {
   return new LBFGS;
 }
 
-const std::string name = "CG-LBFGS";
+// L-BFGS (limited-memory BFGS quasi-Newton); factory id "LBFGS".
 const bool RegisteredLbgs =
-    registerCreationFunction<Optimizer, std::string>(name, CreateLbfgs);
+    registerCreationFunction<Optimizer, std::string>("LBFGS", CreateLbfgs);
 }  // namespace

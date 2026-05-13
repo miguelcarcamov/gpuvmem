@@ -31,7 +31,7 @@
  * -------------------------------------------------------------------------
  */
 
-#include "regularizers/regularizers_kernels.cuh"
+#include "regularizer_kernels/regularizers_kernels.cuh"
 #include <cuda_runtime.h>
 #include <math.h>
 
@@ -373,7 +373,8 @@ __device__ float calculateDQ(const float* __restrict__ I,
       const float r = I[N * M * index + N * i + (j + 1)];
       const float l = I[N * M * index + N * i + (j - 1)];
 
-      dQ = 2.0f * (4.0f * c - d + u + r + l);
+      // φ = 0.5 * Σ_{n∈{l,r,u,d}} (c - n)²  ⇒  ∂φ/∂c = (c-l)+(c-r)+(c-u)+(c-d) = 4c - l - r - u - d
+      dQ = 4.0f * c - l - r - u - d;
     } else {
       dQ = I[N * M * index + N * i + j];
     }
@@ -749,18 +750,15 @@ __device__ float calculateDATV(const float* __restrict__ I,
 
       // Anisotropic TV derivative: sign(dx) + sign(dy)
       // For numerical stability, use smoothed sign: x / (|x| + epsilon)
-      const float dx_right = c - r;
-      const float dx_left = l - c;
-      const float dy_down = c - d;
-      const float dy_up = u - c;
+      // F = Σ_{i,j} (|I_{i,j+1}-I_{i,j}| + |I_{i+1,j}-I_{i,j}| + ε). Each interior I(c) appears in
+      // its own cell (right/down diffs) and in cells (i,j-1) and (i-1,j) (left/up as second arg).
+      // ∂F/∂c = sign(c-r) + sign(c-d) + sign(c-l) + sign(c-u).
+      const float s_cr = (c - r) / (fabsf(c - r) + epsilon);
+      const float s_cd = (c - d) / (fabsf(c - d) + epsilon);
+      const float s_cl = (c - l) / (fabsf(c - l) + epsilon);
+      const float s_cu = (c - u) / (fabsf(c - u) + epsilon);
 
-      const float sign_dx_right = dx_right / (fabsf(dx_right) + epsilon);
-      const float sign_dx_left = dx_left / (fabsf(dx_left) + epsilon);
-      const float sign_dy_down = dy_down / (fabsf(dy_down) + epsilon);
-      const float sign_dy_up = dy_up / (fabsf(dy_up) + epsilon);
-
-      // Sum of contributions from all neighbors
-      datv = sign_dx_right + sign_dx_left + sign_dy_down + sign_dy_up;
+      datv = s_cr + s_cd + s_cl + s_cu;
     } else {
       datv = I[N * M * index + N * i + j];
     }

@@ -33,9 +33,10 @@
 
 #include "linesearch/linesearcher.cuh"
 #include "linesearch/line_search_1d_eval.cuh"
-#include "optimization/projection.hh"
+#include "projection/projection.hh"
 #include "error.cuh"
 #include <iostream>
+#include <utility>
 #include "framework.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel
 
@@ -49,7 +50,8 @@ LineSearcher::LineSearcher()
       seeder_ptr(nullptr),
       prev_point(nullptr),
       prev_gradient(nullptr),
-      prev_step_size(1.0f) {}
+      prev_step_size(1.0f),
+      step_domain_floor_(0.0f) {}
 
 LineSearcher::~LineSearcher() {
   if (seeder_ptr != nullptr) {
@@ -81,6 +83,19 @@ void LineSearcher::setInitialStepSize(float initial_step_size) {
 }
 
 float LineSearcher::getInitialStepSize() const { return initial_step_size_value; }
+
+void LineSearcher::setStepDomainFloor(float eps) { step_domain_floor_ = eps; }
+
+float LineSearcher::getStepDomainFloor() const { return step_domain_floor_; }
+
+std::pair<float, float> LineSearcher::clampLineSearchStepToDomain(
+    float alpha, float f_at_alpha, const LineSearch1dEval* ctx) const {
+  if (step_domain_floor_ <= 0.0f || alpha >= step_domain_floor_) {
+    return std::make_pair(alpha, f_at_alpha);
+  }
+  const float a = step_domain_floor_;
+  return std::make_pair(a, lineSearch1dEval(ctx, a));
+}
 
 void LineSearcher::setObjectiveFunction(ObjectiveFunction* of) { objective_function_ = of; }
 

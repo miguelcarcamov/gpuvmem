@@ -19,6 +19,20 @@ class VirtualImageProcessor {
                           float freq,
                           int primary_beam,
                           float fg_scale) = 0;
+  /** Baseline PB on sky brightness: multiply by sqrt(A_ant1 * A_ant2). */
+  virtual void apply_baseline_beam(cufftComplex* image,
+                                   float ant1_diameter,
+                                   float ant1_pb_factor,
+                                   float ant1_pb_cutoff,
+                                   int ant1_primary_beam,
+                                   float ant2_diameter,
+                                   float ant2_pb_factor,
+                                   float ant2_pb_cutoff,
+                                   int ant2_primary_beam,
+                                   float xobs,
+                                   float yobs,
+                                   float freq,
+                                   float fg_scale) = 0;
   virtual void calculateInu(cufftComplex* image, float* I, float freq) = 0;
   virtual void chainRule(float* I, float freq, float fg_scale) = 0;
   /** Configure from Image geometry (dimensions and image count). Call when image is created (e.g. from setDevice). */

@@ -1,11 +1,6 @@
 #include "objective_function/terms/regularizers/laplacian.cuh"
-#include "regularizers/regularizers_host.cuh"
+#include "regularizer_kernels/regularizers_host.cuh"
 #include "chi2/chi2_host.cuh"  // For linkAddToDPhi
-
-extern long M, N;
-extern int image_count;
-extern float* penalizators;
-extern int nPenalizators;
 
 Laplacian::Laplacian() {
   this->name = "Laplacian";
@@ -24,7 +19,8 @@ void Laplacian::calcGi(float* p, float* xi) {
 };
 
 void Laplacian::restartDGi() {
-  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+  const size_t plane = static_cast<size_t>(gridM()) * static_cast<size_t>(gridN());
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * plane));
 };
 
 void Laplacian::addToDphi(float* device_dphi) {

@@ -8,7 +8,14 @@
 #include "linesearch/brent.cuh"
 #include <string>
 #include <memory>
+#include <vector>
 
+/** Device buffers: `d_s`/`d_y` are the L-BFGS pair ring; `xi` holds ∇f after calcGradient,
+ *  then the line-search direction; `p_old` / `xi_old` are previous image and gradient for
+ *  secant pairs. `norm_vector` is reduction scratch for |∇f|_∞. `aux_vector` is one M×N
+ *  plane for pairwise products before reduction; `d_q`/`d_r` are full multi-image vectors
+ *  for the two-loop recursion. Staging buffers are only for the yᵀs curvature gate.
+ */
 // Forward declaration to avoid circular dependency
 class StepSizeSeeder;
 
@@ -81,10 +88,10 @@ class LBFGS : public Optimizer {
    * @param gradient Current gradient vector g
    * @param par_M Number of correction pairs to use
    * @param lbfgs_it Current iteration index in circular buffer
-   * @param alpha Output array for alpha coefficients
+   * @param alpha_coeffs In/out: alpha coefficients (host; resized by caller to image_count × par_M)
    */
   __host__ void computeAlphaCoefficients(float* gradient, int par_M, int lbfgs_it,
-                                        float** alpha);
+                                        std::vector<std::vector<float>>& alpha_coeffs);
 
   /**
    * @brief Compute beta coefficients and update r in second loop.
@@ -92,12 +99,12 @@ class LBFGS : public Optimizer {
    * Implements the iterative second loop as per standard L-BFGS algorithm.
    * 
    * @param r Intermediate vector r = gamma * q from first loop
-   * @param alpha Alpha coefficients from first loop
+   * @param alpha_coeffs Alpha coefficients from first loop (host; one row per spectral image)
    * @param par_M Number of correction pairs to use
    * @param lbfgs_it Current iteration index in circular buffer
    */
-  __host__ void computeBetaCoefficients(float* r, float** alpha, int par_M,
-                                        int lbfgs_it);
+  __host__ void computeBetaCoefficients(float* r, std::vector<std::vector<float>>& alpha_coeffs,
+                                        int par_M, int lbfgs_it);
 
   /**
    * @brief Compute gamma scaling factor for Hessian approximation.
@@ -152,21 +159,20 @@ class LBFGS : public Optimizer {
   __host__ float initializeOptimizationState();
 
   // Memory pointers for CUDA operations
-  float* d_s;           // Correction pairs: s_k = x_{k+1} - x_k
-  float* d_y;           // Correction pairs: y_k = g_{k+1} - g_k
-  float* xi;            // Current gradient / search direction
-  float* xi_old;        // Previous gradient
-  float* p_old;         // Previous parameter values
-  float* norm_vector;   // Temporary storage for gradient norm computation
-  float* d_r;           // Temporary storage for second loop
-  float* d_q;           // Temporary storage for first loop
-  float* aux_vector;    // Temporary storage for dot products
+  float* d_s = nullptr;           // Correction pairs: s_k = x_{k+1} - x_k
+  float* d_y = nullptr;           // Correction pairs: y_k = g_{k+1} - g_k
+  float* xi = nullptr;            // Current gradient / search direction
+  float* xi_old = nullptr;        // Previous gradient g_k (for y = g_{k+1} - g_k)
+  float* p_old = nullptr;         // Previous parameter values
+  float* norm_vector = nullptr;   // Reduction scratch for gradient stopping
+  float* d_r = nullptr;           // Two-loop workspace (second loop, size M×N×#images)
+  float* d_q = nullptr;           // Two-loop workspace (first loop, q vector)
+  float* aux_vector = nullptr;    // One M×N plane: per-pixel products before reduction
   float* lbfgs_scratch_s = nullptr;  // Staged s for curvature check (M*N*image_count)
   float* lbfgs_scratch_y = nullptr;  // Staged y for curvature check
 
   // Optimization state
-  float fret = 0.0f;    // Function value after line search
-  float fp = 0.0f;      // Previous function value
+  float last_objective_value_ = 0.0f;
   float max_per_it = 0.0f;  // Maximum gradient component
   int configured = 1;   // Configuration flag (1 = needs configuration)
   int K = 100;          // Maximum number of correction pairs (memory limit)
@@ -177,6 +183,9 @@ class LBFGS : public Optimizer {
   
   // Previous step size (used as fallback initial_alpha for line search)
   float prev_step_size;   // Previous step size
+
+  /** Set in performIteration after calcGradient, before computeDirection overwrites `xi`. */
+  bool gradient_tolerance_met_ = false;
 
   /** Number of correction pairs successfully stored (drives two-loop window). */
   int lbfgs_stored_pairs = 0;

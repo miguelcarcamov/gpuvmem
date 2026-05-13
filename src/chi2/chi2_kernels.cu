@@ -86,9 +86,11 @@ __global__ void DChi2(float* noise,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  // Early exit: check noise threshold first to avoid unnecessary computation
+  // Mask: exclude pixels with noise map value >= noise_cut (when noise_cut > 0).
+  // noise_cut <= 0 means "no cut" — otherwise noise_cut==0 with a non-negative
+  // noise/distance map would skip every pixel and zero the χ² gradient.
   const float noise_val = noise[N * i + j];
-  if (noise_val >= noise_cut) {
+  if (noise_cut > 0.0f && noise_val >= noise_cut) {
     return;
   }
 
@@ -149,9 +151,8 @@ __global__ void DChi2(float* noise,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  // Early exit: check noise threshold first to avoid unnecessary computation
   const float noise_val = noise[N * i + j];
-  if (noise_val >= noise_cut) {
+  if (noise_cut > 0.0f && noise_val >= noise_cut) {
     return;
   }
 
@@ -187,6 +188,122 @@ __global__ void DChi2(float* noise,
   dChi2[N * i + j] = -dchi2;
 }
 
+__global__ void DChi2Baseline(float* noise,
+                              float* dChi2,
+                              cufftComplex* Vr,
+                              double3* UVW,
+                              float* w,
+                              long N,
+                              long numVisibilities,
+                              float fg_scale,
+                              float noise_cut,
+                              float ref_xobs,
+                              float ref_yobs,
+                              float phs_xobs,
+                              float phs_yobs,
+                              double DELTAX,
+                              double DELTAY,
+                              float ant1_diameter,
+                              float ant1_pb_factor,
+                              float ant1_pb_cutoff,
+                              int ant1_primary_beam,
+                              float ant2_diameter,
+                              float ant2_pb_factor,
+                              float ant2_pb_cutoff,
+                              int ant2_primary_beam,
+                              float freq,
+                              bool normalize,
+                              float N_eff) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  const float noise_val = noise[N * i + j];
+  if (noise_cut > 0.0f && noise_val >= noise_cut) {
+    return;
+  }
+
+  float idft_result = computeIdftPixel(i, j, Vr, UVW, w, N, numVisibilities,
+                                        phs_xobs, phs_yobs, DELTAX, DELTAY);
+
+  const float a1 = attenuation(ant1_diameter, ant1_pb_factor, ant1_pb_cutoff, freq,
+                               ref_xobs, ref_yobs, DELTAX, DELTAY, ant1_primary_beam);
+  const float a2 = attenuation(ant2_diameter, ant2_pb_factor, ant2_pb_cutoff, freq,
+                               ref_xobs, ref_yobs, DELTAX, DELTAY, ant2_primary_beam);
+  const float comb = sqrtf(fmaxf(a1 * a2, 0.0f));
+  const float scale_factor = fg_scale * comb;
+
+  float dchi2 = idft_result * scale_factor;
+
+  if (normalize) {
+    if (N_eff > 0.0f) {
+      dchi2 /= N_eff;
+    } else {
+      dchi2 /= numVisibilities;
+    }
+  }
+
+  dChi2[N * i + j] = -dchi2;
+}
+
+__global__ void DChi2Baseline(float* noise,
+                              float* gcf,
+                              float* dChi2,
+                              cufftComplex* Vr,
+                              double3* UVW,
+                              float* w,
+                              long N,
+                              long numVisibilities,
+                              float fg_scale,
+                              float noise_cut,
+                              float ref_xobs,
+                              float ref_yobs,
+                              float phs_xobs,
+                              float phs_yobs,
+                              double DELTAX,
+                              double DELTAY,
+                              float ant1_diameter,
+                              float ant1_pb_factor,
+                              float ant1_pb_cutoff,
+                              int ant1_primary_beam,
+                              float ant2_diameter,
+                              float ant2_pb_factor,
+                              float ant2_pb_cutoff,
+                              int ant2_primary_beam,
+                              float freq,
+                              bool normalize,
+                              float N_eff) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  const float noise_val = noise[N * i + j];
+  if (noise_cut > 0.0f && noise_val >= noise_cut) {
+    return;
+  }
+
+  float idft_result = computeIdftPixel(i, j, Vr, UVW, w, N, numVisibilities,
+                                        phs_xobs, phs_yobs, DELTAX, DELTAY);
+
+  const float a1 = attenuation(ant1_diameter, ant1_pb_factor, ant1_pb_cutoff, freq,
+                               ref_xobs, ref_yobs, DELTAX, DELTAY, ant1_primary_beam);
+  const float a2 = attenuation(ant2_diameter, ant2_pb_factor, ant2_pb_cutoff, freq,
+                               ref_xobs, ref_yobs, DELTAX, DELTAY, ant2_primary_beam);
+  const float comb = sqrtf(fmaxf(a1 * a2, 0.0f));
+  const float gcf_i = gcf[N * i + j];
+  const float scale_factor = fg_scale * comb * gcf_i;
+
+  float dchi2 = idft_result * scale_factor;
+
+  if (normalize) {
+    if (N_eff > 0.0f) {
+      dchi2 /= N_eff;
+    } else {
+      dchi2 /= numVisibilities;
+    }
+  }
+
+  dChi2[N * i + j] = -dchi2;
+}
+
 // Gather one (chan, pol) visibility from each chunk at offset into contiguous buffers
 __global__ void gatherChunkAtOffset(double3* uvw_out,
                                     cufftComplex* Vo_out,
@@ -201,6 +318,22 @@ __global__ void gatherChunkAtOffset(double3* uvw_out,
   uvw_out[i] = uvw_ptrs[i][offset];
   Vo_out[i] = Vo_ptrs[i][offset];
   weight_out[i] = weight_ptrs[i][offset];
+}
+
+__global__ void gatherChunkAtOffsets(double3* uvw_out,
+                                     cufftComplex* Vo_out,
+                                     float* weight_out,
+                                     double3 const* const* uvw_ptrs,
+                                     cufftComplex const* const* Vo_ptrs,
+                                     float const* const* weight_ptrs,
+                                     const int* slots,
+                                     int n) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  const int o = slots[i];
+  uvw_out[i] = uvw_ptrs[i][o];
+  Vo_out[i] = Vo_ptrs[i][o];
+  weight_out[i] = weight_ptrs[i][o];
 }
 
 // Add gradient contribution to multi-plane gradient array

@@ -1,7 +1,8 @@
 #include "utils/copyrightwarranty.cuh"
+#include <iostream>
 
 __host__ void print_warranty() {
-  printf(
+  std::cout <<
       "THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY \
 APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT \
 HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM 'AS IS' WITHOUT WARRANTY \
@@ -9,11 +10,11 @@ OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, \
 THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR \
 PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM \
 IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF \
-ALL NECESSARY SERVICING, REPAIR OR CORRECTION.\n");
+ALL NECESSARY SERVICING, REPAIR OR CORRECTION.\n";
 }
 
 __host__ void print_copyright() {
-  printf(
+  std::cout <<
       "   TERMS AND CONDITIONS \n"
       " \n"
       "0. Definitions. \n"
@@ -638,5 +639,5 @@ __host__ void print_copyright() {
       "Program, unless a warranty or assumption of liability accompanies a \n"
       "copy of the Program in return for a fee. \n"
       " \n"
-      " END OF TERMS AND CONDITIONS \n\n");
+      " END OF TERMS AND CONDITIONS \n\n";
 }

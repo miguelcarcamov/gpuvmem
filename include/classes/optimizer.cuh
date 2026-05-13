@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "optimization/projection.hh"
+#include "projection/projection.hh"
 
 class Image;
 class ObjectiveFunction;
@@ -43,6 +43,14 @@ class Optimizer {
   __host__ virtual void setProjection(std::unique_ptr<Projection> projection);
 
  protected:
+  /**
+   * Objective stopping: scale-invariant on |f|,
+   *   |f_new − f_prev| ≤ ftol · (1 + max(|f_new|, |f_prev|)).
+   * Also stops on exact float equality of f (line search made no representable progress).
+   * Returns false if either value is non-finite.
+   */
+  __host__ bool objectiveSequenceWithinTolerance(float f_new, float f_prev) const;
+
   ObjectiveFunction* of;
   Image* image;
   int flag;

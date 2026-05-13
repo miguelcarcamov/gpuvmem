@@ -1,8 +1,9 @@
 #ifndef IO_CUH
 #define IO_CUH
 
-#include "fits/fits_io.h"
+#include "classes/imaging_header.hh"
 #include <fitsio.h>  // For fitsfile forward declaration
+#include <optional>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
@@ -38,9 +39,17 @@ class Io {
   virtual void setNormalizationFactor(int normalization_factor){};
   virtual void setPrintImages(bool print_images){};
 
-  virtual gpuvmem::fits::FitsHeader readHeader(){};
-  virtual gpuvmem::fits::FitsHeader readHeader(char* header_name){};
-  virtual gpuvmem::fits::FitsHeader readHeader(std::string header_name){};
+  /**
+   * When set, supplies primary-HDU geometry without a model FITS path (synthetic grid),
+   * or overrides file-based geometry for FITS writes. Pass std::nullopt to use only file input.
+   */
+  virtual void setModelFitsGeometry(std::optional<gpuvmem::ImagingHeader> geometry) {
+    (void)geometry;
+  }
+
+  virtual gpuvmem::ImagingHeader readHeader() { return {}; }
+  virtual gpuvmem::ImagingHeader readHeader(char* /*header_name*/) { return {}; }
+  virtual gpuvmem::ImagingHeader readHeader(std::string /*header_name*/) { return {}; }
   virtual std::vector<float> read_data_float_FITS(){};
   virtual std::vector<float> read_data_float_FITS(char* filename){};
   virtual std::vector<float> read_data_float_FITS(std::string filename){};

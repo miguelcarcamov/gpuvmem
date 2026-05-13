@@ -33,6 +33,7 @@
 
 #include "linesearch/brent.cuh"
 #include "linesearch/nrutil.h"
+#include <iostream>
 #define ITMAX 500
 #define CGOLD 0.3819660
 #define ZEPS 1.0e-10
@@ -116,7 +117,7 @@ __host__ float brent(float ax,
       }
     }
   }
-  printf("Too many iterations in brent\n");
+  std::cerr << "Too many iterations in brent\n";
   *xmin = x;
   return fx;
 }

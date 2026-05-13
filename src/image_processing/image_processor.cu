@@ -27,6 +27,26 @@ void ImageProcessor::apply_beam(cufftComplex* image,
                     freq, primary_beam, fg_scale);
 };
 
+void ImageProcessor::apply_baseline_beam(cufftComplex* image,
+                                           float ant1_diameter,
+                                           float ant1_pb_factor,
+                                           float ant1_pb_cutoff,
+                                           int ant1_primary_beam,
+                                           float ant2_diameter,
+                                           float ant2_pb_factor,
+                                           float ant2_pb_cutoff,
+                                           int ant2_primary_beam,
+                                           float xobs,
+                                           float yobs,
+                                           float freq,
+                                           float fg_scale) {
+  if (image_count == 2)
+    linkApplyBaselineBeam2I(image, ant1_diameter, ant1_pb_factor, ant1_pb_cutoff,
+                          ant1_primary_beam, ant2_diameter, ant2_pb_factor,
+                          ant2_pb_cutoff, ant2_primary_beam, xobs, yobs, freq,
+                          fg_scale);
+};
+
 void ImageProcessor::chainRule(float* I, float freq, float fg_scale) {
   if (image_count == 2)
     linkChain2I(chain, freq, I, fg_scale);

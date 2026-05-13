@@ -31,8 +31,8 @@
  * -------------------------------------------------------------------------
  */
 
-#include "regularizers/regularizers_host.cuh"
-#include "regularizers/regularizers_kernels.cuh"
+#include "regularizer_kernels/regularizers_host.cuh"
+#include "regularizer_kernels/regularizers_kernels.cuh"
 #include "reduction/reduction_host.cuh"
 #include "error.cuh"
 #include <cuda_runtime.h>

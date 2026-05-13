@@ -11,7 +11,7 @@
 #include <tables/Tables/Table.h>
 #include <tables/Tables/TableDesc.h>
 
-#include <cstdio>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -29,14 +29,14 @@ class CasacoreMSWriter : public MSWriter {
              const MSWriteOptions& options) override {
     try {
       if (ms.storage_mode() == StorageMode::Stokes) {
-        std::fprintf(stderr,
-                     "MSWriter: dataset must be in correlation mode to write; "
-                     "call stokes_to_correlations(ms) first.\n");
+        std::cerr
+            << "MSWriter: dataset must be in correlation mode to write; "
+               "call stokes_to_correlations(ms) first.\n";
         return false;
       }
       casacore::Table main_tab(path, casacore::Table::Update);
       if (main_tab.nrow() == 0) {
-        std::fprintf(stderr, "MSWriter: empty MAIN table\n");
+        std::cerr << "MSWriter: empty MAIN table\n";
         return false;
       }
 
@@ -53,7 +53,7 @@ class CasacoreMSWriter : public MSWriter {
       main_tab.flush();
       return true;
     } catch (const std::exception& e) {
-      std::fprintf(stderr, "MSWriter: %s\n", e.what());
+      std::cerr << "MSWriter: " << e.what() << '\n';
       return false;
     }
   }

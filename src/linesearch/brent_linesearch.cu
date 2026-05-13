@@ -41,7 +41,14 @@
 #include "framework.cuh"
 #include "factory.cuh"
 #include "cli/gpuvmem_cli_config.hh"
+#include <cmath>
+#include <iomanip>
 #include <iostream>
+
+__host__ Brent::Brent() {
+  // Pyralysis GoldenSectionSearch / FibonacciSearch: setup_bracketing(..., domain_eps=1e-12)
+  setStepDomainFloor(1.0e-12f);
+}
 
 std::pair<float, float> Brent::search(
     float* current_point, float* search_direction,
@@ -55,6 +62,8 @@ std::pair<float, float> Brent::search(
   const int image_count = objective_function->getImageCount();
   const size_t vec_bytes = sizeof(float) * static_cast<size_t>(M) * static_cast<size_t>(N) *
                            static_cast<size_t>(image_count);
+
+  checkCudaErrors(cudaSetDevice(objective_function->getPrimaryCudaDevice()));
 
   // Allocate temporary memory
   float* local_device_pcom;
@@ -71,24 +80,26 @@ std::pair<float, float> Brent::search(
   LineSearch1dEval line_eval{local_device_pcom, local_device_xicom, this->image,
                              objective_function};
   LineSearcher::ScopedSearchContext _ls_ctx(this, objective_function, &line_eval);
-  
-  // Get initial step size from seeder/history/initial_step_size_value
-  float initial_alpha = computeInitialAlpha(objective_function, current_point, search_direction);
-  if (initial_alpha <= 0.0f) {
-    initial_alpha = initial_step_size_value;  // Fallback to initial_step_size_value
-  }
 
-  // Bracket the minimum first
+  // Legacy linmin.cu: ax=0, xx=1 always for mnbrak (not prev step / seeder).
+  // Keep xx configurable via setInitialStepSize() (default 1.0f == legacy).
   float ax = 0.0f;
-  float xx = initial_alpha;
+  float xx = getInitialStepSize();
+  if (xx <= 0.0f) {
+    xx = 1.0f;
+  }
   float bx, fa, fx, fb;
   mnbrak(&ax, &xx, &bx, &fa, &fx, &fb, lineSearch1dEvalThunk, &line_eval);
 
-  // Brent's method
+  // Brent's method (legacy linmin used TOL 1e-7; use LineSearcher tolerance)
   float xmin;
   float function_value =
-      brent(ax, xx, bx, tolerance, &xmin, lineSearch1dEvalThunk, &line_eval);
-  
+      brent(ax, xx, bx, getTolerance(), &xmin, lineSearch1dEvalThunk, &line_eval);
+
+  const auto clamped = clampLineSearchStepToDomain(xmin, function_value, &line_eval);
+  xmin = clamped.first;
+  function_value = clamped.second;
+
   // Update point: p = p + xmin * d
   // Use Image object from line searcher member instead of extern Image* I
   updatePoint(objective_function, this->image, current_point, search_direction, xmin);
@@ -98,7 +109,12 @@ std::pair<float, float> Brent::search(
   cudaFree(local_device_xicom);
   
   if (gpuvmem_cli_verbose()) {
-    printf("Alpha for linear minimization = %f\n\n", xmin);
+    std::cout << "Alpha for linear minimization = ";
+    if (fabsf(xmin) < 1e-3f && xmin != 0.0f) {
+      std::cout << std::scientific << std::setprecision(8) << xmin << std::fixed << "\n\n";
+    } else {
+      std::cout << std::setprecision(4) << std::fixed << xmin << "\n\n";
+    }
   }
   
   return std::make_pair(function_value, xmin);

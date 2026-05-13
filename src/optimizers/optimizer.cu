@@ -1,5 +1,7 @@
 #include "classes/optimizer.cuh"
 
+#include <cmath>
+
 __host__ Optimizer::~Optimizer() = default;
 
 __host__ Optimizer::Optimizer()
@@ -56,3 +58,12 @@ __host__ void Optimizer::setK(int /*K*/) {}
 __host__ void Optimizer::setLineSearcher(std::unique_ptr<LineSearcher> /*searcher*/) {}
 
 __host__ void Optimizer::setProjection(std::unique_ptr<Projection> /*projection*/) {}
+
+__host__ bool Optimizer::objectiveSequenceWithinTolerance(float f_new,
+                                                          float f_prev) const {
+  if (!std::isfinite(f_new) || !std::isfinite(f_prev)) return false;
+  const float diff = fabsf(f_new - f_prev);
+  if (!(diff > 0.0f)) return true;
+  const float scale = 1.0f + std::fmax(fabsf(f_new), fabsf(f_prev));
+  return diff <= this->ftol * scale;
+}

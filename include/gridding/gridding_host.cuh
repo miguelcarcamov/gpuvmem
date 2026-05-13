@@ -13,6 +13,8 @@ class ChunkedVisibilityGPU;
 }  // namespace ms
 }  // namespace gpuvmem
 
+class Image;
+
 // Gridding functions - New MS API
 __host__ gpuvmem::ms::MeasurementSet do_gridding(
     gpuvmem::ms::MeasurementSet& ms,
@@ -26,16 +28,13 @@ __host__ gpuvmem::ms::MeasurementSet do_gridding(
 
 __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
                             gpuvmem::ms::ChunkedVisibilityGPU* gpu,
-                            double deltau,
-                            double deltav,
                             int num_gpus,
                             int firstgpu,
                             int blockSizeV,
-                            long M,
-                            long N,
                             CKernel* ckernel,
                             float* I,
-                            VirtualImageProcessor* ip);
+                            VirtualImageProcessor* ip,
+                            const Image* grid_image);
 
 __host__ void griddedTogrid(std::vector<cufftComplex>& Vm_gridded,
                             std::vector<cufftComplex> Vm_gridded_sp,

@@ -40,6 +40,7 @@
 #include "utils/complexOps.cuh"
 #include "measurement_operator/measurement_operator_host.cuh"
 #include "framework/cuda_grid.cuh"
+#include "classes/image.cuh"
 #include <cufft.h>
 #include <cuda_runtime.h>
 #include <vector>
@@ -53,8 +54,6 @@ extern Vars variables;
 extern varsPerGPU* vars_gpu;
 extern int image_count;
 extern long M, N;
-extern double deltau, deltav;
-extern double crpix1, crpix2;
 extern dim3 threadsPerBlockNN, numBlocksNN;
 extern int num_gpus, firstgpu;
 extern unsigned int NearestPowerOf2(unsigned int x);
@@ -251,21 +250,24 @@ __host__ gpuvmem::ms::MeasurementSet do_gridding(
 
 __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
                             gpuvmem::ms::ChunkedVisibilityGPU* gpu,
-                            double deltau,
-                            double deltav,
                             int num_gpus,
                             int firstgpu,
                             int blockSizeV,
-                            long M,
-                            long N,
                             CKernel* ckernel,
                             float* I,
-                            VirtualImageProcessor* ip) {
-  if (!gpu || !ckernel || !I || !ip) return;
+                            VirtualImageProcessor* ip,
+                            const Image* grid_image) {
+  if (!gpu || !ckernel || !I || !ip || !grid_image) return;
   if (gpu->num_fields() == 0) {
     if (!gpu->upload(ms)) return;
   }
   if (gpu->num_fields() == 0) return;
+
+  const long Mc = grid_image->getM();
+  const long Nc = grid_image->getN();
+  const ImagingGeometry geo = grid_image->imaging_geometry();
+  const double deltau = geo.deltau;
+  const double deltav = geo.deltav;
 
   const gpuvmem::ms::MeasurementSetMetadata& meta = ms.metadata();
   if (meta.num_antennas() == 0) return;
@@ -285,10 +287,6 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
     const gpuvmem::ms::GPUField& gpu_field = gpu->fields()[f];
     const gpuvmem::ms::Field& host_field = ms.field(f);
     const gpuvmem::ms::FieldMetadata& fmeta = host_field.metadata();
-    float ref_xobs = fmeta.ref_xobs_pix;
-    float ref_yobs = fmeta.ref_yobs_pix;
-    float phs_xobs = fmeta.phs_xobs_pix;
-    float phs_yobs = fmeta.phs_yobs_pix;
 
     std::set<int> dd_ids;
     for (const auto& bl : gpu_field.baselines)
@@ -354,18 +352,18 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
 
         if (stokes_imaging) {
           for (int pol = 0; pol < npol; pol++) {
-            float* I_slice = I + static_cast<ptrdiff_t>(pol) * M * N;
-            computeImageToVisibilityGrid(
-                I_slice, ip, vars_gpu, gpu_idx, M, N, nu, ref_xobs, ref_yobs,
-                phs_xobs, phs_yobs, ant_diam, pb_factor, pb_cutoff,
-                primary_beam_int, 1.0f, ckernel, fft_shift);
+            float* I_slice = I + static_cast<ptrdiff_t>(pol) * Mc * Nc;
+            computeImageToVisibilityGridBaseline(
+                {I_slice, grid_image, ip}, fmeta, vars_gpu, gpu_idx, nu,
+                ant_diam, pb_factor, pb_cutoff, primary_beam_int, ant_diam, pb_factor,
+                pb_cutoff, primary_beam_int, 1.0f, ckernel, fft_shift);
 
             cufftComplex* d_Vm_out = nullptr;
             checkCudaErrors(
                 cudaMalloc(&d_Vm_out, num_chunks * sizeof(cufftComplex)));
             degriddingGPU<<<blocks_vis, threads_vis>>>(
                 d_uvw, d_Vm_out, vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
-                deltau, deltav, nvis, M, N, ckernel->getm(), ckernel->getn(),
+                deltau, deltav, nvis, Mc, Nc, ckernel->getm(), ckernel->getn(),
                 ckernel->getSupportX(), ckernel->getSupportY());
             checkCudaErrors(cudaDeviceSynchronize());
 
@@ -387,17 +385,17 @@ __host__ void do_degridding(gpuvmem::ms::MeasurementSet& ms,
             cudaFree(d_ptrs);
           }
         } else {
-          computeImageToVisibilityGrid(
-              I, ip, vars_gpu, gpu_idx, M, N, nu, ref_xobs, ref_yobs, phs_xobs,
-              phs_yobs, ant_diam, pb_factor, pb_cutoff, primary_beam_int, 1.0f,
-              ckernel, fft_shift);
+          computeImageToVisibilityGridBaseline(
+              {I, grid_image, ip}, fmeta, vars_gpu, gpu_idx, nu, ant_diam, pb_factor,
+              pb_cutoff, primary_beam_int, ant_diam, pb_factor, pb_cutoff,
+              primary_beam_int, 1.0f, ckernel, fft_shift);
 
           cufftComplex* d_Vm_out = nullptr;
           checkCudaErrors(
               cudaMalloc(&d_Vm_out, num_chunks * sizeof(cufftComplex)));
           degriddingGPU<<<blocks_vis, threads_vis>>>(
               d_uvw, d_Vm_out, vars_gpu[gpu_idx].device_V, ckernel->getGPUKernel(),
-              deltau, deltav, nvis, M, N, ckernel->getm(), ckernel->getn(),
+              deltau, deltav, nvis, Mc, Nc, ckernel->getm(), ckernel->getn(),
               ckernel->getSupportX(), ckernel->getSupportY());
           checkCudaErrors(cudaDeviceSynchronize());
 

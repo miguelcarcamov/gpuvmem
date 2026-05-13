@@ -50,8 +50,6 @@ extern dim3 numBlocksNN;
 
 int flag_opt;
 
-#define EPS 1.0e-10
-
 #define FREEALL                \
   if (device_gg_vector) { cudaFree(device_gg_vector); device_gg_vector = nullptr; } \
   if (device_dgg_vector) { cudaFree(device_dgg_vector); device_dgg_vector = nullptr; } \
@@ -110,6 +108,16 @@ __global__ void updateSearchDirectionCG(float* search_dir, float* grad,
   }
 }
 
+/** dst = -src per (M,N) plane and spectral channel `image`. */
+__global__ void negateDevicePlaneInPlace(float* dst, const float* src, long N, long M,
+                                         int image) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+  if (i >= M || j >= N) return;
+  const long idx = M * N * image + N * i + j;
+  dst[idx] = -src[idx];
+}
+
 // Base class implementation
 
 __host__ ConjugateGradient::ConjugateGradient() {
@@ -163,7 +171,10 @@ __host__ void ConjugateGradient::allocateMemoryGpu() {
   long M_local = image->getM();
   long N_local = image->getN();
   int image_count_local = image->getImageCount();
-  
+
+  extern int firstgpu;
+  checkCudaErrors(cudaSetDevice(firstgpu));
+
   if (configured) {
     of->configure(N_local, M_local, image_count_local);
     // Set CUDA launch configuration
@@ -187,11 +198,6 @@ __host__ void ConjugateGradient::allocateMemoryGpu() {
     std::cerr << "  ObjectiveFunction must be configured before allocating memory!" << std::endl;
     return;
   }
-  
-  // Ensure we're on firstgpu before allocating memory
-  // (dphi and other memory is allocated on firstgpu)
-  extern int firstgpu;
-  cudaSetDevice(firstgpu);
   
   size_t array_size = sizeof(float) * M_local * N_local * image_count_local;
   // device_gg_vector and device_dgg_vector are used by kernels that access
@@ -235,8 +241,8 @@ __host__ float ConjugateGradient::initializeOptimizationState() {
 
   float initial_function_value = of->calcFunction(image->getImage());
   if (gpuvmem_cli_verbose()) {
-    std::cout << "Starting function value = " << std::setprecision(4)
-              << std::fixed << initial_function_value << std::endl;
+    std::cout << "  Initial objective f(x): " << std::setprecision(4) << std::fixed
+              << initial_function_value << std::endl;
   }
 
   if (xi == nullptr) {
@@ -255,6 +261,11 @@ __host__ float ConjugateGradient::initializeOptimizationState() {
     searchDirection<<<blocks, threads>>>(device_g, xi, device_h, N_local, M_local, i);
     checkCudaErrors(cudaDeviceSynchronize());
   }
+  // searchDirection leaves device_g = -∇f; PRP needs the true previous gradient +∇f in device_g.
+  for (int i = 0; i < image_count_local; i++) {
+    negateDevicePlaneInPlace<<<blocks, threads>>>(device_g, device_g, N_local, M_local, i);
+    checkCudaErrors(cudaDeviceSynchronize());
+  }
 
   prev_step_size = 1.0f;
 
@@ -271,8 +282,7 @@ __host__ float ConjugateGradient::initializeOptimizationState() {
 
 __host__ bool ConjugateGradient::checkFunctionConvergence(float new_value,
                                                            float prev_value) {
-  return (2.0f * fabsf(new_value - prev_value) <=
-          this->ftol * (fabsf(new_value) + fabsf(prev_value) + EPS));
+  return objectiveSequenceWithinTolerance(new_value, prev_value);
 }
 
 __host__ bool ConjugateGradient::checkGradientConvergence(float* current_gradient,
@@ -332,8 +342,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   this->current_iteration = iteration;
 
   if (gpuvmem_cli_verbose()) {
-    std::cout << "\n\n********** Iteration " << iteration << " **********\n"
-              << std::endl;
+    std::cout << "\n--- " << methodName() << " iteration " << iteration << " ---\n";
   }
 
   long M_local = image->getM();
@@ -343,12 +352,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   extern int firstgpu;
   cudaSetDevice(firstgpu);
 
-  // Gradient at current point: only compute on first iteration (g_0). For iteration >= 2,
-  // device_g already holds g_{k-1} from the end of the previous iteration (saved below).
-  if (iteration == 1) {
-    checkCudaErrors(cudaMemset(device_g, 0, grad_size));
-    of->calcGradient(image->getImage(), device_g, iteration);
-  }
+  // device_g holds +g_{k-1} (after init: +g_0; after each iteration: +g_k saved before newXi).
 
   LineSearcher* searcher = static_cast<LineSearcher*>(linesearcher_ptr);
   if (searcher == nullptr) {
@@ -362,11 +366,11 @@ __host__ float ConjugateGradient::performIteration(int iteration,
   auto result = searcher->search(image->getImage(), xi, of, nullptr);
   float new_function_value = result.first;
   float alpha_step = result.second;
-  fret = new_function_value;
+  last_objective_value_ = new_function_value;
 
   if (gpuvmem_cli_verbose()) {
-    std::cout << "Function value = " << std::setprecision(4) << std::fixed
-              << new_function_value << std::endl;
+    std::cout << "  Objective f(x_k): " << std::setprecision(4) << std::fixed << new_function_value
+              << std::endl;
   }
 
   // New gradient at the new point (after line search). Zero xi so no leftover
@@ -389,14 +393,17 @@ __host__ float ConjugateGradient::performIteration(int iteration,
     throw;
   }
 
-  // Save g_{k+1} (in xi) to device_g for next iteration; then newXi overwrites xi and
-  // needs a buffer for -g_{k+1}. Pass temp for that so device_g is not overwritten.
+  // newXi(g, xi, h, beta): xi_new = h_new = g + beta*h with g = -∇f_{k+1}. xi holds +∇f_{k+1}.
+  dim3 blocks = of->getNumBlocksNN();
+  dim3 threads = of->getThreadsPerBlockNN();
+  for (int i = 0; i < image_count_local; i++) {
+    negateDevicePlaneInPlace<<<blocks, threads>>>(temp, xi, N_local, M_local, i);
+    checkCudaErrors(cudaDeviceSynchronize());
+  }
   for (int i = 0; i < image_count_local; i++) {
     checkCudaErrors(cudaMemcpy(&device_g[M_local * N_local * i], &xi[M_local * N_local * i],
                                sizeof(float) * M_local * N_local, cudaMemcpyDeviceToDevice));
   }
-  dim3 blocks = of->getNumBlocksNN();
-  dim3 threads = of->getThreadsPerBlockNN();
   for (int i = 0; i < image_count_local; i++) {
     newXi<<<blocks, threads>>>(temp, xi, device_h, beta, N_local, M_local, i);
     checkCudaErrors(cudaDeviceSynchronize());
@@ -404,8 +411,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
 
   if (gpuvmem_cli_verbose()) {
     double end = omp_get_wtime();
-    std::cout << "Time: " << std::setprecision(4) << (end - start)
-              << " seconds" << std::endl;
+    std::cout << "  Wall time this iteration: " << std::setprecision(4) << (end - start) << " s\n";
   }
 
   return new_function_value;
@@ -413,8 +419,7 @@ __host__ float ConjugateGradient::performIteration(int iteration,
 
 __host__ void ConjugateGradient::optimize() {
   if (gpuvmem_cli_verbose()) {
-    std::cout << "\n\nStarting " << methodName()
-              << " method (Conj. Grad.)\n\n";
+    std::cout << "\n--- " << methodName() << " (nonlinear conjugate gradients) ---\n";
   }
 
   // Reset configuration flag to ensure proper setup for this optimization run
@@ -437,8 +442,9 @@ __host__ void ConjugateGradient::optimize() {
     } catch (const GradientNormError&) {
       // Zero gradient norm detected - optimization converged
       if (gpuvmem_cli_verbose()) {
-        std::cout << methodName() << " converged due to zero gradient norm (gg = 0) after " 
-                  << iteration << " iterations" << std::endl;
+        std::cout << methodName() << ": gradient norm vanished (exact minimum or numerical gg=0) "
+                     "after "
+                  << iteration << " iterations.\n";
       }
       // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
@@ -446,11 +452,18 @@ __host__ void ConjugateGradient::optimize() {
       return;
     }
 
-    // Check for function convergence
+    // Check for function convergence (includes numerical stagnation: |df| == 0 in float)
     if (checkFunctionConvergence(new_function_value, prev_function_value)) {
       if (gpuvmem_cli_verbose()) {
-        std::cout << methodName() << " converged after " << iteration
-                  << " iterations" << std::endl;
+        const float df = fabsf(new_function_value - prev_function_value);
+        if (!(df > 0.0f)) {
+          std::cout << methodName() << ": stopped at iteration " << iteration
+                    << " - objective unchanged at float precision (plateau; consider scaling or "
+                       "looser gtol).\n";
+        } else {
+          std::cout << methodName() << ": converged after " << iteration
+                    << " iterations (relative objective tolerance).\n";
+        }
       }
       // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
@@ -458,11 +471,11 @@ __host__ void ConjugateGradient::optimize() {
       return;
     }
 
-    // Check for gradient convergence (device_g holds current gradient; xi holds search direction)
+    // Check for gradient convergence (device_g holds +∇f at the iterate; xi is the search direction)
     if (checkGradientConvergence(device_g, new_function_value)) {
       if (gpuvmem_cli_verbose()) {
-        std::cout << methodName() << " converged due to gradient tolerance after " 
-                  << iteration << " iterations" << std::endl;
+        std::cout << methodName() << ": converged after " << iteration
+                  << " iterations (gradient norm below gtol).\n";
       }
       // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
@@ -474,8 +487,8 @@ __host__ void ConjugateGradient::optimize() {
   }
 
   if (gpuvmem_cli_verbose()) {
-    std::cout << methodName() << " reached maximum iterations ("
-              << this->total_iterations << ")" << std::endl;
+    std::cout << methodName() << ": reached maximum iteration budget (" << this->total_iterations
+              << ") without meeting tolerances.\n";
   }
 
   // Use optimizer's image member instead of extern Image* I

@@ -1,11 +1,6 @@
 #include "objective_function/terms/regularizers/l1norm.cuh"
-#include "regularizers/regularizers_host.cuh"
+#include "regularizer_kernels/regularizers_host.cuh"
 #include "chi2/chi2_host.cuh"  // For linkAddToDPhi
-
-extern long M, N;
-extern int image_count;
-extern float* penalizators;
-extern int nPenalizators;
 
 L1norm::L1norm() {
   this->name = "L1 Norm";
@@ -38,7 +33,8 @@ void L1norm::calcGi(float* p, float* xi) {
 };
 
 void L1norm::restartDGi() {
-  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+  const size_t plane = static_cast<size_t>(gridM()) * static_cast<size_t>(gridN());
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * plane));
 };
 
 void L1norm::addToDphi(float* device_dphi) {

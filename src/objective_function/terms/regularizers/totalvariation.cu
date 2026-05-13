@@ -1,11 +1,6 @@
 #include "objective_function/terms/regularizers/totalvariation.cuh"
-#include "regularizers/regularizers_host.cuh"
+#include "regularizer_kernels/regularizers_host.cuh"
 #include "chi2/chi2_host.cuh"  // For linkAddToDPhi
-
-extern long M, N;
-extern int image_count;
-extern float* penalizators;
-extern int nPenalizators;
 
 IsotropicTVariation::IsotropicTVariation() {
   this->name = "Isotropic Total Variation";
@@ -39,7 +34,8 @@ void IsotropicTVariation::calcGi(float* p, float* xi) {
 };
 
 void IsotropicTVariation::restartDGi() {
-  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+  const size_t plane = static_cast<size_t>(gridM()) * static_cast<size_t>(gridN());
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * plane));
 };
 
 void IsotropicTVariation::addToDphi(float* device_dphi) {
@@ -86,7 +82,8 @@ void AnisotropicTVariation::calcGi(float* p, float* xi) {
 };
 
 void AnisotropicTVariation::restartDGi() {
-  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+  const size_t plane = static_cast<size_t>(gridM()) * static_cast<size_t>(gridN());
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * plane));
 };
 
 void AnisotropicTVariation::addToDphi(float* device_dphi) {

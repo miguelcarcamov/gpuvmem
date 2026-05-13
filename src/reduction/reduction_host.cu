@@ -37,19 +37,12 @@
 #include "utils/cuda_utils.cuh"
 #include "error.cuh"
 #include <cuda_runtime.h>
-#include <cstdlib>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <float.h>
 #include <helper_cuda.h>
-#include "reduction/reduction_kernels.cuh"
-#include "utils/math_utils.hh"
-#include "utils/cuda_utils.cuh"
-#include "error.cuh"
-#include <cuda_runtime.h>
-#include <cstdlib>
-#include <algorithm>
-#include <cmath>
+#include <vector>
 
 ////////////////////////////////////////////////////////////////////////////////
 //! Compute sum reduction on CPU
@@ -92,7 +85,7 @@ __host__ T deviceReduce(T* in, long N, int input_threads) {
   dim3 dimBlock(threads, 1, 1);
   dim3 dimGrid(blocks, 1, 1);
 
-  T* h_odata = (T*)malloc(blocks * sizeof(T));
+  std::vector<T> h_odata(static_cast<size_t>(blocks));
   checkCudaErrors(cudaMalloc((void**)&d_odata, blocks * sizeof(T)));
 
   if (isPow2(N)) {
@@ -203,19 +196,18 @@ __host__ T deviceReduce(T* in, long N, int input_threads) {
   checkCudaErrors(cudaDeviceSynchronize());
 
   checkCudaErrors(
-      cudaMemcpy(h_odata, d_odata, blocks * sizeof(T), cudaMemcpyDeviceToHost));
+      cudaMemcpy(h_odata.data(), d_odata, blocks * sizeof(T), cudaMemcpyDeviceToHost));
 
   for (int i = 0; i < blocks; i++) {
     sum += h_odata[i];
   }
 
   cudaFree(d_odata);
-  free(h_odata);
   return sum;
 }
 
 __host__ float deviceMaxReduce(float* in, long N, int input_threads) {
-  float max = FLT_MIN;
+  float max = -std::numeric_limits<float>::infinity();
   float* d_odata = NULL;
   int maxThreads = input_threads;
   int maxBlocks = iDivUp(N, maxThreads);
@@ -230,7 +222,7 @@ __host__ float deviceMaxReduce(float* in, long N, int input_threads) {
   dim3 dimBlock(threads, 1, 1);
   dim3 dimGrid(blocks, 1, 1);
 
-  float* h_odata = (float*)malloc(blocks * sizeof(float));
+  std::vector<float> h_odata(static_cast<size_t>(blocks));
   checkCudaErrors(cudaMalloc((void**)&d_odata, blocks * sizeof(float)));
 
   if (isPow2(N)) {
@@ -340,7 +332,7 @@ __host__ float deviceMaxReduce(float* in, long N, int input_threads) {
   }
   checkCudaErrors(cudaDeviceSynchronize());
 
-  checkCudaErrors(cudaMemcpy(h_odata, d_odata, blocks * sizeof(float),
+  checkCudaErrors(cudaMemcpy(h_odata.data(), d_odata, blocks * sizeof(float),
                              cudaMemcpyDeviceToHost));
 
   for (int i = 0; i < blocks; i++) {
@@ -348,7 +340,6 @@ __host__ float deviceMaxReduce(float* in, long N, int input_threads) {
   }
 
   cudaFree(d_odata);
-  free(h_odata);
   return max;
 }
 
@@ -368,7 +359,7 @@ __host__ float deviceMinReduce(float* in, long N, int input_threads) {
   dim3 dimBlock(threads, 1, 1);
   dim3 dimGrid(blocks, 1, 1);
 
-  float* h_odata = (float*)malloc(blocks * sizeof(float));
+  std::vector<float> h_odata(static_cast<size_t>(blocks));
   checkCudaErrors(cudaMalloc((void**)&d_odata, blocks * sizeof(float)));
 
   if (isPow2(N)) {
@@ -478,7 +469,7 @@ __host__ float deviceMinReduce(float* in, long N, int input_threads) {
   }
   checkCudaErrors(cudaDeviceSynchronize());
 
-  checkCudaErrors(cudaMemcpy(h_odata, d_odata, blocks * sizeof(float),
+  checkCudaErrors(cudaMemcpy(h_odata.data(), d_odata, blocks * sizeof(float),
                              cudaMemcpyDeviceToHost));
 
   for (int i = 0; i < blocks; i++) {
@@ -486,7 +477,6 @@ __host__ float deviceMinReduce(float* in, long N, int input_threads) {
   }
 
   cudaFree(d_odata);
-  free(h_odata);
   return min;
 }
 

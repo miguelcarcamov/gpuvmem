@@ -12,6 +12,16 @@ NaturalWeightingScheme::NaturalWeightingScheme(int threads)
 NaturalWeightingScheme::NaturalWeightingScheme(int threads, UVTaper* uvtaper)
     : WeightingScheme(threads, uvtaper){};
 
+void NaturalWeightingScheme::configure(void* params) {
+  if (params == nullptr) return;
+  const float r = *static_cast<const float*>(params);
+  if (r != 0.0f) {
+    std::cerr << "WARNING: -R / robust parameter (" << r
+              << ") has no effect with Natural weighting; use -W briggs (or robust) "
+                 "to apply Briggs robustness.\n";
+  }
+}
+
 void NaturalWeightingScheme::apply(std::vector<gpuvmem::ms::MSWithGPU>& d) {
   std::cout << "Running Natural weighting scheme with " << this->threads
             << " threads" << std::endl;

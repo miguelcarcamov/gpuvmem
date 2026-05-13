@@ -1,21 +1,26 @@
 #include "io/iofits.cuh"
+#include "classes/imaging_header.hh"
 #include "fits/fits_io.h"
-#include <cstdlib>
+#include <helper_cuda.h>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
+#include <string>
 
 /** Build WriteFitsImageOptions from IoFITS state and write one slice; exits on error. */
 void write_slice(float* I, const char* path, const char* name_image,
                  const char* units, int iteration, int index, float fg_scale,
                  long M, long N, double ra_center, double dec_center,
                  std::string frame, float equinox, bool isInGPU,
-                 const std::string& template_path) {
+                 const std::string& template_path,
+                 const gpuvmem::ImagingHeader* inline_primary_header) {
   gpuvmem::fits::WriteFitsImageOptions opts;
   opts.header_template = template_path;
+  opts.inline_primary_header = inline_primary_header;
   opts.output_path = (path && path[0]) ? (std::string(path) + name_image) : name_image;
   opts.data = I;
-  opts.naxis1 = M;
-  opts.naxis2 = N;
+  opts.naxis1 = N;
+  opts.naxis2 = M;
   opts.plane_index = index;
   opts.bunit = units ? units : "";
   opts.niter = iteration;
@@ -29,23 +34,25 @@ void write_slice(float* I, const char* path, const char* name_image,
   try {
     gpuvmem::fits::write_fits_image_slice(opts);
   } catch (const std::exception& e) {
-    fprintf(stderr,
-            "FITS output failed (writes clone the header from the model FITS; "
-            "see message for read vs write): %s\n",
-            e.what());
+    std::cerr
+        << "FITS output failed (model FITS header or in-memory WCS template; "
+           "see message for read vs write): "
+        << e.what() << '\n';
     std::exit(1);
   }
 }
 
 /** Build WriteFitsComplexImageOptions and write complex image; exits on error. */
-void write_complex_slice(cufftComplex* I, const char* template_filename,
+void write_complex_slice(cufftComplex* I, const std::string& template_path,
+                         const gpuvmem::ImagingHeader* inline_primary_header,
                          const char* path, const char* out_image, int iteration,
                          long M, long N, int option, bool isInGPU) {
   gpuvmem::fits::WriteFitsComplexImageOptions opts;
-  opts.header_template = template_filename ? template_filename : "";
+  opts.header_template = template_path;
+  opts.inline_primary_header = inline_primary_header;
   opts.data = I;
-  opts.naxis1 = M;
-  opts.naxis2 = N;
+  opts.naxis1 = N;
+  opts.naxis2 = M;
   opts.niter = iteration;
   opts.output_type = gpuvmem::fits::WriteFitsComplexImageOptions::AMPLITUDE;
   opts.data_on_device = isInGPU;
@@ -68,11 +75,11 @@ void write_complex_slice(cufftComplex* I, const char* template_filename,
       }
       break;
     case -1:
-      fprintf(stderr, "Invalid case to FITS\n");
+      std::cerr << "Invalid case to FITS\n";
       std::exit(-1);
       break;
     default:
-      fprintf(stderr, "Invalid case to FITS\n");
+      std::cerr << "Invalid case to FITS\n";
       std::exit(-1);
       break;
   }
@@ -81,7 +88,7 @@ void write_complex_slice(cufftComplex* I, const char* template_filename,
   try {
     gpuvmem::fits::write_fits_image_complex(opts);
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS complex write failed: %s\n", e.what());
+    std::cerr << "FITS complex write failed: " << e.what() << '\n';
     std::exit(1);
   }
 }
@@ -167,43 +174,53 @@ void IoFITS::setPrintImages(bool print_images) {
     createFolder(this->path);
 };
 
-gpuvmem::fits::FitsHeader IoFITS::readHeader(char* header_name) {
-  this->input = std::string(header_name);
+void IoFITS::setModelFitsGeometry(std::optional<gpuvmem::ImagingHeader> geometry) {
+  model_fits_geometry_ = std::move(geometry);
+}
+
+std::string IoFITS::templatePathForWrites(const char* model_input_override) const {
+  if (model_fits_geometry_.has_value()) return {};
+  if (model_input_override && model_input_override[0])
+    return std::string(model_input_override);
+  return this->input;
+}
+
+const gpuvmem::ImagingHeader* IoFITS::inlineHeaderForWrites() const {
+  return model_fits_geometry_.has_value() ? &*model_fits_geometry_ : nullptr;
+}
+
+gpuvmem::ImagingHeader IoFITS::readHeader(char* header_name) {
+  return readHeader(std::string(header_name ? header_name : ""));
+}
+
+gpuvmem::ImagingHeader IoFITS::readHeader(std::string header_name) {
+  if (!header_name.empty())
+    this->input = std::move(header_name);
+  if (model_fits_geometry_.has_value() && this->input.empty())
+    return *model_fits_geometry_;
+  if (this->input.empty()) {
+    std::cerr
+        << "FITS read header failed: empty model path and no in-memory geometry\n";
+    std::exit(1);
+  }
   try {
-    return gpuvmem::fits::read_fits_header(this->input);
+    return gpuvmem::imaging_header_from_fits_wire(gpuvmem::fits::read_fits_header(this->input));
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read header failed: %s\n", e.what());
+    std::cerr << "FITS read header failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
 }
 
-gpuvmem::fits::FitsHeader IoFITS::readHeader(std::string header_name) {
-  this->input = header_name;
-  try {
-    return gpuvmem::fits::read_fits_header(header_name);
-  } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read header failed: %s\n", e.what());
-    std::exit(1);
-  }
-  return {};
-}
-
-gpuvmem::fits::FitsHeader IoFITS::readHeader() {
-  try {
-    return gpuvmem::fits::read_fits_header(this->input);
-  } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read header failed: %s\n", e.what());
-    std::exit(1);
-  }
-  return {};
+gpuvmem::ImagingHeader IoFITS::readHeader() {
+  return readHeader(std::string());
 }
 
 std::vector<float> IoFITS::read_data_float_FITS() {
   try {
-    return gpuvmem::fits::read_fits_image_float(this->input);
+    return gpuvmem::fits::read_fits_float_image(this->input).pixels;
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -211,9 +228,9 @@ std::vector<float> IoFITS::read_data_float_FITS() {
 
 std::vector<float> IoFITS::read_data_float_FITS(char* filename) {
   try {
-    return gpuvmem::fits::read_fits_image_float(filename ? filename : "");
+    return gpuvmem::fits::read_fits_float_image(filename ? filename : "").pixels;
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -221,9 +238,9 @@ std::vector<float> IoFITS::read_data_float_FITS(char* filename) {
 
 std::vector<float> IoFITS::read_data_float_FITS(std::string filename) {
   try {
-    return gpuvmem::fits::read_fits_image_float(filename);
+    return gpuvmem::fits::read_fits_float_image(filename).pixels;
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -233,7 +250,7 @@ std::vector<double> IoFITS::read_data_double_FITS() {
   try {
     return gpuvmem::fits::read_fits_image_double(this->input);
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -243,7 +260,7 @@ std::vector<double> IoFITS::read_data_double_FITS(char* filename) {
   try {
     return gpuvmem::fits::read_fits_image_double(filename ? filename : "");
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -253,7 +270,7 @@ std::vector<double> IoFITS::read_data_double_FITS(std::string filename) {
   try {
     return gpuvmem::fits::read_fits_image_double(filename);
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -263,7 +280,7 @@ std::vector<int> IoFITS::read_data_int_FITS() {
   try {
     return gpuvmem::fits::read_fits_image_int(this->input);
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -273,7 +290,7 @@ std::vector<int> IoFITS::read_data_int_FITS(char* filename) {
   try {
     return gpuvmem::fits::read_fits_image_int(filename ? filename : "");
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -283,7 +300,7 @@ std::vector<int> IoFITS::read_data_int_FITS(std::string filename) {
   try {
     return gpuvmem::fits::read_fits_image_int(filename);
   } catch (const std::exception& e) {
-    fprintf(stderr, "FITS read image failed: %s\n", e.what());
+    std::cerr << "FITS read image failed: " << e.what() << '\n';
     std::exit(1);
   }
   return {};
@@ -304,7 +321,7 @@ void IoFITS::printImage(float* I,
                         float equinox,
                         bool isInGPU) {
   write_slice(I, path, name_image, units, iteration, index, fg_scale, M, N,
-              ra_center, dec_center, frame, equinox, isInGPU, this->input);
+              ra_center, dec_center, frame, equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printImage(float* I,
@@ -316,7 +333,7 @@ void IoFITS::printImage(float* I,
   write_slice(I, getConstCharFromString(this->path), name_image, units,
               iteration, index, this->normalization_factor, this->M, this->N,
               this->ra, this->dec, this->frame, this->equinox, isInGPU,
-              this->input);
+              templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printImage(float* I,
@@ -334,7 +351,7 @@ void IoFITS::printImage(float* I,
   write_slice(I, getConstCharFromString(this->path),
               getConstCharFromString(this->output), units, iteration, index,
               fg_scale, M, N, ra_center, dec_center, frame, equinox, isInGPU,
-              this->input);
+              templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printImage(float* I,
@@ -352,7 +369,7 @@ void IoFITS::printImage(float* I,
                         bool isInGPU) {
   write_slice(I, getConstCharFromString(this->path), name_image, units,
               iteration, index, fg_scale, M, N, ra_center, dec_center, frame,
-              equinox, isInGPU, this->input);
+              equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotPathImage(float* I,
@@ -369,7 +386,7 @@ void IoFITS::printNotPathImage(float* I,
                                bool isInGPU) {
   write_slice(I, "", getConstCharFromString(this->output), units, iteration,
               index, fg_scale, M, N, ra_center, dec_center, frame, equinox,
-              isInGPU, this->input);
+              isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotPathImage(float* I,
@@ -386,7 +403,7 @@ void IoFITS::printNotPathImage(float* I,
                                float equinox,
                                bool isInGPU) {
   write_slice(I, "", out_image, units, iteration, index, fg_scale, M, N,
-              ra_center, dec_center, frame, equinox, isInGPU, this->input);
+              ra_center, dec_center, frame, equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotPathImage(float* I,
@@ -397,7 +414,7 @@ void IoFITS::printNotPathImage(float* I,
                                bool isInGPU) {
   write_slice(I, "", out_image, units, iteration, index,
               this->normalization_factor, this->M, this->N, this->ra,
-              this->dec, this->frame, this->equinox, isInGPU, this->input);
+              this->dec, this->frame, this->equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotPathImage(float* I,
@@ -409,7 +426,7 @@ void IoFITS::printNotPathImage(float* I,
                                bool isInGPU) {
   write_slice(I, "", out_image, units, iteration, index, normalization_factor,
               this->M, this->N, this->ra, this->dec, this->frame, this->equinox,
-              isInGPU, this->input);
+              isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotPathImage(float* I,
@@ -420,7 +437,7 @@ void IoFITS::printNotPathImage(float* I,
                                bool isInGPU) {
   write_slice(I, "", getConstCharFromString(this->output), units, iteration,
               index, normalization_factor, this->M, this->N, this->ra,
-              this->dec, this->frame, this->equinox, isInGPU, this->input);
+              this->dec, this->frame, this->equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotNormalizedImage(float* I,
@@ -431,7 +448,7 @@ void IoFITS::printNotNormalizedImage(float* I,
                                      bool isInGPU) {
   write_slice(I, getConstCharFromString(this->path), name_image, units,
               iteration, index, 1.0f, this->M, this->N, this->ra, this->dec,
-              this->frame, this->equinox, isInGPU, this->input);
+              this->frame, this->equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNormalizedImage(float* I,
@@ -443,7 +460,7 @@ void IoFITS::printNormalizedImage(float* I,
                                   bool isInGPU) {
   write_slice(I, getConstCharFromString(this->path), name_image, units,
               iteration, index, scale, this->M, this->N, this->ra, this->dec,
-              this->frame, this->equinox, isInGPU, this->input);
+              this->frame, this->equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotPathNotNormalizedImage(float* I,
@@ -454,7 +471,7 @@ void IoFITS::printNotPathNotNormalizedImage(float* I,
                                             bool isInGPU) {
   write_slice(I, "", name_image, units, iteration, index, 1.0f, this->M,
               this->N, this->ra, this->dec, this->frame, this->equinox,
-              isInGPU, this->input);
+              isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printImageIteration(float* I,
@@ -470,18 +487,12 @@ void IoFITS::printImageIteration(float* I,
                                  std::string frame,
                                  float equinox,
                                  bool isInGPU) {
-  size_t needed;
-  char* full_name;
+  const std::string full_name =
+      std::string(name_image) + "_" + std::to_string(iteration) + ".fits";
 
-  needed = snprintf(NULL, 0, "%s_%d.fits", name_image, iteration) + 1;
-  full_name = (char*)malloc(needed * sizeof(char));
-  snprintf(full_name, needed * sizeof(char), "%s_%d.fits", name_image,
-           iteration);
-
-  write_slice(I, getConstCharFromString(this->path), full_name, units,
+  write_slice(I, getConstCharFromString(this->path), full_name.c_str(), units,
               iteration, index, fg_scale, M, N, ra_center, dec_center, frame,
-              equinox, isInGPU, this->input);
-  free(full_name);
+              equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printImageIteration(float* I,
@@ -490,19 +501,13 @@ void IoFITS::printImageIteration(float* I,
                                  int iteration,
                                  int index,
                                  bool isInGPU) {
-  size_t needed;
-  char* full_name;
+  const std::string full_name =
+      std::string(name_image) + "_" + std::to_string(iteration) + ".fits";
 
-  needed = snprintf(NULL, 0, "%s_%d.fits", name_image, iteration) + 1;
-  full_name = (char*)malloc(needed * sizeof(char));
-  snprintf(full_name, needed * sizeof(char), "%s_%d.fits", name_image,
-           iteration);
-
-  write_slice(I, getConstCharFromString(this->path), full_name, units,
+  write_slice(I, getConstCharFromString(this->path), full_name.c_str(), units,
               iteration, index, this->normalization_factor, this->M, this->N,
               this->ra, this->dec, this->frame, this->equinox, isInGPU,
-              this->input);
-  free(full_name);
+              templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printNotNormalizedImageIteration(float* I,
@@ -511,18 +516,12 @@ void IoFITS::printNotNormalizedImageIteration(float* I,
                                               int iteration,
                                               int index,
                                               bool isInGPU) {
-  size_t needed;
-  char* full_name;
+  const std::string full_name =
+      std::string(name_image) + "_" + std::to_string(iteration) + ".fits";
 
-  needed = snprintf(NULL, 0, "%s_%d.fits", name_image, iteration) + 1;
-  full_name = (char*)malloc(needed * sizeof(char));
-  snprintf(full_name, needed * sizeof(char), "%s_%d.fits", name_image,
-           iteration);
-
-  write_slice(I, getConstCharFromString(this->path), full_name, units,
+  write_slice(I, getConstCharFromString(this->path), full_name.c_str(), units,
               iteration, index, 1.0f, this->M, this->N, this->ra, this->dec,
-              this->frame, this->equinox, isInGPU, this->input);
-  free(full_name);
+              this->frame, this->equinox, isInGPU, templatePathForWrites(nullptr), inlineHeaderForWrites());
 }
 
 void IoFITS::printImageIteration(float* I,
@@ -540,18 +539,12 @@ void IoFITS::printImageIteration(float* I,
                                  std::string frame,
                                  float equinox,
                                  bool isInGPU) {
-  size_t needed;
-  char* full_name;
+  const std::string full_name =
+      std::string(name_image) + "_" + std::to_string(iteration) + ".fits";
 
-  needed = snprintf(NULL, 0, "%s_%d.fits", name_image, iteration) + 1;
-  full_name = (char*)malloc(needed * sizeof(char));
-  snprintf(full_name, needed * sizeof(char), "%s_%d.fits", name_image,
-           iteration);
-
-  write_slice(I, path, full_name, units, iteration, index, fg_scale, M, N,
+  write_slice(I, path, full_name.c_str(), units, iteration, index, fg_scale, M, N,
               ra_center, dec_center, frame, equinox, isInGPU,
-              model_input ? model_input : this->input);
-  free(full_name);
+              templatePathForWrites(model_input), inlineHeaderForWrites());
 }
 
 void IoFITS::printcuFFTComplex(cufftComplex* I,
@@ -564,9 +557,9 @@ void IoFITS::printcuFFTComplex(cufftComplex* I,
                                long N,
                                int option,
                                bool isInGPU) {
-  write_complex_slice(I, getConstCharFromString(this->input),
-                      getConstCharFromString(this->path), out_image,
-                      iteration, M, N, option, isInGPU);
+  write_complex_slice(I, templatePathForWrites(nullptr), inlineHeaderForWrites(),
+                      getConstCharFromString(this->path), out_image, iteration, M, N,
+                      option, isInGPU);
 };
 
 void IoFITS::printcuFFTComplex(cufftComplex* I,
@@ -576,9 +569,9 @@ void IoFITS::printcuFFTComplex(cufftComplex* I,
                                int iteration,
                                int option,
                                bool isInGPU) {
-  write_complex_slice(I, getConstCharFromString(this->input),
-                      getConstCharFromString(this->path), out_image,
-                      iteration, this->M, this->N, option, isInGPU);
+  write_complex_slice(I, templatePathForWrites(nullptr), inlineHeaderForWrites(),
+                      getConstCharFromString(this->path), out_image, iteration,
+                      this->M, this->N, option, isInGPU);
 };
 
 void IoFITS::printcuFFTComplex(cufftComplex* I,
@@ -593,8 +586,85 @@ void IoFITS::printcuFFTComplex(cufftComplex* I,
                                long N,
                                int option,
                                bool isInGPU) {
-  write_complex_slice(I, input, path, out_image, iteration, M, N, option, isInGPU);
+  const std::string tpl =
+      (input && input[0]) ? std::string(input) : templatePathForWrites(nullptr);
+  const gpuvmem::ImagingHeader* inl =
+      (input && input[0]) ? nullptr : inlineHeaderForWrites();
+  write_complex_slice(I, tpl, inl, path, out_image, iteration, M, N, option,
+                      isInGPU);
 };
+
+Image* IoFITS::readImageFromFits(const std::string& path, int cuda_device) {
+  if (path.empty()) throw std::runtime_error("readImageFromFits: empty path");
+  gpuvmem::fits::FitsFloatImage data = gpuvmem::fits::read_fits_float_image(path);
+  const long n1 = data.header.naxis1;
+  const long n2 = data.header.naxis2;
+  const size_t count = static_cast<size_t>(n1) * static_cast<size_t>(n2);
+  if (data.pixels.size() != count)
+    throw std::runtime_error("readImageFromFits: pixel count does not match NAXIS1*NAXIS2");
+  float* d = nullptr;
+  checkCudaErrors(cudaSetDevice(cuda_device));
+  checkCudaErrors(cudaMalloc(reinterpret_cast<void**>(&d), count * sizeof(float)));
+  checkCudaErrors(cudaMemcpy(d, data.pixels.data(), count * sizeof(float), cudaMemcpyHostToDevice));
+  Image* img = new Image(d, 1, n2, n1);
+  img->setImagingHeader(gpuvmem::imaging_header_from_fits_wire(data.header));
+  return img;
+}
+
+void IoFITS::writeImageToFits(const Image* image, const std::string& output_path, int plane_index,
+                              const std::string& header_template_path, bool data_on_device,
+                              const char* bunit, int niter, float normalization_factor,
+                              bool normalize) {
+  if (!image) throw std::runtime_error("writeImageToFits: null Image");
+  if (plane_index < 0 || plane_index >= image->getImageCount())
+    throw std::runtime_error("writeImageToFits: plane_index out of range");
+
+  gpuvmem::fits::WriteFitsImageOptions opts;
+  opts.output_path = output_path;
+  opts.data = image->getImage();
+  opts.naxis1 = image->getN();
+  opts.naxis2 = image->getM();
+  opts.plane_index = plane_index;
+  opts.bunit = bunit ? bunit : "";
+  opts.niter = niter;
+  opts.normalization_factor = normalization_factor;
+  opts.normalize = normalize;
+  opts.data_on_device = data_on_device;
+
+  const gpuvmem::ImagingHeader* inline_hdr = nullptr;
+  if (image->hasImagingHeader())
+    inline_hdr = &image->imagingHeader();
+  else
+    inline_hdr = inlineHeaderForWrites();
+
+  if (inline_hdr) {
+    opts.inline_primary_header = inline_hdr;
+    opts.header_template.clear();
+  } else {
+    opts.inline_primary_header = nullptr;
+    opts.header_template =
+        !header_template_path.empty() ? header_template_path : templatePathForWrites(nullptr);
+  }
+
+  if (image->hasImagingHeader()) {
+    const gpuvmem::ImagingHeader& h = image->imagingHeader();
+    opts.crval1 = h.crval1;
+    opts.crval2 = h.crval2;
+    opts.radesys = h.radesys.empty() ? frame : h.radesys;
+    opts.equinox = h.equinox;
+  } else {
+    opts.crval1 = ra;
+    opts.crval2 = dec;
+    opts.radesys = frame;
+    opts.equinox = equinox;
+  }
+
+  try {
+    gpuvmem::fits::write_fits_image_slice(opts);
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("writeImageToFits: ") + e.what());
+  }
+}
 
 void IoFITS::closeHeader(fitsfile* header) {
   // Legacy no-op: fitsfile* is no longer used with new FITS API

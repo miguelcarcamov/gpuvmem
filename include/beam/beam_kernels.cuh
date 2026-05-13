@@ -75,6 +75,24 @@ __global__ void apply_beam2I(float antenna_diameter,
                              double DELTAY,
                              int primary_beam);
 
+/** Baseline PB on Stokes I: multiply by sqrt(A1 * A2) (voltage-style product). */
+__global__ void apply_baseline_beam2I(float ant1_diameter,
+                                      float ant1_pb_factor,
+                                      float ant1_pb_cutoff,
+                                      int ant1_primary_beam,
+                                      float ant2_diameter,
+                                      float ant2_pb_factor,
+                                      float ant2_pb_cutoff,
+                                      int ant2_primary_beam,
+                                      cufftComplex* image,
+                                      long N,
+                                      float xobs,
+                                      float yobs,
+                                      float fg_scale,
+                                      float freq,
+                                      double DELTAX,
+                                      double DELTAY);
+
 __global__ void apply_beam2I(float antenna_diameter,
                              float pb_factor,
                              float pb_cutoff,

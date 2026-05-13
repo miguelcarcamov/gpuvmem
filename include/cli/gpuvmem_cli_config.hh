@@ -16,6 +16,10 @@ struct GpuvmemCliRuntimeFlags {
   bool save_model_input = false;
   bool radius_mask = false;
   bool modify_weights = false;
+  /** If set, print GPL warranty text and exit (no CUDA / no imaging run). */
+  bool print_warranty = false;
+  /** If set, print GPL copying conditions and exit (no CUDA / no imaging run). */
+  bool print_copyright = false;
 };
 
 /** Full CLI parse result: scalar/string options plus runtime booleans. */

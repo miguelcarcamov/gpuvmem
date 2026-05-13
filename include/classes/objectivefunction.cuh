@@ -11,14 +11,13 @@
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 
-// Forward declarations for extern variables
-extern long M, N;
-extern int image_count;
-
 class ObjectiveFunction {
  public:
   ObjectiveFunction(){};
+  /** Skip terms with λ==0 so their calcGi/addToDphi are never called (saves work). */
   void addFi(Fi* fi) {
+    if (fi == nullptr) return;
+    fi->attachToObjectiveFunction(this);
     if (fi->getPenalizationFactor()) {
       fis.push_back(fi);
       fi_values.push_back(0.0f);
@@ -118,7 +117,22 @@ class ObjectiveFunction {
   void setN(long N) { this->N = N; }
   void setM(long M) { this->M = M; }
   void setImageCount(int I) { this->image_count = I; }
-  
+
+  /** Set grid dimensions only (no dphi allocation). Used before Fi::configure in the driver. */
+  void setGridDimensions(long N, long M, int image_count_in) {
+    this->N = N;
+    this->M = M;
+    this->image_count = image_count_in;
+  }
+
+  /** Non-owning pointer to the -Z weight list (same lifetime as MFS penalty storage). */
+  void setRegularizationWeights(const float* weights, int n) {
+    reg_weights_ptr_ = weights;
+    n_reg_weights_ = n;
+  }
+  const float* getRegularizationWeights() const { return reg_weights_ptr_; }
+  int getRegularizationWeightCount() const { return n_reg_weights_; }
+
   // Getters for dimensions (used by seeders and line searchers)
   long getM() const { return this->M; }
   long getN() const { return this->N; }
@@ -139,21 +153,21 @@ class ObjectiveFunction {
     this->IoOrderIterations = func;
   };
   void configure(long N, long M, int I) {
-    setN(N);
-    setM(M);
-    setImageCount(I);
-    // Free existing dphi if already allocated
+    const bool need_alloc =
+        (dphi == nullptr || this->N != N || this->M != M || this->image_count != I);
+    setGridDimensions(N, M, I);
+    if (!need_alloc) {
+      return;
+    }
     if (dphi != nullptr) {
       cudaFree(dphi);
       dphi = nullptr;
     }
-    // Verify dimensions are valid before allocating
     if (this->M <= 0 || this->N <= 0 || this->image_count <= 0) {
-      std::cerr << "ERROR: configure() called with invalid dimensions: M=" << this->M 
+      std::cerr << "ERROR: configure() called with invalid dimensions: M=" << this->M
                 << " N=" << this->N << " image_count=" << this->image_count << std::endl;
       return;
     }
-    // Use member variables to ensure consistency
     size_t alloc_size = sizeof(float) * this->M * this->N * this->image_count;
     checkCudaErrors(cudaMalloc((void**)&dphi, alloc_size));
     checkCudaErrors(cudaMemset(dphi, 0, alloc_size));
@@ -174,6 +188,8 @@ class ObjectiveFunction {
   dim3 threadsPerBlockNN = dim3(0, 0, 0);  // CUDA launch configuration
   dim3 numBlocksNN = dim3(0, 0, 0);        // CUDA launch configuration
   int primary_cuda_device_{0};
+  const float* reg_weights_ptr_{nullptr};
+  int n_reg_weights_{0};
 };
 
 namespace {

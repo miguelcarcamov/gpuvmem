@@ -34,15 +34,12 @@
 #include "linesearch/linesearch_utils.cuh"
 #include "linesearch/linesearch_kernels.cuh"
 #include "linesearch/linesearcher.cuh"  // For LineSearcher class definition
-#include "optimization/projection.hh"
+#include "projection/projection.hh"
 #include "cli/gpuvmem_cli_config.hh"
 #include "error.cuh"
 #include "optimizers/conjugategradient.cuh"  // For computeDotProduct kernel
 #include "reduction/reduction_host.cuh"
 #include <iostream>
-
-// Thread-local storage for Image pointer (set in updatePoint, accessed by particularNewP)
-static thread_local Image* current_image_for_newp = nullptr;
 
 /** ObjectiveFunction passed to updatePoint; used by imageMap kernel wrappers. */
 static thread_local const ObjectiveFunction* tls_linesearch_kernel_objective = nullptr;
@@ -53,11 +50,6 @@ struct LinesearchObjectiveTlsGuard {
     tls_linesearch_kernel_objective = of;
   }
   ~LinesearchObjectiveTlsGuard() { tls_linesearch_kernel_objective = prev_; }
-};
-
-struct CurrentImageForNewpGuard {
-  explicit CurrentImageForNewpGuard(Image* im) { current_image_for_newp = im; }
-  ~CurrentImageForNewpGuard() { current_image_for_newp = nullptr; }
 };
 
 static const ObjectiveFunction* resolve_objective_for_linesearch_kernels() {
@@ -75,14 +67,10 @@ static const Projection* active_projection() {
 
 __host__ void applyProjectionToImagePlane(const Projection* proj, float* buffer, long N, long M,
                                           int image, unsigned blocks_x, unsigned blocks_y,
-                                          unsigned threads_x, unsigned threads_y) {
+                                          unsigned threads_x, unsigned threads_y,
+                                          ProjectionApplyContext ctx) {
   if (proj == nullptr || buffer == nullptr) return;
-  proj->applyToImagePlane(buffer, N, M, image, blocks_x, blocks_y, threads_x, threads_y);
-}
-
-// Accessor function for particularNewP to get current Image object
-__host__ Image* getCurrentImage() {
-  return current_image_for_newp;
+  proj->applyToImagePlane(buffer, N, M, image, blocks_x, blocks_y, threads_x, threads_y, ctx);
 }
 
 // Free helper: delegates to active LineSearcher (same path as member evaluateLineFunction).
@@ -186,7 +174,6 @@ __host__ void updatePoint(ObjectiveFunction* objective_function, Image* image,
   }
 
   LinesearchObjectiveTlsGuard _obj_kern_guard(objective_function);
-  CurrentImageForNewpGuard _img_for_newp_guard(image);
 
   const Projection* line_proj = active_projection();
 
@@ -195,16 +182,7 @@ __host__ void updatePoint(ObjectiveFunction* objective_function, Image* image,
   if (current_device != primary_dev) {
     cudaSetDevice(primary_dev);
   }
-  
-  // Use imageMap function pointers to determine which kernel to use
-  // This ensures consistency with how other line searchers (Brent, Fixed) work
-  // and respects the configuration set up in mfs.cu
-  // The imageMap function pointers are already correctly configured:
-  // - particularNewP for image 0 when positivity is enabled
-  // - defaultNewP for other images or when positivity is disabled
-  // This is critical for multi-parameter optimization where initial_values might
-  // become invalid, but the imageMap configuration remains correct
-  
+
   for (int img_idx = 0; img_idx < image_count; img_idx++) {
     cudaSetDevice(primary_dev);
     cudaGetLastError();  // Clear any previous errors
@@ -240,10 +218,11 @@ __host__ void updatePoint(ObjectiveFunction* objective_function, Image* image,
     }
 
     applyProjectionToImagePlane(line_proj, p, N_use, M_use, img_idx,
-                                     static_cast<unsigned>(numBlocksNN_use.x),
-                                     static_cast<unsigned>(numBlocksNN_use.y),
-                                     static_cast<unsigned>(threadsPerBlockNN_use.x),
-                                     static_cast<unsigned>(threadsPerBlockNN_use.y));
+                                static_cast<unsigned>(numBlocksNN_use.x),
+                                static_cast<unsigned>(numBlocksNN_use.y),
+                                static_cast<unsigned>(threadsPerBlockNN_use.x),
+                                static_cast<unsigned>(threadsPerBlockNN_use.y),
+                                ProjectionApplyContext::kParameterStep);
   }
 }
 
@@ -260,6 +239,7 @@ __host__ float computeDirectionalDerivative(float* gradient, float* search_direc
   const dim3 threadsPerBlockNN = of->getThreadsPerBlockNN();
   const dim3 numBlocksNN = of->getNumBlocksNN();
   float* dot_result;
+  checkCudaErrors(cudaSetDevice(of->getPrimaryCudaDevice()));
   // computeDotProduct kernel accesses result[M * N * image + N * i + j]
   // So we need to allocate for all images, not just one
   checkCudaErrors(cudaMalloc((void**)&dot_result, sizeof(float) * M * N * image_count));
@@ -311,57 +291,6 @@ __host__ void defaultEvaluateXt(float* xt,
   const dim3 th = of->getThreadsPerBlockNN();
   applyProjectionToImagePlane(active_projection(), xt, of->getN(), of->getM(), image,
                               static_cast<unsigned>(nb.x), static_cast<unsigned>(nb.y),
-                              static_cast<unsigned>(th.x), static_cast<unsigned>(th.y));
-}
-
-__host__ void particularNewP(float* p, float* xi, float xmin, int image) {
-  const ObjectiveFunction* of = resolve_objective_for_linesearch_kernels();
-  if (of == nullptr) {
-    std::cerr << "ERROR: particularNewP: no ObjectiveFunction context." << std::endl;
-    return;
-  }
-
-  Image* current_image = getCurrentImage();
-
-  cudaSetDevice(of->getPrimaryCudaDevice());
-
-  long M_local = current_image != nullptr ? current_image->getM() : of->getM();
-  long N_local = current_image != nullptr ? current_image->getN() : of->getN();
-  const float min_pixel_value =
-      current_image != nullptr ? current_image->getMinimalPixelValue(image) : 0.0f;
-  const Projection* proj = active_projection();
-  const float eta_ls = proj != nullptr ? proj->positivityEta() : -1.0f;
-
-  newP<<<of->getNumBlocksNN(), of->getThreadsPerBlockNN()>>>(
-      p, xi, xmin, N_local, M_local, min_pixel_value, eta_ls, image);
-  checkCudaErrors(cudaDeviceSynchronize());
-}
-
-__host__ void particularEvaluateXt(float* xt,
-                                   float* pcom,
-                                   float* xicom,
-                                   float x,
-                                   int image) {
-  const ObjectiveFunction* of = resolve_objective_for_linesearch_kernels();
-  if (of == nullptr) {
-    std::cerr << "ERROR: particularEvaluateXt: no ObjectiveFunction context." << std::endl;
-    return;
-  }
-  Image* current_image = getCurrentImage();
-  if (current_image == nullptr) {
-    std::cerr << "ERROR: particularEvaluateXt: no Image in line-search context." << std::endl;
-    return;
-  }
-  cudaSetDevice(of->getPrimaryCudaDevice());
-  const Projection* proj = active_projection();
-  const float iv = proj != nullptr ? proj->referenceValue(image) : 0.0f;
-  const float eta_ls = proj != nullptr ? proj->positivityEta() : -1.0f;
-  evaluateXt<<<of->getNumBlocksNN(), of->getThreadsPerBlockNN()>>>(
-      xt, pcom, xicom, x, of->getN(), of->getM(), iv, eta_ls, image);
-  checkCudaErrors(cudaDeviceSynchronize());
-  const dim3 nb = of->getNumBlocksNN();
-  const dim3 th = of->getThreadsPerBlockNN();
-  applyProjectionToImagePlane(active_projection(), xt, of->getN(), of->getM(), image,
-                              static_cast<unsigned>(nb.x), static_cast<unsigned>(nb.y),
-                              static_cast<unsigned>(th.x), static_cast<unsigned>(th.y));
+                              static_cast<unsigned>(th.x), static_cast<unsigned>(th.y),
+                              ProjectionApplyContext::kLineSearch1dSample);
 }

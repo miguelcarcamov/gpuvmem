@@ -52,7 +52,7 @@ __global__ void calculateSandY(float* d_y,
                                int N,
                                int image);
 
-/** Staged s,y (flat M*N*image + …) for curvature check before writing history slots. */
+/** @param xi_old previous gradient g_k (same layout as xi); y = xi - xi_old. */
 __global__ void calculateSandYScratch(float* scratch_y,
                                       float* scratch_s,
                                       float* p,

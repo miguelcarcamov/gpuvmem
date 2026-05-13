@@ -65,6 +65,26 @@ __host__ void linkApplyBeam2I(cufftComplex* image,
   checkCudaErrors(cudaDeviceSynchronize());
 }
 
+__host__ void linkApplyBaselineBeam2I(cufftComplex* image,
+                                      float ant1_diameter,
+                                      float ant1_pb_factor,
+                                      float ant1_pb_cutoff,
+                                      int ant1_primary_beam,
+                                      float ant2_diameter,
+                                      float ant2_pb_factor,
+                                      float ant2_pb_cutoff,
+                                      int ant2_primary_beam,
+                                      float xobs,
+                                      float yobs,
+                                      float freq,
+                                      float fg_scale) {
+  apply_baseline_beam2I<<<numBlocksNN, threadsPerBlockNN>>>(
+      ant1_diameter, ant1_pb_factor, ant1_pb_cutoff, ant1_primary_beam,
+      ant2_diameter, ant2_pb_factor, ant2_pb_cutoff, ant2_primary_beam, image, N,
+      xobs, yobs, fg_scale, freq, DELTAX, DELTAY);
+  checkCudaErrors(cudaDeviceSynchronize());
+}
+
 __host__ void linkClipWNoise2I(float* I) {
   clip2IWNoise<<<numBlocksNN, threadsPerBlockNN>>>(
       device_noise_image, I, N, M, noise_cut, initial_values[0],

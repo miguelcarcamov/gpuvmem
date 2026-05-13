@@ -66,6 +66,9 @@ class Flags {
   bool Parse(int argc, char** argv);
   void PrintHelp(std::ostream& to = std::cout);
 
+  /** Used when PrintHelp runs without Parse (e.g. --help); sets the executable in the Usage line. */
+  void setProgramNameForHelp(std::string name) { argv0 = std::move(name); }
+
  private:
   int autoId;
   std::map<int, std::function<void(std::string optarg)>>
@@ -128,14 +131,17 @@ inline void Flags::entry(struct option& op,
   }
   ss << "[default: " << defaultValue << "]";
   ss << std::endl;
-  constexpr size_t step = 80 - 6;
-  for (size_t i = 0; i < description.size(); i += step) {
-    ss << "      ";
-    if (i + step < description.size()) {
-      ss << description.substr(i, step) << std::endl;
-    } else {
-      ss << description.substr(i);
+  constexpr size_t step = 92 - 6;
+  size_t pos = 0;
+  while (pos < description.size()) {
+    size_t end = std::min(pos + step, description.size());
+    if (end < description.size()) {
+      const size_t sp = description.rfind(' ', end);
+      if (sp != std::string::npos && sp > pos + step / 3) end = sp;
     }
+    ss << "      " << description.substr(pos, end - pos) << std::endl;
+    pos = end;
+    while (pos < description.size() && description[pos] == ' ') ++pos;
   }
   this->help[descriptionGroup].push_back(ss.str());
 }
@@ -152,7 +158,12 @@ inline void Flags::Var(T& var,
   this->entry(op, shortFlag, longFlag, defaultValue, description,
               descriptionGroup);
 
-  this->optionStr += ":";
+  /* Long-only options (no short letter) must not append ":"; orphan colons merge
+   * with the previous short flag (e.g. "m::::" makes -m look optional-arg and
+   * breaks parsing of following options such as -O path). */
+  if (shortFlag) {
+    this->optionStr += ":";
+  }
   op.has_arg = required_argument;
   var = defaultValue;
 
@@ -200,7 +211,8 @@ inline bool Flags::Parse(int argc, char** argv) {
 }
 
 inline void Flags::PrintHelp(std::ostream& to) {
-  to << "Usage: " << this->argv0 << " [options]" << std::endl << std::endl;
+  const std::string exe = this->argv0.empty() ? std::string("gpuvmem") : this->argv0;
+  to << "Usage: " << exe << " [options]" << std::endl << std::endl;
   for (auto& it : this->help) {
     if (it.first.size()) {
       to << it.first << ":" << std::endl;

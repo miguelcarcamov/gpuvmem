@@ -246,6 +246,14 @@ size_t ChunkedVisibilityGPU::max_chunk_count() const {
   return m;
 }
 
+size_t ChunkedVisibilityGPU::total_chunk_count() const {
+  size_t n = 0;
+  for (const GPUField& gf : fields_) {
+    for (const GPUBaseline& gb : gf.baselines) n += gb.chunks.size();
+  }
+  return n;
+}
+
 bool ChunkedVisibilityGPU::download(MeasurementSet* ms) {
   if (!ms || total_vis_ == 0 || fields_.size() != ms->num_fields()) return false;
   std::vector<cufftComplex> h_Vm(total_vis_), h_Vr(total_vis_);

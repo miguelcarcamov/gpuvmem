@@ -178,6 +178,12 @@ class ChunkedVisibilityGPU {
   /** Max of chunk counts over all chunks (for sizing gather buffers). */
   size_t max_chunk_count() const;
 
+  /** Number of GPU chunks (baseline × time sample); Chi² gather `nch` is ≤ this per DD. */
+  size_t total_chunk_count() const;
+
+  /** Total visibility rows (sum of chunk counts). */
+  size_t total_visibilities() const { return total_vis_; }
+
   void clear();
 
  private:

@@ -166,16 +166,19 @@ endif()
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 file(GLOB APP_CORE_SOURCES ${SRC_DIR}/options.cu)
-file(GLOB MFS_SOURCES ${SRC_DIR}/mfs/*.cu)
+file(GLOB MFS_CUDA_SOURCES ${SRC_DIR}/mfs/*.cu)
+file(GLOB MFS_CPP_SOURCES ${SRC_DIR}/mfs/*.cc)
+set(MFS_SOURCES ${MFS_CUDA_SOURCES} ${MFS_CPP_SOURCES})
 file(GLOB OPTIMIZER_SOURCES CONFIGURE_DEPENDS ${SRC_DIR}/optimizers/*.cu)
 file(GLOB LINESEARCH_SOURCES ${SRC_DIR}/linesearch/*.cu ${SRC_DIR}/seeding/*.cu
-                              ${SRC_DIR}/optimization/*.cu)
+                              ${SRC_DIR}/projection/*.cu)
 file(
   GLOB
   REGULARIZER_SOURCES
-  ${SRC_DIR}/regularizers/*.cu
+  ${SRC_DIR}/regularizer_kernels/*.cu
   ${SRC_DIR}/objective_function/terms/chi2/*.cu
-  ${SRC_DIR}/objective_function/terms/regularizers/*.cu)
+  ${SRC_DIR}/objective_function/terms/regularizers/*.cu
+  ${SRC_DIR}/objective_function/fi_context.cu)
 file(
   GLOB
   IMAGING_SOURCES
@@ -198,6 +201,9 @@ file(GLOB COMMON_CPP_SOURCES ${SRC_DIR}/utils/*.cc ${SRC_DIR}/rng/*.cc)
 
 add_library(gpuvmem_appcore_static STATIC ${APP_CORE_SOURCES})
 add_library(gpuvmem_mfs_static STATIC ${MFS_SOURCES})
+foreach(CC_FILE ${MFS_CPP_SOURCES})
+  set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
+endforeach()
 add_library(gpuvmem_optimizers_static STATIC ${OPTIMIZER_SOURCES})
 add_library(gpuvmem_linesearch_static STATIC ${LINESEARCH_SOURCES})
 add_library(gpuvmem_regularizers_static STATIC ${REGULARIZER_SOURCES})
@@ -258,8 +264,8 @@ target_include_directories(
          ${CMAKE_CURRENT_SOURCE_DIR}/include/io
          ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
-         ${CMAKE_CURRENT_SOURCE_DIR}/include/optimization
-         ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizers
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/projection
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizer_kernels
          ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
          ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
          ${CMAKE_CURRENT_SOURCE_DIR}/include/beam
@@ -290,8 +296,8 @@ foreach(TGT ${GPUVMEM_INTERNAL_TARGETS})
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/io
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
-                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/optimization
-                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizers
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/projection
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizer_kernels
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
                                            ${CMAKE_CURRENT_SOURCE_DIR}/include/beam

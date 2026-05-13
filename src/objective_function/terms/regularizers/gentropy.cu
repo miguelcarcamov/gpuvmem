@@ -1,12 +1,7 @@
 #include "objective_function/terms/regularizers/gentropy.cuh"
-#include "regularizers/regularizers_host.cuh"
+#include "regularizer_kernels/regularizers_host.cuh"
 #include "chi2/chi2_host.cuh"  // For linkAddToDPhi
 #include "image_processing/image_processing_host.cuh"
-
-extern long M, N;
-extern int image_count;
-extern float* penalizators;
-extern int nPenalizators;
 
 GEntropy::GEntropy() {
   this->name = "GEntropy";
@@ -18,9 +13,10 @@ GEntropy::GEntropy() {
 GEntropy::GEntropy(std::vector<float> prior) {
   this->name = "GEntropy";
   this->normalization_factor = 1.0f;
-  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * M * N));
+  const size_t n = prior.size();
+  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * n));
   checkCudaErrors(
-      cudaMemcpy(this->prior, prior.data(), M * N, cudaMemcpyHostToDevice));
+      cudaMemcpy(this->prior, prior.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
   this->eta = -1.0f;
 };
 
@@ -43,9 +39,10 @@ GEntropy::GEntropy(float* prior, float normalization_factor, float eta) {
 GEntropy::GEntropy(std::vector<float> prior, float normalization_factor) {
   this->name = "GEntropy";
   this->normalization_factor = normalization_factor;
-  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * M * N));
+  const size_t n = prior.size();
+  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * n));
   checkCudaErrors(
-      cudaMemcpy(this->prior, prior.data(), M * N, cudaMemcpyHostToDevice));
+      cudaMemcpy(this->prior, prior.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
   this->normalizePrior();
   this->eta = -1.0f;
 };
@@ -55,9 +52,10 @@ GEntropy::GEntropy(std::vector<float> prior,
                    float eta) {
   this->name = "GEntropy";
   this->normalization_factor = normalization_factor;
-  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * M * N));
+  const size_t n = prior.size();
+  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * n));
   checkCudaErrors(
-      cudaMemcpy(this->prior, prior.data(), M * N, cudaMemcpyHostToDevice));
+      cudaMemcpy(this->prior, prior.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
   this->normalizePrior();
   this->eta = eta;
 };
@@ -109,7 +107,8 @@ void GEntropy::calcGi(float* p, float* xi) {
 };
 
 void GEntropy::restartDGi() {
-  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+  const size_t plane = static_cast<size_t>(gridM()) * static_cast<size_t>(gridN());
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * plane));
 };
 
 void GEntropy::addToDphi(float* device_dphi) {

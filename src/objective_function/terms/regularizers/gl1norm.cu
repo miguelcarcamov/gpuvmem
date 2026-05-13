@@ -1,12 +1,7 @@
 #include "objective_function/terms/regularizers/gl1norm.cuh"
-#include "regularizers/regularizers_host.cuh"
+#include "regularizer_kernels/regularizers_host.cuh"
 #include "chi2/chi2_host.cuh"  // For linkAddToDPhi
 #include "image_processing/image_processing_host.cuh"
-
-extern long M, N;
-extern int image_count;
-extern float* penalizators;
-extern int nPenalizators;
 
 GL1Norm::GL1Norm() {
   this->name = "G L1-Norm";
@@ -21,9 +16,10 @@ GL1Norm::GL1Norm(std::vector<float> prior) {
   this->normalization_factor = 1.0f;
   this->epsilon_a = 1E-12;
   this->epsilon_b = 1E-12;
-  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * M * N));
+  const size_t n = prior.size();
+  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * n));
   checkCudaErrors(
-      cudaMemcpy(this->prior, prior.data(), M * N, cudaMemcpyHostToDevice));
+      cudaMemcpy(this->prior, prior.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
 };
 
 GL1Norm::GL1Norm(std::vector<float> prior, float epsilon_a, float epsilon_b) {
@@ -31,9 +27,10 @@ GL1Norm::GL1Norm(std::vector<float> prior, float epsilon_a, float epsilon_b) {
   this->normalization_factor = 1.0f;
   this->epsilon_a = epsilon_a;
   this->epsilon_b = epsilon_b;
-  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * M * N));
+  const size_t n = prior.size();
+  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * n));
   checkCudaErrors(
-      cudaMemcpy(this->prior, prior.data(), M * N, cudaMemcpyHostToDevice));
+      cudaMemcpy(this->prior, prior.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
 };
 
 GL1Norm::GL1Norm(float* prior, float normalization_factor) {
@@ -62,9 +59,10 @@ GL1Norm::GL1Norm(std::vector<float> prior, float normalization_factor) {
   this->epsilon_a = 1E-12;
   this->epsilon_b = 1E-12;
   this->normalization_factor = normalization_factor;
-  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * M * N));
+  const size_t n = prior.size();
+  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * n));
   checkCudaErrors(
-      cudaMemcpy(this->prior, prior.data(), M * N, cudaMemcpyHostToDevice));
+      cudaMemcpy(this->prior, prior.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
   this->normalizePrior();
 };
 
@@ -76,9 +74,10 @@ GL1Norm::GL1Norm(std::vector<float> prior,
   this->epsilon_a = epsilon_a;
   this->epsilon_b = epsilon_b;
   this->normalization_factor = normalization_factor;
-  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * M * N));
+  const size_t n = prior.size();
+  checkCudaErrors(cudaMalloc((void**)&this->prior, sizeof(float) * n));
   checkCudaErrors(
-      cudaMemcpy(this->prior, prior.data(), M * N, cudaMemcpyHostToDevice));
+      cudaMemcpy(this->prior, prior.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
   this->normalizePrior();
 };
 
@@ -143,7 +142,8 @@ void GL1Norm::calcGi(float* p, float* xi) {
 };
 
 void GL1Norm::restartDGi() {
-  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+  const size_t plane = static_cast<size_t>(gridM()) * static_cast<size_t>(gridN());
+  checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * plane));
 };
 
 void GL1Norm::addToDphi(float* device_dphi) {

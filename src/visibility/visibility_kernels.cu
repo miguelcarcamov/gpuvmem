@@ -48,30 +48,25 @@ __device__ void computeFrequenciesAndPhaseCenter(int j,
                                                  long N,
                                                  double xphs,
                                                  double yphs,
-                                                 double crpix1,
-                                                 double crpix2,
+                                                 double reference_column,
+                                                 double reference_row,
                                                  double& u_freq,
                                                  double& v_freq,
                                                  double& xphs_relative,
                                                  double& yphs_relative) {
   // DC at center: frequencies are centered after fftshift
   // Frequencies: [-N/2, ..., -1, 0, 1, ..., N/2-1] / N
-  // Use actual center pixel from FITS header (crpix1, crpix2)
-  // FITS uses 1-indexed coordinates, so subtract 1 to get 0-indexed
-  const double center_j = crpix1 - 1.0;  // Column center (u direction, width N)
-  const double center_k = crpix2 - 1.0;  // Row center (v direction, height M)
+  // reference_column / reference_row are 0-based (same convention as thread indices j, k and
+  // FieldMetadata phs_*), from Image::imaging_geometry().
 
   // u frequencies (column direction, width N) - u maps to j (columns)
-  u_freq = ((double)j - center_j) / (double)N;
+  u_freq = ((double)j - reference_column) / (double)N;
 
   // v frequencies (row direction, height M) - v maps to k (rows)
-  v_freq = ((double)k - center_k) / (double)M;
+  v_freq = ((double)k - reference_row) / (double)M;
 
-  // FFT grid center is at (crpix1-1, crpix2-1), so convert from absolute to
-  // relative to center
-  xphs_relative =
-      xphs - center_j;  // Convert to cartesian (relative to FFT grid center)
-  yphs_relative = yphs - center_k;
+  xphs_relative = xphs - reference_column;
+  yphs_relative = yphs - reference_row;
 }
 
 // Compute frequencies and relative phase coordinates for DC at corner case
@@ -115,8 +110,8 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
                              long N,
                              double xphs,
                              double yphs,
-                             double crpix1,
-                             double crpix2,
+                             double reference_column,
+                             double reference_row,
                              bool dc_at_center) {
   // cuFFT uses row-major layout: data[N * row + column]
   // Match gridding convention: j = column (u direction), k = row (v direction)
@@ -131,8 +126,8 @@ __global__ void phase_rotate(cufftComplex* __restrict__ data,
     double xphs_relative, yphs_relative;
 
     if (dc_at_center) {
-      computeFrequenciesAndPhaseCenter(j, k, M, N, xphs, yphs, crpix1, crpix2,
-                                       u_freq, v_freq, xphs_relative,
+      computeFrequenciesAndPhaseCenter(j, k, M, N, xphs, yphs, reference_column,
+                                       reference_row, u_freq, v_freq, xphs_relative,
                                        yphs_relative);
     } else {
       computeFrequenciesAndPhaseCorner(j, k, M, N, xphs, yphs, u_freq, v_freq,
@@ -170,12 +165,9 @@ __device__ bool interpolateVisibilityCenter(const double3& uvw,
                                             const long N,
                                             const cufftComplex* __restrict__ V,
                                             cufftComplex& result) {
-  // DC at center: standard bilinear interpolation
-  // Use floor(N/2.0) and floor(M/2.0) to match gridding coordinate system
-  // IMPORTANT: Match gridding convention: j = column (u), k = row (v)
-  const double center_j =
-      floor(N / 2.0);  // Column center (u direction, width N)
-  const double center_k = floor(M / 2.0);  // Row center (v direction, height M)
+  // Default 0-based reference matches Image::imaging_geometry() when no FITS header: N/2, M/2.
+  const double reference_column = floor(N / 2.0);
+  const double reference_row = floor(M / 2.0);
 
   // Standard bilinear interpolation: continuous coordinate without +0.5
   // The +0.5 is only for rounding to nearest pixel (used in gridding), not for
@@ -188,10 +180,8 @@ __device__ bool interpolateVisibilityCenter(const double3& uvw,
   // interpolation Gridding uses +0.5 for rounding to nearest pixel center, but
   // for bilinear interpolation we need to interpolate between pixel centers (at
   // integer positions), so we use floor
-  double j_cont =
-      grid_pos_x + center_j;  // Column (u direction) - continuous coordinate
-  double k_cont =
-      grid_pos_y + center_k;  // Row (v direction) - continuous coordinate
+  double j_cont = grid_pos_x + reference_column;  // column (u), continuous
+  double k_cont = grid_pos_y + reference_row;     // row (v), continuous
 
   // Get integer parts using floor (standard bilinear interpolation)
   // Note: floor gives us the lower-left corner of the interpolation cell

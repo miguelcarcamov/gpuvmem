@@ -47,7 +47,7 @@ __global__ void searchDirection_LBFGS(float* xi, long N, long M, int image) {
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  xi[M * N * image + N * i + j] *= -1.0f;
+  if (i < M && j < N) xi[M * N * image + N * i + j] *= -1.0f;
 }
 
 __global__ void getDot_LBFGS_ff(float* aux_vector,
@@ -74,8 +74,10 @@ __global__ void normArray(float* result,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
-  result[M * N * image + (N * i + j)] =
-      fabsf(array[M * N * image + (N * i + j)]);
+  if (i < M && j < N) {
+    result[M * N * image + (N * i + j)] =
+        fabsf(array[M * N * image + (N * i + j)]);
+  }
 }
 
 __global__ void CGGradCondition(float* temp,
@@ -127,9 +129,9 @@ __global__ void calculateSandY(float* d_y,
   const int j = threadIdx.x + blockDim.x * blockIdx.x;
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
+  /* y = g_{k+1} - g_k; xi_old must hold g_k (saved before overwriting xi with search direction). */
   d_y[M * N * image * iter + M * N * image + (N * i + j)] =
-      xi[M * N * image + N * i + j] -
-      (-1.0f * xi_old[M * N * image + N * i + j]);
+      xi[M * N * image + N * i + j] - xi_old[M * N * image + N * i + j];
   d_s[M * N * image * iter + M * N * image + (N * i + j)] =
       p[M * N * image + N * i + j] - p_old[M * N * image + N * i + j];
 }
@@ -147,8 +149,7 @@ __global__ void calculateSandYScratch(float* scratch_y,
   const int i = threadIdx.y + blockDim.y * blockIdx.y;
 
   scratch_y[M * N * image + N * i + j] =
-      xi[M * N * image + N * i + j] -
-      (-1.0f * xi_old[M * N * image + N * i + j]);
+      xi[M * N * image + N * i + j] - xi_old[M * N * image + N * i + j];
   scratch_s[M * N * image + N * i + j] =
       p[M * N * image + N * i + j] - p_old[M * N * image + N * i + j];
 }

@@ -39,54 +39,46 @@
 #include <cuda_runtime.h>
 
 extern dim3 threadsPerBlockNN, numBlocksNN;
-extern double crpix1, crpix2;
 
-// Measurement operator: transforms image to visibility grid
-// This encapsulates the forward model pipeline:
-//   calculateInu -> apply_beam -> apply_GCF -> FFT2D -> phase_rotate
-__host__ void computeImageToVisibilityGrid(float* I,
-                                           VirtualImageProcessor* ip,
-                                           varsPerGPU* vars_gpu,
-                                           int gpu_idx,
-                                           long M,
-                                           long N,
-                                           float nu,
-                                           float ref_xobs_pix,
-                                           float ref_yobs_pix,
-                                           float phs_xobs_pix,
-                                           float phs_yobs_pix,
-                                           float antenna_diameter,
-                                           float pb_factor,
-                                           float pb_cutoff,
-                                           int primary_beam,
-                                           float fg_scale,
-                                           CKernel* ckernel,
-                                           bool fft_shift) {
-  // Recompute FFT of final image for this frequency/channel
-  ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, I, nu);
+__host__ void computeImageToVisibilityGridBaseline(
+    const MeasurementGridView& model,
+    const gpuvmem::ms::FieldMetadata& field,
+    varsPerGPU* vars_gpu,
+    int gpu_idx,
+    float nu,
+    float ant1_diameter,
+    float ant1_pb_factor,
+    float ant1_pb_cutoff,
+    int ant1_primary_beam,
+    float ant2_diameter,
+    float ant2_pb_factor,
+    float ant2_pb_cutoff,
+    int ant2_primary_beam,
+    float fg_scale,
+    CKernel* ckernel,
+    bool fft_shift) {
+  if (!model.I_plane || !model.grid_image || !model.ip) return;
+  const long M = model.grid_image->getM();
+  const long N = model.grid_image->getN();
+  const ImagingGeometry geo = model.grid_image->imaging_geometry();
+  model.ip->calculateInu(vars_gpu[gpu_idx].device_I_nu, model.I_plane, nu);
 
-  // Apply primary beam
-  ip->apply_beam(vars_gpu[gpu_idx].device_I_nu, antenna_diameter, pb_factor,
-                 pb_cutoff, ref_xobs_pix, ref_yobs_pix, nu, primary_beam,
-                 fg_scale);
+  model.ip->apply_baseline_beam(
+      vars_gpu[gpu_idx].device_I_nu, ant1_diameter, ant1_pb_factor, ant1_pb_cutoff,
+      ant1_primary_beam, ant2_diameter, ant2_pb_factor, ant2_pb_cutoff,
+      ant2_primary_beam, field.ref_xobs_pix, field.ref_yobs_pix, nu, fg_scale);
 
-  // Apply Gridding Correction Function (GCF) if using convolution kernel
   if (ckernel != NULL && ckernel->getGCFGPU() != NULL) {
     apply_GCF<<<numBlocksNN, threadsPerBlockNN>>>(vars_gpu[gpu_idx].device_I_nu,
                                                   ckernel->getGCFGPU(), N);
     checkCudaErrors(cudaDeviceSynchronize());
   }
 
-  // FFT 2D: Transform image to visibility grid
   FFT2D(vars_gpu[gpu_idx].device_V, vars_gpu[gpu_idx].device_I_nu,
         vars_gpu[gpu_idx].plan, M, N, CUFFT_INVERSE, fft_shift);
 
-  // Phase rotate to correct phase center
-  // Pass fft_shift as dc_at_center since they match (fft_shift=true means DC at
-  // center) Pass crpix1 and crpix2 from FITS header (already declared as
-  // extern)
   phase_rotate<<<numBlocksNN, threadsPerBlockNN>>>(
-      vars_gpu[gpu_idx].device_V, M, N, phs_xobs_pix, phs_yobs_pix, crpix1,
-      crpix2, fft_shift);
+      vars_gpu[gpu_idx].device_V, M, N, field.phs_xobs_pix, field.phs_yobs_pix,
+      geo.reference_column, geo.reference_row, fft_shift);
   checkCudaErrors(cudaDeviceSynchronize());
 }

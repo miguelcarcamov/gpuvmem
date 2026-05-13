@@ -64,6 +64,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <iostream>
 
 #include "rng/rngs.cuh"
 
@@ -144,21 +145,21 @@ void PutSeed(long x)
     x = ((unsigned long)time((time_t*)NULL)) % MODULUS;
   if (x == 0)
     while (!ok) {
-      printf("\nEnter a positive integer seed (9 digits or less) >> ");
+      std::cout << "\nEnter a positive integer seed (9 digits or less) >> ";
       int rc = scanf("%ld", &x);
       if (rc == EOF) {
         x = DEFAULT;
         ok = 1;
-        printf("\nEnd of input; using default seed.\n");
+        std::cout << "\nEnd of input; using default seed.\n";
       } else if (rc != 1) {
         int c;
         while ((c = getchar()) != '\n' && c != EOF) {
         }
-        printf("\nInvalid input ... try again\n");
+        std::cout << "\nInvalid input ... try again\n";
       } else {
         ok = (0 < x) && (x < MODULUS);
         if (!ok)
-          printf("\nInput out of range ... try again\n");
+          std::cout << "\nInput out of range ... try again\n";
       }
     }
   seed[stream] = x;
@@ -209,7 +210,7 @@ void TestRandom(void)
   GetSeed(&x);            /* get the state of stream 1       */
   ok = ok && (x == A256); /* x should be the jump multiplier */
   if (ok)
-    printf("\n The implementation of rngs.c is correct.\n\n");
+    std::cout << "\n The implementation of rngs.c is correct.\n\n";
   else
-    printf("\n\a ERROR -- the implementation of rngs.c is not correct.\n\n");
+    std::cerr << "\n\a ERROR -- the implementation of rngs.c is not correct.\n\n";
 }

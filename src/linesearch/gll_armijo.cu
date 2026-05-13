@@ -162,7 +162,7 @@ std::pair<float, float> GLLArmijo::search(float* current_point,
       // Don't free gradient - it's owned by the optimizer, not allocated here
       
       if (gpuvmem_cli_verbose()) {
-        printf("Alpha for linear minimization = %f\n\n", alpha);
+        std::cout << "Alpha for linear minimization = " << alpha << "\n\n";
       }
       
       return std::make_pair(f_alpha, alpha);
@@ -195,7 +195,7 @@ std::pair<float, float> GLLArmijo::search(float* current_point,
   cudaFree(local_device_pcom);
 
   if (gpuvmem_cli_verbose()) {
-    printf("Alpha for linear minimization = %f\n\n", alpha);
+    std::cout << "Alpha for linear minimization = " << alpha << "\n\n";
   }
   
   return std::make_pair(f_final, alpha);

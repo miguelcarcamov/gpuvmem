@@ -35,6 +35,7 @@
 #include <cooperative_groups.h>
 #include <float.h>
 #include <cuda_runtime.h>
+#include <math_constants.h>
 
 namespace cg = cooperative_groups;
 
@@ -237,7 +238,7 @@ __global__ void reduceMaxKernel(float* g_idata,
   unsigned int tid = threadIdx.x;
   unsigned int gridSize = blockSize * gridDim.x;
 
-  float myMax = FLT_MIN;
+  float myMax = -CUDART_INF_F;
 
   // we reduce multiple elements per thread.  The number is determined by the
   // number of active thread blocks (via gridDim).  More blocks will result

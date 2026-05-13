@@ -36,10 +36,60 @@
 #include "reduction/reduction_host.cuh"
 #include "framework.cuh"
 #include "ms/ms_with_gpu.h"
+#include "ms/polarization.h"
 #include "error.cuh"
 #include <cuda_runtime.h>
+#include <iostream>
 #include <vector>
 #include <set>
+
+namespace {
+
+int vis_slot_for_err(const gpuvmem::ms::TimeSample& ts, int chan, int pol) {
+  for (size_t vi = 0; vi < ts.visibilities().size(); ++vi) {
+    const auto& v = ts.visibilities()[vi];
+    if (v.chan == chan && v.pol == pol) return static_cast<int>(vi);
+  }
+  return -1;
+}
+
+void collect_chunks_for_chan_pol_err(const gpuvmem::ms::GPUField& gpu_field,
+                                     const gpuvmem::ms::Field& host_field,
+                                     int dd_id,
+                                     int chan,
+                                     int pol,
+                                     std::vector<const gpuvmem::ms::GPUChunk*>& chunks_out,
+                                     std::vector<int>& slots_out) {
+  chunks_out.clear();
+  slots_out.clear();
+  if (gpu_field.baselines.size() != host_field.baselines().size()) return;
+  for (size_t bi = 0; bi < gpu_field.baselines.size(); ++bi) {
+    const gpuvmem::ms::GPUBaseline& gbl = gpu_field.baselines[bi];
+    const gpuvmem::ms::Baseline& hbl = host_field.baselines()[bi];
+    if (gbl.chunks.size() != hbl.time_samples().size()) continue;
+    for (size_t ti = 0; ti < gbl.chunks.size(); ++ti) {
+      const gpuvmem::ms::GPUChunk& ch = gbl.chunks[ti];
+      if (ch.data_desc_id != dd_id || ch.empty()) continue;
+      const gpuvmem::ms::TimeSample& ts = hbl.time_samples()[ti];
+      const int slot = vis_slot_for_err(ts, chan, pol);
+      if (slot < 0 || slot >= static_cast<int>(ch.count)) continue;
+      chunks_out.push_back(&ch);
+      slots_out.push_back(slot);
+    }
+  }
+}
+
+const gpuvmem::ms::Field& host_field_for_gpu_field_err(const gpuvmem::ms::MSWithGPU& dw,
+                                                       size_t field_index,
+                                                       const gpuvmem::ms::GPUField& gf) {
+  if (dw.gridded_ms.num_fields() > field_index) {
+    const gpuvmem::ms::Field& cand = dw.gridded_ms.field(field_index);
+    if (cand.baselines().size() == gf.baselines.size()) return cand;
+  }
+  return dw.ms.field(field_index);
+}
+
+}  // namespace
 
 // Extern variables
 extern long M, N;
@@ -68,8 +118,46 @@ std::vector<double3**> d_uvw_ptrs;
 std::vector<cufftComplex**> d_Vo_ptrs;
 std::vector<float**> d_weight_ptrs;
 bool gather_buffers_initialized = false;
+int gather_buffer_capacity = 0;
+
+void free_gather_buffers() {
+  for (int g = 0; g < num_gpus; g++) {
+    cudaSetDevice(g + firstgpu);
+    if (g < static_cast<int>(d_uvw_gather.size()) && d_uvw_gather[g]) {
+      cudaFree(d_uvw_gather[g]);
+      d_uvw_gather[g] = nullptr;
+    }
+    if (g < static_cast<int>(d_Vo_gather.size()) && d_Vo_gather[g]) {
+      cudaFree(d_Vo_gather[g]);
+      d_Vo_gather[g] = nullptr;
+    }
+    if (g < static_cast<int>(d_weight_gather.size()) && d_weight_gather[g]) {
+      cudaFree(d_weight_gather[g]);
+      d_weight_gather[g] = nullptr;
+    }
+    if (g < static_cast<int>(d_uvw_ptrs.size()) && d_uvw_ptrs[g]) {
+      cudaFree(d_uvw_ptrs[g]);
+      d_uvw_ptrs[g] = nullptr;
+    }
+    if (g < static_cast<int>(d_Vo_ptrs.size()) && d_Vo_ptrs[g]) {
+      cudaFree(d_Vo_ptrs[g]);
+      d_Vo_ptrs[g] = nullptr;
+    }
+    if (g < static_cast<int>(d_weight_ptrs.size()) && d_weight_ptrs[g]) {
+      cudaFree(d_weight_ptrs[g]);
+      d_weight_ptrs[g] = nullptr;
+    }
+  }
+  gather_buffers_initialized = false;
+  gather_buffer_capacity = 0;
+}
+
 void ensure_gather_buffers() {
-  if (gather_buffers_initialized || max_number_vis <= 0) return;
+  if (max_number_vis <= 0) return;
+  if (gather_buffers_initialized && gather_buffer_capacity >= max_number_vis) return;
+
+  if (gather_buffers_initialized) free_gather_buffers();
+
   d_uvw_gather.resize(num_gpus);
   d_Vo_gather.resize(num_gpus);
   d_weight_gather.resize(num_gpus);
@@ -85,6 +173,7 @@ void ensure_gather_buffers() {
     checkCudaErrors(cudaMalloc(&d_Vo_ptrs[g], max_number_vis * sizeof(cufftComplex*)));
     checkCudaErrors(cudaMalloc(&d_weight_ptrs[g], max_number_vis * sizeof(float*)));
   }
+  gather_buffer_capacity = max_number_vis;
   gather_buffers_initialized = true;
 }
 }  // namespace errors_gather
@@ -121,7 +210,7 @@ __host__ void calculateErrors_chunked(Image* image, float fg_scale) {
 
     for (size_t f = 0; f < dw.gpu.num_fields(); f++) {
       const gpuvmem::ms::GPUField& gpu_field = dw.gpu.fields()[f];
-      const gpuvmem::ms::Field& host_field = dw.ms.field(f);
+      const gpuvmem::ms::Field& host_field = host_field_for_gpu_field_err(dw, f, gpu_field);
       const gpuvmem::ms::FieldMetadata& fmeta = host_field.metadata();
       float ref_xobs = fmeta.ref_xobs_pix;
       float ref_yobs = fmeta.ref_yobs_pix;
@@ -145,11 +234,8 @@ __host__ void calculateErrors_chunked(Image* image, float fg_scale) {
         if (nchan <= 0 || npol <= 0) continue;
         const std::vector<int>& corr_type = pol_info->corr_type();
 
-        std::vector<const gpuvmem::ms::GPUChunk*> chunks_with_dd;
-        for (const auto& bl : gpu_field.baselines)
-          for (const auto& ch : bl.chunks)
-            if (ch.data_desc_id == dd_id && ch.count > 0)
-              chunks_with_dd.push_back(&ch);
+        std::vector<const gpuvmem::ms::GPUChunk*> chunks_sel;
+        std::vector<int> slots_sel;
 
         for (int chan = 0; chan < nchan; chan++) {
           float nu = static_cast<float>(spw->frequency(chan));
@@ -157,26 +243,37 @@ __host__ void calculateErrors_chunked(Image* image, float fg_scale) {
           cudaSetDevice(gpu_idx + firstgpu);
 
           for (int pol = 0; pol < npol; pol++) {
-            if (pol >= static_cast<int>(corr_type.size())) continue;
-            int ct = corr_type[pol];
-            if (ct != 1 && ct != 2 && ct != 5 && ct != 6) continue;  // RR, LL, XX, YY
-
-            const int offset = chan * npol + pol;
-            std::vector<const gpuvmem::ms::GPUChunk*> chunks_at_offset;
-            for (const auto* ch : chunks_with_dd) {
-              if (offset < static_cast<int>(ch->count))
-                chunks_at_offset.push_back(ch);
+            if (!corr_type.empty()) {
+              if (pol >= static_cast<int>(corr_type.size())) continue;
+              const int ct = corr_type[static_cast<size_t>(pol)];
+              if (!gpuvmem::ms::is_circular(ct) && !gpuvmem::ms::is_linear(ct)) continue;
             }
-            int nch = static_cast<int>(chunks_at_offset.size());
-            if (nch == 0 || nch > max_number_vis) continue;
 
-            std::vector<float*> h_weight_ptrs(nch);
-            std::vector<double3*> h_uvw_ptrs(nch);
-            std::vector<cufftComplex*> h_Vo_ptrs(nch);
+            collect_chunks_for_chan_pol_err(gpu_field, host_field, dd_id, chan, pol,
+                                            chunks_sel, slots_sel);
+            const int nch = static_cast<int>(chunks_sel.size());
+            if (nch == 0) continue;
+            if (nch > max_number_vis) continue;
+
+            bool uniform_slots = true;
+            for (int si = 1; si < nch; ++si) {
+              if (slots_sel[static_cast<size_t>(si)] !=
+                  slots_sel[static_cast<size_t>(0)]) {
+                uniform_slots = false;
+                break;
+              }
+            }
+            const int gather_slot =
+                uniform_slots ? slots_sel[static_cast<size_t>(0)] : -1;
+
+            std::vector<float*> h_weight_ptrs(static_cast<size_t>(nch));
+            std::vector<double3*> h_uvw_ptrs(static_cast<size_t>(nch));
+            std::vector<cufftComplex*> h_Vo_ptrs(static_cast<size_t>(nch));
             for (int c = 0; c < nch; c++) {
-              h_weight_ptrs[c] = const_cast<float*>(chunks_at_offset[c]->weight);
-              h_uvw_ptrs[c] = const_cast<double3*>(chunks_at_offset[c]->uvw);
-              h_Vo_ptrs[c] = const_cast<cufftComplex*>(chunks_at_offset[c]->Vo);
+              const gpuvmem::ms::GPUChunk* ch = chunks_sel[static_cast<size_t>(c)];
+              h_weight_ptrs[static_cast<size_t>(c)] = const_cast<float*>(ch->weight);
+              h_uvw_ptrs[static_cast<size_t>(c)] = const_cast<double3*>(ch->uvw);
+              h_Vo_ptrs[static_cast<size_t>(c)] = const_cast<cufftComplex*>(ch->Vo);
             }
 
             checkCudaErrors(cudaMemcpy(errors_gather::d_weight_ptrs[gpu_idx], h_weight_ptrs.data(),
@@ -189,13 +286,29 @@ __host__ void calculateErrors_chunked(Image* image, float fg_scale) {
                                         nch * sizeof(cufftComplex*),
                                         cudaMemcpyHostToDevice));
 
-            gatherChunkAtOffset<<<(nch + 255) / 256, 256>>>(
-                errors_gather::d_uvw_gather[gpu_idx], errors_gather::d_Vo_gather[gpu_idx],
-                errors_gather::d_weight_gather[gpu_idx],
-                const_cast<double3 const* const*>(errors_gather::d_uvw_ptrs[gpu_idx]),
-                const_cast<cufftComplex const* const*>(errors_gather::d_Vo_ptrs[gpu_idx]),
-                const_cast<float const* const*>(errors_gather::d_weight_ptrs[gpu_idx]),
-                offset, nch);
+            if (uniform_slots) {
+              gatherChunkAtOffset<<<(nch + 255) / 256, 256>>>(
+                  errors_gather::d_uvw_gather[gpu_idx], errors_gather::d_Vo_gather[gpu_idx],
+                  errors_gather::d_weight_gather[gpu_idx],
+                  const_cast<double3 const* const*>(errors_gather::d_uvw_ptrs[gpu_idx]),
+                  const_cast<cufftComplex const* const*>(errors_gather::d_Vo_ptrs[gpu_idx]),
+                  const_cast<float const* const*>(errors_gather::d_weight_ptrs[gpu_idx]),
+                  gather_slot, nch);
+            } else {
+              int* d_slots = nullptr;
+              checkCudaErrors(cudaMalloc(&d_slots, static_cast<size_t>(nch) * sizeof(int)));
+              checkCudaErrors(cudaMemcpy(d_slots, slots_sel.data(),
+                                        static_cast<size_t>(nch) * sizeof(int),
+                                        cudaMemcpyHostToDevice));
+              gatherChunkAtOffsets<<<(nch + 255) / 256, 256>>>(
+                  errors_gather::d_uvw_gather[gpu_idx], errors_gather::d_Vo_gather[gpu_idx],
+                  errors_gather::d_weight_gather[gpu_idx],
+                  const_cast<double3 const* const*>(errors_gather::d_uvw_ptrs[gpu_idx]),
+                  const_cast<cufftComplex const* const*>(errors_gather::d_Vo_ptrs[gpu_idx]),
+                  const_cast<float const* const*>(errors_gather::d_weight_ptrs[gpu_idx]),
+                  d_slots, nch);
+              cudaFree(d_slots);
+            }
             checkCudaErrors(cudaDeviceSynchronize());
 
             float sum_weights = deviceReduce<float>(errors_gather::d_weight_gather[gpu_idx],

@@ -33,6 +33,7 @@
 
 #include "linesearch/fibonacci_search.cuh"
 #include "classes/image.cuh"
+#include "classes/objectivefunction.cuh"
 #include "linesearch/linesearch_utils.cuh"
 #include "linesearch/line_search_1d_eval.cuh"
 #include "linesearch/mnbrak.cuh"
@@ -55,6 +56,8 @@ std::pair<float, float> FibonacciSearch::search(
   const int image_count = objective_function->getImageCount();
   const size_t vec_bytes = sizeof(float) * static_cast<size_t>(M) * static_cast<size_t>(N) *
                            static_cast<size_t>(image_count);
+
+  checkCudaErrors(cudaSetDevice(objective_function->getPrimaryCudaDevice()));
 
   // Allocate temporary memory
   float* local_device_pcom;
@@ -128,7 +131,7 @@ std::pair<float, float> FibonacciSearch::search(
   }
   
   float xmin = (a + b) / 2.0f;
-  float fret = this->evaluateLineFunction(xmin);
+  const float f_at_minimum = this->evaluateLineFunction(xmin);
   
   // Update point
   // Use Image object from line searcher member instead of extern Image* I
@@ -139,10 +142,10 @@ std::pair<float, float> FibonacciSearch::search(
   cudaFree(local_device_pcom);
   
   if (gpuvmem_cli_verbose()) {
-    printf("Alpha for linear minimization = %f\n\n", xmin);
+    std::cout << "  Line search: accepted step alpha = " << xmin << " (along search direction)\n\n";
   }
   
-  return std::make_pair(fret, xmin);
+  return std::make_pair(f_at_minimum, xmin);
 }
 
 namespace {

@@ -7,6 +7,13 @@
 #include <string>
 #include <memory>
 
+/** Device buffer roles (Numerical Recipes–style names kept for line search API):
+ *  - `xi` : gradient workspace after calcGradient; then search direction for LineSearcher;
+ *           overwritten by newXi with the next direction.
+ *  - `device_g` : previous gradient +∇f (for β); not the NR “g = −∇f” buffer name.
+ *  - `device_h` : previous search direction d_k.
+ *  - `temp` : scratch for convergence test and for holding −∇f before newXi.
+ */
 // Forward declaration to avoid circular dependency
 class LineSearcher;
 class StepSizeSeeder;
@@ -143,8 +150,8 @@ class ConjugateGradient : public Optimizer {
   float* device_dgg_vector; // reduction scratch (dot products for beta)
 
   // Optimization state
-  float fret = 0.0f;      // Function value after line search
-  float fp = 0.0f;        // Previous function value
+  /** Last objective f(x) seen after a line search (used for logging / sanity checks). */
+  float last_objective_value_ = 0.0f;
   int configured = 1;     // Configuration flag (1 = needs configuration)
   
   // Line search (opaque pointer to avoid circular dependency in header)

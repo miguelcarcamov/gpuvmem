@@ -3,7 +3,7 @@
 
 #include "image.cuh"
 #include "objectivefunction.cuh"
-#include "optimization/projection.hh"
+#include "projection/projection.hh"
 #include <string>
 #include <utility>  // for std::pair
 #include <memory>   // for std::unique_ptr
@@ -121,6 +121,18 @@ class LineSearcher {
   float getInitialStepSize() const;
 
   /**
+   * @brief Optional strictly positive lower bound on the accepted line-search step.
+   *
+   * Mirrors Pyralysis ``setup_bracketing(..., domain_eps=...)`` (see
+   * ``golden_section/bracketing.py``): when ``eps > 0``, any minimizer ``α`` below ``eps``
+   * is replaced by ``eps`` and the 1D objective is re-evaluated. Use ``0`` (default on the
+   * base class) to leave the NR minimizer unchanged. ``Brent`` sets a small default in its
+   * constructor to match Pyralysis ``GoldenSectionSearch`` / ``FibonacciSearch`` defaults.
+   */
+  void setStepDomainFloor(float eps);
+  float getStepDomainFloor() const;
+
+  /**
    * @brief Update history after line search completes.
    * 
    * Called by optimizer after gradient is computed to update
@@ -215,6 +227,12 @@ class LineSearcher {
    */
   float computeInitialAlpha(ObjectiveFunction* objective_function,
                            float* current_point, float* search_direction);
+
+  /** If ``step_domain_floor_ > 0`` and ``alpha < floor``, return ``(floor, f(floor))``. */
+  std::pair<float, float> clampLineSearchStepToDomain(float alpha, float f_at_alpha,
+                                                      const LineSearch1dEval* ctx) const;
+
+  float step_domain_floor_;
 };
 
 /** Active LineSearcher while `LineSearcher::ScopedSearchContext` is alive (no extern). */

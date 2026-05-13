@@ -7,6 +7,7 @@
 #include <measures/Measures/MDirection.h>
 #include "utils/direction_cosines.cuh"
 #include "framework.cuh"
+#include "classes/imaging_header.hh"
 #include "optimizers/conjugategradient.cuh"
 #include "framework.cuh"
 
@@ -34,6 +35,8 @@ class MFS : public Synthesizer {
 
  private:
   GpuvmemCliConfig cli_config_;
+  /** Model image astrometry (in-memory, 0-based reference pixel) copied onto Image in setDevice(). */
+  gpuvmem::ImagingHeader resolved_model_header_{};
   void syncLegacyGlobalsFromCli_(const GpuvmemCliConfig& cfg);
 };
 

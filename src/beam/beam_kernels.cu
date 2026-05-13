@@ -216,6 +216,34 @@ __global__ void apply_beam2I(float antenna_diameter,
       make_cuFloatComplex(image[N * i + j].x * atten * fg_scale, 0.0f);
 }
 
+__global__ void apply_baseline_beam2I(float ant1_diameter,
+                                      float ant1_pb_factor,
+                                      float ant1_pb_cutoff,
+                                      int ant1_primary_beam,
+                                      float ant2_diameter,
+                                      float ant2_pb_factor,
+                                      float ant2_pb_cutoff,
+                                      int ant2_primary_beam,
+                                      cufftComplex* image,
+                                      long N,
+                                      float xobs,
+                                      float yobs,
+                                      float fg_scale,
+                                      float freq,
+                                      double DELTAX,
+                                      double DELTAY) {
+  const int j = threadIdx.x + blockDim.x * blockIdx.x;
+  const int i = threadIdx.y + blockDim.y * blockIdx.y;
+
+  const float a1 = attenuation(ant1_diameter, ant1_pb_factor, ant1_pb_cutoff, freq,
+                               xobs, yobs, DELTAX, DELTAY, ant1_primary_beam);
+  const float a2 = attenuation(ant2_diameter, ant2_pb_factor, ant2_pb_cutoff, freq,
+                               xobs, yobs, DELTAX, DELTAY, ant2_primary_beam);
+  const float comb = sqrtf(fmaxf(a1 * a2, 0.0f));
+  image[N * i + j] =
+      make_cuFloatComplex(image[N * i + j].x * comb * fg_scale, 0.0f);
+}
+
 __global__ void apply_beam2I(float antenna_diameter,
                              float pb_factor,
                              float pb_cutoff,

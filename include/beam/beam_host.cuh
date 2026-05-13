@@ -18,6 +18,20 @@ __host__ void linkApplyBeam2I(cufftComplex* image,
                               int primary_beam,
                               float fg_scale);
 
+__host__ void linkApplyBaselineBeam2I(cufftComplex* image,
+                                      float ant1_diameter,
+                                      float ant1_pb_factor,
+                                      float ant1_pb_cutoff,
+                                      int ant1_primary_beam,
+                                      float ant2_diameter,
+                                      float ant2_pb_factor,
+                                      float ant2_pb_cutoff,
+                                      int ant2_primary_beam,
+                                      float xobs,
+                                      float yobs,
+                                      float freq,
+                                      float fg_scale);
+
 __host__ void linkClipWNoise2I(float* I);
 
 __host__ void linkCalculateInu2I(cufftComplex* image, float* I, float freq);

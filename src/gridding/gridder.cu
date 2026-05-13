@@ -1,5 +1,6 @@
 #include "gridding/gridder.cuh"
 #include "framework.cuh"
+#include "classes/image.cuh"
 
 #include <ckernel.cuh>
 
@@ -24,16 +25,18 @@ void Gridder::grid(gpuvmem::ms::MSWithGPU& dataset) {
 }
 
 void Gridder::degrid(std::vector<gpuvmem::ms::MSWithGPU>& datasets,
-                    float* I,
-                    VirtualImageProcessor* ip) {
+                     float* I,
+                     VirtualImageProcessor* ip,
+                     const Image* grid_image) {
   for (auto& dw : datasets) {
-    degrid(dw, I, ip);
+    degrid(dw, I, ip, grid_image);
   }
 }
 
 void Gridder::degrid(gpuvmem::ms::MSWithGPU& dataset,
-                    float* I,
-                    VirtualImageProcessor* ip) {
-  do_degridding(dataset.ms, &dataset.gpu, deltau, deltav, num_gpus, firstgpu,
-                variables.blockSizeV, M, N, ckernel_, I, ip);
+                     float* I,
+                     VirtualImageProcessor* ip,
+                     const Image* grid_image) {
+  do_degridding(dataset.ms, &dataset.gpu, num_gpus, firstgpu,
+                variables.blockSizeV, ckernel_, I, ip, grid_image);
 }

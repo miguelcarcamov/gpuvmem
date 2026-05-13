@@ -36,7 +36,7 @@
 #include <helper_cuda.h>
 #include "error.cuh"
 #include <cuda_runtime.h>
-#include <cstdio>
+#include <iostream>
 
 #ifndef MIN
 #define MIN(x, y) ((x < y) ? x : y)
@@ -62,14 +62,13 @@ __host__ void getNumBlocksAndThreads(int n,
   }
   if ((float)threads * blocks >
       (float)prop.maxGridSize[0] * prop.maxThreadsPerBlock) {
-    printf("n is too large, please choose a smaller number!\n");
+    std::cerr << "n is too large, please choose a smaller number!\n";
   }
 
   if (blocks > prop.maxGridSize[0]) {
-    printf(
-        "Grid size <%d> exceeds the device capability <%d>, set block size as "
-        "%d (original %d)\n",
-        blocks, prop.maxGridSize[0], threads * 2, threads);
+    std::cerr << "Grid size <" << blocks << "> exceeds the device capability <"
+              << prop.maxGridSize[0] << ">, set block size as " << (threads * 2)
+              << " (original " << threads << ")\n";
 
     blocks /= 2;
     threads *= 2;

@@ -13,6 +13,7 @@
 #include <casa/BasicSL.h>
 
 #include <cstdio>
+#include <iostream>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -87,9 +88,8 @@ static std::vector<int> read_corr_type_row(const casacore::Table& pol_tab,
         break;
     }
   } catch (const std::exception& e) {
-    std::fprintf(stderr,
-                 "MSReader: CORR_TYPE read failed (declared type=%d): %s\n",
-                 static_cast<int>(dt), e.what());
+    std::cerr << "MSReader: CORR_TYPE read failed (declared type="
+              << static_cast<int>(dt) << "): " << e.what() << '\n';
     return {};
   }
 
@@ -123,10 +123,10 @@ static std::vector<int> read_corr_type_row(const casacore::Table& pol_tab,
   } catch (...) {
   }
 
-  std::fprintf(stderr,
-               "MSReader: unsupported CORR_TYPE storage (DataType=%d); "
-               "continuing with empty correlation type list\n",
-               static_cast<int>(dt));
+  std::cerr
+      << "MSReader: unsupported CORR_TYPE storage (DataType="
+      << static_cast<int>(dt)
+      << "); continuing with empty correlation type list\n";
   return {};
 }
 
@@ -240,20 +240,20 @@ class CasacoreMSReader : public MSReader {
     try {
       casacore::Table main_tab(path);
       if (main_tab.nrow() == 0) {
-        std::fprintf(stderr, "MSReader: empty MAIN table\n");
+        std::cerr << "MSReader: empty MAIN table\n";
         return false;
       }
 
       std::string data_col = column_name_for_read(options.data_column);
       if (data_col.empty()) {
-        std::fprintf(stderr, "MSReader: RESIDUAL cannot be read from disk\n");
+        std::cerr << "MSReader: RESIDUAL cannot be read from disk\n";
         return false;
       }
       if (!table_has_column(main_tab, data_col)) {
         if (table_has_column(main_tab, "CORRECTED_DATA")) data_col = "CORRECTED_DATA";
         else if (table_has_column(main_tab, "DATA")) data_col = "DATA";
         else {
-          std::fprintf(stderr, "MSReader: no DATA/CORRECTED_DATA column\n");
+          std::cerr << "MSReader: no DATA/CORRECTED_DATA column\n";
           return false;
         }
       }
@@ -264,7 +264,7 @@ class CasacoreMSReader : public MSReader {
       read_visibilities(main_tab, path, data_col, options, out);
       return true;
     } catch (const std::exception& e) {
-      std::fprintf(stderr, "MSReader: %s\n", e.what());
+      std::cerr << "MSReader: " << e.what() << '\n';
       return false;
     }
   }
