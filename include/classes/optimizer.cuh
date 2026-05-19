@@ -2,6 +2,7 @@
 #define OPTIMIZER_CUH
 
 #include <memory>
+#include <string>
 
 #include "projection/projection.hh"
 
