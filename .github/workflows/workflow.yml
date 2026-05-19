@@ -2,28 +2,26 @@ name: gpuvmem CI
 
 on:
   push:
-    branches: [master, framework_dev, development]
-    paths:
+    # Run on all branches (feature branches like fix/* were excluded before).
+    paths: &ci_paths
     - '**.cu'
     - '**.cuh'
     - '**.c'
     - '**.h'
+    - '**.hh'
     - '**.cpp'
     - '**.hpp'
     - '**.cmake'
+    - '**.cc'
+    - '**.sh'
     - CMakeLists.txt
+    - 'tests/**'
+    - '.github/workflows/**'
   pull_request:
-    branches: [master]
-    types: [opened, reopened]
-    paths:
-    - '**.cu'
-    - '**.cuh'
-    - '**.c'
-    - '**.h'
-    - '**.cpp'
-    - '**.hpp'
-    - '**.cmake'
-    - CMakeLists.txt
+    branches: [master, framework_dev, development]
+    types: [opened, reopened, synchronize]
+    paths: *ci_paths
+  workflow_dispatch:
 
 env:
   BUILD_DIR: build
@@ -111,12 +109,12 @@ jobs:
     - name: GPU unit tests
       if: steps.cuda.outputs.available == 'true'
       working-directory: ${{ env.BUILD_DIR }}
-      run: ctest -L 'unit;gpu' --output-on-failure
+      run: ctest -L gpu -L unit --output-on-failure
 
     - name: GPU integration tests
       if: steps.cuda.outputs.available == 'true'
       working-directory: ${{ env.BUILD_DIR }}
-      run: ctest -L 'integration;gpu' --output-on-failure
+      run: ctest -L gpu -L integration --output-on-failure
 
     - name: GPU tests skipped (no device)
       if: steps.cuda.outputs.available != 'true'
