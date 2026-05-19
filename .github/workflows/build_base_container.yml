@@ -1,15 +1,23 @@
 name: build-base-container
 
+# Builds and publishes ghcr.io/<repo>:base from ./Dockerfile.
+# CI (workflow.yml) only *pulls* that tag; it does not rebuild the image.
+#
+# Push to :base happens on:
+#   - push to master / framework_dev / development when Dockerfile changes
+#   - workflow_dispatch (manual; uses the Dockerfile on the selected branch)
+# Feature-branch pushes with Dockerfile changes only validate the build (no push).
+
 on:
   push:
-    branches: [master, framework_dev, development]
     paths:
     - Dockerfile
   pull_request:
-    branches: [master]
-    types: [opened, reopened]
+    branches: [master, framework_dev, development]
+    types: [opened, reopened, synchronize]
     paths:
     - Dockerfile
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -36,12 +44,28 @@ jobs:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Decide whether to push :base
+      id: push
+      env:
+        IS_INTEGRATION: ${{ contains(fromJSON('["master","framework_dev","development"]'), github.ref_name) }}
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "push=true" >> "$GITHUB_OUTPUT"
+          echo "Publish :base (manual workflow_dispatch)."
+        elif [[ "${{ github.event_name }}" == "push" && "$IS_INTEGRATION" == "true" ]]; then
+          echo "push=true" >> "$GITHUB_OUTPUT"
+          echo "Publish :base (push to integration branch ${{ github.ref_name }})."
+        else
+          echo "push=false" >> "$GITHUB_OUTPUT"
+          echo "Build only (no push to :base on this event/branch)."
+        fi
+
     - name: Build and push base image
       uses: docker/build-push-action@v5
       with:
         context: .
         file: ./Dockerfile
-        push: ${{ github.event_name != 'pull_request' }}
+        push: ${{ steps.push.outputs.push == 'true' }}
         tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:base
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:base
         cache-to: type=inline

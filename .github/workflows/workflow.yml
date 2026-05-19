@@ -1,5 +1,8 @@
 name: gpuvmem CI
 
+# Uses container image ghcr.io/<repo>:base (see build-base-container workflow).
+# Changing Dockerfile does NOT rebuild :base here — run or wait for build-base-container.
+
 on:
   push:
     paths: &ci_paths
@@ -14,6 +17,7 @@ on:
     - '**.cc'
     - '**.sh'
     - CMakeLists.txt
+    - Dockerfile
     - 'tests/**'
     - '.github/workflows/**'
   pull_request:
