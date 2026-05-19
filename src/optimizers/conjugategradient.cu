@@ -36,6 +36,10 @@
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
 #include "cli/gpuvmem_cli_config.hh"
+#include "cli/cli_metrics.hh"
+#include "cli/run_observer.hh"
+
+#include <sstream>
 #include "framework.cuh"
 #include "factory.cuh"
 #include "reduction/reduction_host.cuh"
@@ -409,10 +413,8 @@ __host__ float ConjugateGradient::performIteration(int iteration,
     checkCudaErrors(cudaDeviceSynchronize());
   }
 
-  if (gpuvmem_cli_verbose()) {
-    double end = omp_get_wtime();
-    std::cout << "  Wall time this iteration: " << std::setprecision(4) << (end - start) << " s\n";
-  }
+  const double end = omp_get_wtime();
+  reportIteration(new_function_value, end - start);
 
   return new_function_value;
 }
@@ -440,44 +442,39 @@ __host__ void ConjugateGradient::optimize() {
     try {
       new_function_value = performIteration(iteration, prev_function_value);
     } catch (const GradientNormError&) {
-      // Zero gradient norm detected - optimization converged
-      if (gpuvmem_cli_verbose()) {
-        std::cout << methodName() << ": gradient norm vanished (exact minimum or numerical gg=0) "
-                     "after "
-                  << iteration << " iterations.\n";
+      if (run_observer_ != nullptr) {
+        gpuvmem::cli::OptimizationEndInfo end_info;
+        end_info.iteration = iteration;
+        end_info.reason = gpuvmem::cli::OptimizationStopReason::GradientTolerance;
+        end_info.detail = "gradient norm vanished";
+        run_observer_->on_optimization_end(end_info);
       }
-      // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
       deallocateMemoryGpu();
       return;
     }
 
-    // Check for function convergence (includes numerical stagnation: |df| == 0 in float)
     if (checkFunctionConvergence(new_function_value, prev_function_value)) {
-      if (gpuvmem_cli_verbose()) {
+      if (run_observer_ != nullptr) {
+        gpuvmem::cli::OptimizationEndInfo end_info;
+        end_info.iteration = iteration;
         const float df = fabsf(new_function_value - prev_function_value);
-        if (!(df > 0.0f)) {
-          std::cout << methodName() << ": stopped at iteration " << iteration
-                    << " - objective unchanged at float precision (plateau; consider scaling or "
-                       "looser gtol).\n";
-        } else {
-          std::cout << methodName() << ": converged after " << iteration
-                    << " iterations (relative objective tolerance).\n";
-        }
+        end_info.reason = (!(df > 0.0f)) ? gpuvmem::cli::OptimizationStopReason::ObjectivePlateau
+                                           : gpuvmem::cli::OptimizationStopReason::FunctionTolerance;
+        run_observer_->on_optimization_end(end_info);
       }
-      // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
       deallocateMemoryGpu();
       return;
     }
 
-    // Check for gradient convergence (device_g holds +∇f at the iterate; xi is the search direction)
     if (checkGradientConvergence(device_g, new_function_value)) {
-      if (gpuvmem_cli_verbose()) {
-        std::cout << methodName() << ": converged after " << iteration
-                  << " iterations (gradient norm below gtol).\n";
+      if (run_observer_ != nullptr) {
+        gpuvmem::cli::OptimizationEndInfo end_info;
+        end_info.iteration = iteration;
+        end_info.reason = gpuvmem::cli::OptimizationStopReason::GradientTolerance;
+        run_observer_->on_optimization_end(end_info);
       }
-      // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
       deallocateMemoryGpu();
       return;
@@ -486,9 +483,11 @@ __host__ void ConjugateGradient::optimize() {
     prev_function_value = new_function_value;
   }
 
-  if (gpuvmem_cli_verbose()) {
-    std::cout << methodName() << ": reached maximum iteration budget (" << this->total_iterations
-              << ") without meeting tolerances.\n";
+  if (run_observer_ != nullptr) {
+    gpuvmem::cli::OptimizationEndInfo end_info;
+    end_info.iteration = this->total_iterations;
+    end_info.reason = gpuvmem::cli::OptimizationStopReason::MaxIterations;
+    run_observer_->on_optimization_end(end_info);
   }
 
   // Use optimizer's image member instead of extern Image* I

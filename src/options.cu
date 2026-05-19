@@ -120,6 +120,28 @@ static bool validate_gpuvmem_cli_vars(const Vars& v, std::ostream& err) {
   return true;
 }
 
+static bool parse_progress_mode(const std::string& s, GpuvmemCliRuntimeFlags::ProgressModeKind& out,
+                                std::ostream& err) {
+  if (s == "auto") {
+    out = GpuvmemCliRuntimeFlags::ProgressAuto;
+    return true;
+  }
+  if (s == "bar") {
+    out = GpuvmemCliRuntimeFlags::ProgressBar;
+    return true;
+  }
+  if (s == "plain") {
+    out = GpuvmemCliRuntimeFlags::ProgressPlain;
+    return true;
+  }
+  if (s == "off") {
+    out = GpuvmemCliRuntimeFlags::ProgressOff;
+    return true;
+  }
+  err << "--progress must be auto, bar, plain, or off (got: \"" << s << "\").\n";
+  return false;
+}
+
 /* Group names use a numeric prefix so --help sections follow a sensible order (std::map is sorted). */
 static void addOptions(Flags& f, Vars& v, GpuvmemCliRuntimeFlags& rf) {
   f.Var(v.input, 'i', "input", std::string("NULL"),
@@ -200,7 +222,13 @@ static void addOptions(Flags& f, Vars& v, GpuvmemCliRuntimeFlags& rf) {
   f.Var(v.blockSizeY, 'Y', "blockSizeY", -1, "CUDA block dim Y (-1 = auto).", "6 GPU tuning");
   f.Var(v.blockSizeV, 'V', "blockSizeV", -1, "CUDA block for 1D kernels (-1 = auto).", "6 GPU tuning");
 
-  f.Bool(rf.verbose, 'v', "verbose", "Extra progress and diagnostics on stdout.", "7 Flags");
+  f.Bool(rf.verbose, 'v', "verbose", "Extra MS/WCS detail and optimizer diagnostics.", "7 Flags");
+  f.Bool(rf.quiet, 'q', "quiet", "Minimal stdout (errors + short final line).", "7 Flags");
+  f.Bool(rf.debug, '\0', "debug", "GPU/CUDA grid detail and internal optimizer messages.", "7 Flags");
+  f.Var(rf.progress_mode_user, '\0', "progress", std::string("auto"),
+        "Optimization progress: auto|bar|plain|off (auto uses a bar on TTY).", "7 Flags");
+  f.Var(rf.log_interval, '\0', "log-interval", 1,
+        "Print every N optimizer iterations in plain/auto file mode.", "7 Flags");
   f.Bool(rf.nopositivity, 'x', "nopositivity", "Turn off positivity projection in line search.", "7 Flags");
   f.Bool(rf.apply_noise, 'a', "apply-noise", "Add Gaussian noise to simulated / stored visibilities.", "7 Flags");
   f.Bool(rf.print_images, 'P', "print-images", "Write intermediate FITS each iteration.", "7 Flags");
@@ -249,6 +277,16 @@ bool parse_gpuvmem_cli(int argc, char** argv, GpuvmemCliConfig& out, std::ostrea
   }
   if (out.runtime.print_warranty || out.runtime.print_copyright) return true;
   if (!validate_gpuvmem_cli_vars(out.vars, err)) return false;
+  if (!parse_progress_mode(out.runtime.progress_mode_user, out.runtime.progress_mode, err))
+    return false;
+  if (out.runtime.log_interval < 1) {
+    err << "--log-interval must be >= 1.\n";
+    return false;
+  }
+  if (out.runtime.quiet && out.runtime.verbose) {
+    err << "--quiet and --verbose are mutually exclusive.\n";
+    return false;
+  }
   return true;
 }
 

@@ -67,7 +67,8 @@ float PositivityProjection::referenceValue(int image_index) const {
   if (image_index >= 0 && image_index < static_cast<int>(xt_reference_.size())) {
     return xt_reference_[static_cast<size_t>(image_index)];
   }
-  return 0.0f;
+  // No per-image reference configured: use the same floor as the parameter step.
+  return minimalValue(image_index);
 }
 
 float PositivityProjection::minimalValue(int image_index) const {

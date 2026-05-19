@@ -297,15 +297,27 @@ Authoritative list of every flag lives in **`src/options.cu`**; **`--help`** tra
 
 | Long / flag | Role |
 |-------------|------|
-| `--metrics-file` | Same text as stdout after the run: **φ total** from one `calcFunction` pass, then **each active Fi** (only terms with non-zero λ are registered — with **`-Z`** omitted that is usually **χ²** and **TSV**; see [Defaults worth knowing](#defaults-worth-knowing)): `lambda`, raw **value**, and `lambda_times_value`. No reduced χ² or ad hoc normalizations; CPU and wall time at the end. |
+| `--metrics-file` | Write the **final metrics** block (same as stdout) to a file: **φ**, **chi2_w**, **reg_w**, per-Fi lines, times. |
 | `--normalize` | Normalize χ² / effective samples. |
 | `--modify-weights` | Experimental weight tweaks. |
-| `-v` / `--verbose` | Extra **one-line run context** before the final summary (grid, GPU, weighting, optimizer, line search, seeder, L-BFGS **m**). |
+| `-q` / `--quiet` | Minimal stdout (one-line finish + paths). |
+| `-v` / `--verbose` | Extra MS/WCS/field detail and optimizer stop reasons. |
+| `--debug` | CUDA grid, GPU inventory, gridding kernel dumps, internal optimizer notes. |
+| `--progress` | `auto` (bar on TTY, plain lines in log files), `bar`, `plain`, or `off`. |
+| `--log-interval` | In `plain`/`auto` file mode, print every **N** iterations (default **1**). |
 | `-x`, `-a`, `-P`, `-E`, `-M` | No positivity, noise on data, FITS every iteration, error maps, radius mask. |
+
+### CLI output (normal run)
+
+Before optimization, gpuvmem prints a **`=== gpuvmem run summary ===`** block (sky frame, grid, band, beam, active λ, GPU). During optimization, each iteration reports **`phi`**, **`chi2_w`** (λ·χ²), **`reg_w`** (remaining weighted terms), optional **ETA**, and wall time. After the run, **`=== gpuvmem final metrics ===`** repeats objective numbers plus per-Fi breakdown. Snow-style pipelines can ignore stdout and use the output FITS/MS only; use **`--metrics-file`** if you want a machine-readable log of the final numbers.
 
 ### Defaults worth knowing
 
 Out of the box you get **1000** iterations, **natural** weighting, **LBFGS**, **joint** mode, **L-BFGS memory 10**, and **α mask 5σ**. **`--help`** prints **`[default: ]`** for options whose registered default is an empty string (**`-L`**, **`-B`**); at runtime **LBFGS** / **CG** still construct with **Brent**, and no **seeder** is attached unless you pass **`-B`**. **`-Z`:** if you omit it, **`main.cu`** leaves entropy and L1 at **λ = 0** (those terms are **not** added — **`ObjectiveFunction::addFi`** skips **λ == 0**) and applies a legacy **λ = 0.05** to **TSV** only, beside **χ²** at **λ = 1**. Pass **`-Z`** to supply comma-separated weights (layout in the table above). Full literals live in **`setDefaultVars`** (`src/options.cu`).
+
+### Testing
+
+See [tests/README.md](tests/README.md): **Google Test** unit tests per class (`ctest -L unit`), integration tests between modules (`ctest -L integration`), and **multi-scenario E2E** per dataset (`ctest -L e2e`, `GPUVMEM_E2E_MAX_ITER` controls iteration budget).
 
 ### What we might add next
 

@@ -43,11 +43,22 @@ jobs:
         password: ${{ secrets.REGISTRY_TOKEN }}
 
     steps:
-    - name: Verify CUDA installation
+    - name: Verify CUDA toolkit (compile-only on typical GitHub runners)
       run: |
         nvcc --version
         test -f /usr/local/cuda/bin/nvcc
-        echo "CUDA verified successfully"
+        echo "CUDA toolkit verified (device may be absent on hosted runners)"
+
+    - name: Detect CUDA device
+      id: cuda
+      run: |
+        if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+          echo "GPU runner: $(nvidia-smi -L | head -1)"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "No GPU visible (expected on github-hosted runners)."
+          echo "available=false" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Install Git LFS
       run: |
@@ -65,7 +76,8 @@ jobs:
       run: |
         cmake . -B ${{ env.BUILD_DIR }} \
                -DCMAKE_BUILD_TYPE=${{ env.CONFIG }} \
-               -DCUDA_ARCH=${{ env.CUDA_ARCH }}
+               -DCUDA_ARCH=${{ env.CUDA_ARCH }} \
+               -DGPUVMEM_BUILD_TESTS=ON
 
     - name: Show CMake configuration errors
       if: failure() && steps.configure.outcome == 'failure'
@@ -86,7 +98,31 @@ jobs:
     - name: Build gpuvmem
       working-directory: ${{ env.BUILD_DIR }}
       run: |
-        cmake --build . --target all --verbose -j$(nproc)
+        cmake --build . --verbose -j$(nproc)
+
+    - name: Unit tests without GPU (ctest label gpu excluded)
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L unit -LE gpu --output-on-failure
+
+    - name: Integration tests without GPU (ctest label gpu excluded)
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L integration -LE gpu --output-on-failure
+
+    - name: GPU unit tests
+      if: steps.cuda.outputs.available == 'true'
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L 'unit;gpu' --output-on-failure
+
+    - name: GPU integration tests
+      if: steps.cuda.outputs.available == 'true'
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L 'integration;gpu' --output-on-failure
+
+    - name: GPU tests skipped (no device)
+      if: steps.cuda.outputs.available != 'true'
+      run: |
+        echo "Skipped ctest -L gpu (objective CUDA, projection kernels, optimizer smoke)."
+        echo "Run locally with a GPU or use a self-hosted runner with nvidia-smi."
 
     - name: Verify build output
       run: |

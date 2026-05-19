@@ -8,6 +8,9 @@
 #include "objective_function/terms/chi2/chi2.cuh"
 #include "objective_function/terms/regularizers/secondderivateerror.cuh"
 #include "cli/gpuvmem_cli_config.hh"
+#include "cli/cli_metrics.hh"
+#include "cli/optimization_reporting.hh"
+#include "cli/run_observer_factory.hh"
 #include "framework.cuh"  // Still needed for many kernels and utilities
 #include "main.cuh"       // print_help, goToError
 #include "linesearch/linesearch_utils.cuh"  // defaultNewP, defaultEvaluateXt
@@ -95,6 +98,16 @@ double start, end;
 
 float noise_min = 1E32;
 
+/** Cached for run summary (set during configure / setDevice). */
+static float g_summary_freq_min_hz = 0.f;
+static float g_summary_freq_max_hz = 0.f;
+static double g_summary_max_uv_wavelength = 0.0;
+static double g_summary_nyquist_cell_arcsec = 0.0;
+static double g_summary_log_nu_min = 0.0;
+static double g_summary_log_nu_max = 0.0;
+static double g_summary_beam_major_arcsec = 0.0;
+static double g_summary_beam_minor_arcsec = 0.0;
+
 inline bool IsGPUCapableP2P(cudaDeviceProp* pProp) {
 #ifdef _WIN32
   return (bool)(pProp->tccDriver ? true : false);
@@ -130,6 +143,7 @@ std::vector<std::string> MFS::countAndSeparateStrings(std::string long_str,
 void MFS::syncLegacyGlobalsFromCli_(const GpuvmemCliConfig& cfg) {
   cli_config_ = cfg;
   gpuvmem_cli_runtime_bind(&cli_config_.runtime);
+  run_observer_ = gpuvmem::cli::create_run_observer(cli_config_.runtime);
   variables = cfg.vars;
   verbose_flag = cfg.runtime.verbose;
   nopositivity = cfg.runtime.nopositivity;
@@ -375,8 +389,9 @@ void MFS::configure(const GpuvmemCliConfig& config) {
   radesys = model_header.radesys;
   ioImageHandler->setFrame(radesys);
   equinox = model_header.equinox;
-  std::cout << "\n--- Model sky frame (from FITS / template header) ---\n"
-            << "  RADESYS: " << radesys << "    EQUINOX: " << equinox << '\n';
+  cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                 std::string("\n--- Model sky frame (from FITS / template header) ---\n  RADESYS: ") +
+                     radesys + "    EQUINOX: " + std::to_string(equinox) + '\n');
   ioImageHandler->setEquinox(equinox);
   model_reference_column = model_header.reference_column;
   model_reference_row = model_header.reference_row;
@@ -390,25 +405,25 @@ void MFS::configure(const GpuvmemCliConfig& config) {
   cudaGetDeviceCount(&num_gpus);
   cudaDeviceProp dprop[num_gpus];
 
-  std::cout << "\n--- Compute: CPUs and CUDA GPUs ---\n"
-            << "  Host threads (OpenMP logical CPUs): " << omp_get_num_procs() << '\n'
-            << "  CUDA devices visible: " << num_gpus << '\n';
-
-  for (int i = 0; i < num_gpus; i++) {
-    checkCudaErrors(cudaGetDeviceProperties(&dprop[i], i));
-    std::cout << "  GPU " << i << ": \"" << dprop[i].name << "\""
-              << "    peer-to-peer capable: " << (IsGPUCapableP2P(&dprop[i]) ? "yes" : "no")
-              << '\n';
-
-    // Get memory clock rate - compatible with all CUDA versions
-    int memoryClockRateKHz = GetMemoryClockRateKHz(i, &dprop[i]);
-    std::cout << "      memory clock: " << memoryClockRateKHz << " kHz"
-              << "    bus width: " << dprop[i].memoryBusWidth << " bit\n";
-    std::cout << "      peak memory bandwidth: "
-              << (2.0 * memoryClockRateKHz * (dprop[i].memoryBusWidth / 8) / 1.0e6) << " GB/s"
-              << "    device memory: " << (dprop[i].totalGlobalMem / pow(2, 30)) << " GiB\n";
+  {
+    std::ostringstream oss;
+    oss << "\n--- Compute: CPUs and CUDA GPUs ---\n"
+        << "  Host threads (OpenMP logical CPUs): " << omp_get_num_procs() << '\n'
+        << "  CUDA devices visible: " << num_gpus << '\n';
+    for (int i = 0; i < num_gpus; i++) {
+      checkCudaErrors(cudaGetDeviceProperties(&dprop[i], i));
+      oss << "  GPU " << i << ": \"" << dprop[i].name << "\""
+          << "    peer-to-peer capable: " << (IsGPUCapableP2P(&dprop[i]) ? "yes" : "no") << '\n';
+      int memoryClockRateKHz = GetMemoryClockRateKHz(i, &dprop[i]);
+      oss << "      memory clock: " << memoryClockRateKHz << " kHz"
+          << "    bus width: " << dprop[i].memoryBusWidth << " bit\n";
+      oss << "      peak memory bandwidth: "
+          << (2.0 * memoryClockRateKHz * (dprop[i].memoryBusWidth / 8) / 1.0e6) << " GB/s"
+          << "    device memory: " << (dprop[i].totalGlobalMem / pow(2, 30)) << " GiB\n";
+    }
+    oss << '\n';
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Debug, oss.str());
   }
-  std::cout << '\n';
 
   // Declaring block size and number of blocks for Image
   if (variables.blockSizeX == -1 && variables.blockSizeY == -1) {
@@ -416,9 +431,11 @@ void MFS::configure(const GpuvmemCliConfig& config) {
         gpuvmem::CudaGrid<2>::from_auto(M, N, dprop[0]);
     numBlocksNN = grid2d_auto.blocks();
     threadsPerBlockNN = grid2d_auto.threads();
-    std::cout << "CUDA launch grid (image kernels): blocks (" << numBlocksNN.x << ", "
-              << numBlocksNN.y << "), threads per block (" << threadsPerBlockNN.x << ", "
-              << threadsPerBlockNN.y << ")\n";
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Debug,
+                   "CUDA launch grid (image kernels): blocks (" + std::to_string(numBlocksNN.x) +
+                       ", " + std::to_string(numBlocksNN.y) + "), threads per block (" +
+                       std::to_string(threadsPerBlockNN.x) + ", " +
+                       std::to_string(threadsPerBlockNN.y) + ")\n");
   } else {
     if (variables.blockSizeX * variables.blockSizeY >
             dprop[0].maxThreadsPerBlock) {
@@ -490,10 +507,9 @@ void MFS::configure(const GpuvmemCliConfig& config) {
     float ant_diam = 0.f;
     if (!datasets[d].ms.metadata().antennas().empty())
       ant_diam = datasets[d].ms.metadata().antennas()[0].antenna_diameter;
-    std::cout << "  MS [" << d << "] " << datasets[d].name << '\n'
-              << "      representative antenna diameter (metadata): " << std::fixed
-              << std::setprecision(3) << ant_diam << " m\n"
-              << std::defaultfloat;
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                   "  MS [" + std::to_string(d) + "] " + datasets[d].name +
+                       "  antenna_diam_m=" + std::to_string(ant_diam) + '\n');
   }
 
   // Validate that all datasets can form the requested Stokes (when --stokes was set)
@@ -549,41 +565,28 @@ void MFS::configure(const GpuvmemCliConfig& config) {
   double max_uvmax_wavelength =
       *max_element(ms_uvmax_wavelength.begin(), ms_uvmax_wavelength.end()) +
       1E-5;
-  std::cout << std::scientific << "\n--- UV / frequency / sampling (combined over inputs) ---\n"
-            << "  Approximate max (u,v) radius in wavelengths: " << max_uvmax_wavelength << '\n'
-            << std::fixed << "  Rough synthesized-beam scale from longest baseline / highest nu: ~"
-            << resolution_arcsec << " arcsec FWHM\n"
-            << "  Same at ~7x finer (historical oversampling diagnostic): ~" << (resolution_arcsec / 7.0f)
-            << " arcsec\n"
-            << std::defaultfloat;
+  g_summary_freq_min_hz = min_freq;
+  g_summary_freq_max_hz = max_freq;
+  g_summary_max_uv_wavelength = max_uvmax_wavelength;
 
   if (nu_0 <= 0.0f) {
-    std::cout << "WARNING: reference frequency nu_0 not set (or nu_0<=0); using band centre.\n";
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                   "WARNING: reference frequency nu_0 not set (or nu_0<=0); using band centre.\n");
     nu_0 = 0.5f * (max_freq + min_freq);
   }
-  std::cout << std::scientific << "  Reference frequency nu_0: " << static_cast<double>(nu_0) << " Hz\n"
-            << std::defaultfloat;
-  // Alpha error depends on log(nu/nu_0). Print range so users can check
-  // leverage.
-  double log_nu_min =
-      log(static_cast<double>(min_freq) / static_cast<double>(nu_0));
-  double log_nu_max =
-      log(static_cast<double>(max_freq) / static_cast<double>(nu_0));
-  std::cout << std::scientific << std::setprecision(5) << "  Observed band: ["
-            << static_cast<double>(min_freq) << ", " << static_cast<double>(max_freq)
-            << "] Hz\n  log(nu/nu_0) in [" << std::fixed << std::setprecision(4) << log_nu_min << ", "
-            << log_nu_max << "] (spectral-index leverage)\n"
-            << std::defaultfloat;
-  if (fabs(log_nu_max - log_nu_min) < 0.01 && image_count > 1) {
-    std::cout << "WARNING: log(nu/nu_0) range is very narrow; spectral index alpha will be weakly "
-                 "constrained (errors may be large or hit limits).\n";
+  g_summary_log_nu_min = log(static_cast<double>(min_freq) / static_cast<double>(nu_0));
+  g_summary_log_nu_max = log(static_cast<double>(max_freq) / static_cast<double>(nu_0));
+  if (fabs(g_summary_log_nu_max - g_summary_log_nu_min) < 0.01 && image_count > 1) {
+    cli_diagnostic(
+        gpuvmem::cli::DiagnosticLevel::Verbose,
+        "WARNING: log(nu/nu_0) range is very narrow; spectral index alpha will be weakly "
+        "constrained (errors may be large or hit limits).\n");
   }
-  double deltau_theo = 2.0 * max_uvmax_wavelength / (M - 1);
-  double deltax_theo = 1.0 / (M * deltau_theo) / RPARCSEC;
-  std::cout << "\n--- Pixel scale vs Nyquist (model grid) ---\n"
-            << "  Nyquist-limited cell for this image size (theory): <= " << deltax_theo
-            << " arcsec\n"
-            << "  Model cell on RA axis (|CDELT1|): " << (fabs(DELTAX) * 3600.0) << " arcsec\n";
+  {
+    double deltau_theo = 2.0 * max_uvmax_wavelength / (M - 1);
+    g_summary_nyquist_cell_arcsec = 1.0 / (M * deltau_theo) / RPARCSEC;
+  }
+  (void)resolution_arcsec;
 
   if (verbose_flag) {
     std::cout << "\n--- Measurement Set metadata (verbose) ---\n";
@@ -762,16 +765,23 @@ void MFS::configure(const GpuvmemCliConfig& config) {
   this->scheme->apply(datasets);
 
   if (this->gridding) {
-    std::cout << "\n--- Visibility gridding ---\nGridding visibilities onto the UV grid...\n";
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                   "\n--- Visibility gridding ---\nGridding visibilities onto the UV grid...\n");
     this->ckernel->setSigmas(fabs(deltau), fabs(deltav));
     this->ckernel->buildKernel();
-    this->ckernel->printCKernel();
+    if (gpuvmem_cli_debug()) {
+      this->ckernel->printCKernel();
+    }
     this->ckernel->initializeGCF(M, N, fabs(deltax), fabs(deltay));
-    this->ckernel->printGCF();
-
-    std::cout << "Convolution kernel: " << this->ckernel->getName() << "  kernel size (u,v): ("
-              << this->ckernel->getm() << ", " << this->ckernel->getn() << ")  support: ("
-              << this->ckernel->getSupportX() << ", " << this->ckernel->getSupportY() << ")\n";
+    if (gpuvmem_cli_debug()) {
+      this->ckernel->printGCF();
+    }
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                   std::string("Convolution kernel: ") + this->ckernel->getName() +
+                       "  kernel size (u,v): (" +
+            std::to_string(this->ckernel->getm()) + ", " + std::to_string(this->ckernel->getn()) +
+            ")  support: (" + std::to_string(this->ckernel->getSupportX()) + ", " +
+            std::to_string(this->ckernel->getSupportY()) + ")\n");
     Gridder gridder(this->ckernel, this->getGriddingThreads());
     gridder.grid(datasets);
   } else {
@@ -850,12 +860,14 @@ void MFS::setDevice() {
 
   this->setMaxNumberVis(max_number_vis);
 
-  std::cout << std::scientific << "\n--- Noise and synthesized beam (from weights / UV) ---\n"
-            << "  Estimated restoring beam FWHM: " << (beam_bmaj * 3600.0) << " x "
-            << (beam_bmin * 3600.0) << " arcsec, PA " << std::defaultfloat << beam_bpa << " deg\n";
-  std::cout << std::scientific << "  Heuristic \"clean-beam\" scale (~1/3 of above, diagnostic): "
-            << (beam_bmaj * 1200.0) << " x " << (beam_bmin * 1200.0) << " arcsec, PA "
-            << std::defaultfloat << beam_bpa << " deg\n";
+  g_summary_beam_major_arcsec = beam_bmaj * 3600.0;
+  g_summary_beam_minor_arcsec = beam_bmin * 3600.0;
+  cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                 std::string("\n--- Noise and synthesized beam (from weights / UV) ---\n") +
+                     "  Estimated restoring beam FWHM: " +
+                     std::to_string(g_summary_beam_major_arcsec) + " x " +
+                     std::to_string(g_summary_beam_minor_arcsec) + " arcsec, PA " +
+                     std::to_string(beam_bpa) + " deg\n");
   beam_bmaj = beam_bmaj / fabs(DELTAX);  // Beam major axis to pixels
   beam_bmin = beam_bmin / fabs(DELTAX);  // Beam minor axis to pixels
   noise_jypix =
@@ -864,7 +876,8 @@ void MFS::setDevice() {
 
   /////////////////////////////////////////////////////CALCULATE DIRECTION
   /// COSINES/////////////////////////////////////////////////
-  std::cout << "\nAligning MS pointing with model WCS (reference / phase centres vs CRPIX)...\n";
+  cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                 "\nAligning MS pointing with model WCS (reference / phase centres vs CRPIX)...\n");
   double raimage = ra * RPDEG_D;
   double decimage = dec * RPDEG_D;
 
@@ -1212,56 +1225,114 @@ void MFS::clearRun() {
                              cudaMemcpyHostToDevice));
 };
 
-namespace {
-
-/**
- * End-of-run metrics (stdout + optional `--metrics-file`): only objective-level numbers.
- * Each registered Fi (χ², entropy, L1, TV, …) gets one line: λ, raw value from the term,
- * and λ·value (contribution to φ). No reduced-χ² or ad-hoc normalizations — those depend
- * on how each Fi is configured.
- */
-static void mfs_write_post_optimization_metrics(std::ostream& sink, Optimizer* optimizer,
-                                                Image* image, double wall_time_s,
-                                                double cpu_time_s) {
-  sink << "\n=== gpuvmem run summary ===\n";
-  sink << "# phi_total: weighted sum of Fi terms at the final iterate. Fi lines: lambda, raw value, lambda*value.\n";
-
-  ObjectiveFunction* of = (optimizer && image) ? optimizer->getObjectiveFunction() : nullptr;
-  float phi_total = 0.f;
-  if (of) phi_total = of->calcFunction(image->getImage());
-  sink << std::defaultfloat << std::setprecision(9) << "Objective_phi_total: "
-       << static_cast<double>(phi_total) << '\n';
-
-  if (optimizer) {
-    sink << "Optimizer_id: " << variables.optimizer_name << '\n';
-    sink << "Optimization_mode: " << variables.optimization_mode << '\n';
-    sink << std::defaultfloat << std::setprecision(9) << "Ftol: "
-         << static_cast<double>(optimizer->getFtol()) << "  Gtol: "
-         << static_cast<double>(optimizer->getGtol()) << '\n';
-    sink << "Iteration_budget: " << variables.it_max << '\n';
-    sink << "Iteration_last: " << optimizer->getCurrentIteration() << '\n';
+void MFS::cli_diagnostic(gpuvmem::cli::DiagnosticLevel level,
+                         const std::string& message) const {
+  if (run_observer_ != nullptr) {
+    run_observer_->on_diagnostic(level, message);
+    return;
   }
-
-  if (of && image) {
-    const std::vector<Fi*> terms = of->getFi();
-    sink << "Fi_term_count: " << terms.size() << '\n';
-    for (size_t i = 0; i < terms.size(); ++i) {
-      Fi* fi = terms[i];
-      if (fi == nullptr) continue;
-      const double lam = static_cast<double>(fi->getPenalizationFactor());
-      const double val = static_cast<double>(fi->get_fivalue());
-      sink << std::defaultfloat << std::setprecision(9) << "Fi[" << i << "] name=" << fi->getName()
-           << " lambda=" << lam << " value=" << val << " lambda_times_value=" << (lam * val)
-           << '\n';
-    }
-  }
-
-  sink << std::fixed << std::setprecision(6) << "Cpu_time_s: " << cpu_time_s << '\n'
-       << "Wall_time_s: " << wall_time_s << '\n';
-  sink << "=== end summary ===\n\n";
+  if (level == gpuvmem::cli::DiagnosticLevel::Debug && !gpuvmem_cli_debug()) return;
+  if (level == gpuvmem::cli::DiagnosticLevel::Verbose && !gpuvmem_cli_verbose()) return;
+  std::cout << message;
+  if (!message.empty() && message.back() != '\n') std::cout << '\n';
 }
 
-}  // namespace
+gpuvmem::cli::RunSummary MFS::build_run_summary() const {
+  gpuvmem::cli::RunSummary s;
+  s.n_ms = nMeasurementSets;
+  for (int i = 0; i < nMeasurementSets; ++i) {
+    s.input_ms.push_back(datasets[i].name);
+    s.output_ms.push_back(datasets[i].oname);
+  }
+  if (modinput != "NULL" && !modinput.empty()) {
+    s.model_description = std::string("FITS ") + modinput;
+  } else {
+    s.model_description = "synthetic imsize=" + variables.imsize + " cell=" +
+                          std::to_string(variables.cellsize_arcsec) + " arcsec phase=" +
+                          variables.phase_center_deg;
+  }
+  s.radesys = radesys;
+  s.equinox = static_cast<double>(equinox);
+  s.phase_ra_deg = ra;
+  s.phase_dec_deg = dec;
+  s.grid_m = M;
+  s.grid_n = N;
+  s.cell_arcsec = fabs(DELTAX) * 3600.0;
+  s.ref_col = model_reference_column;
+  s.ref_row = model_reference_row;
+  if (!variables.stokes.empty()) {
+    s.planes_description =
+        std::to_string(image_count) + "  Stokes: " + variables.stokes;
+  } else if (image_count == 2) {
+    s.planes_description = "2  labels=I_nu_0,alpha";
+  } else if (image_count == 1) {
+    s.planes_description = "1  single_plane";
+  } else {
+    s.planes_description = std::to_string(image_count) + "  image_planes";
+  }
+  s.freq_min_hz = g_summary_freq_min_hz;
+  s.freq_max_hz = g_summary_freq_max_hz;
+  s.nu0_hz = nu_0;
+  s.log_nu_min = g_summary_log_nu_min;
+  s.log_nu_max = g_summary_log_nu_max;
+  s.vis_rows_used = total_visibilities;
+  s.random_sample_frac = variables.randoms;
+  s.gridding = this->gridding;
+  s.weighting = variables.weighting_scheme;
+  s.robust_r = variables.robust_param;
+  s.max_uv_wavelength = g_summary_max_uv_wavelength;
+  s.nyquist_cell_arcsec = g_summary_nyquist_cell_arcsec;
+  s.beam_major_arcsec = g_summary_beam_major_arcsec;
+  s.beam_minor_arcsec = g_summary_beam_minor_arcsec;
+  s.beam_pa_deg = beam_bpa;
+  s.noise_jy_per_pixel = noise_jypix;
+  s.fg_scale = this->fg_scale;
+  static const char* k_fi_names[] = {"Chi2", "Entropy", "L1-Norm", "TotalSquaredVariation"};
+  ObjectiveFunction* of =
+      optimizer ? optimizer->getObjectiveFunction() : nullptr;
+  for (const char* name : k_fi_names) {
+    gpuvmem::cli::ObjectiveTermLine line;
+    line.name = name;
+    Fi* fi = (of != nullptr) ? of->getFiByName(name) : nullptr;
+    line.active = (fi != nullptr);
+    line.lambda = (fi != nullptr) ? static_cast<double>(fi->getPenalizationFactor()) : 0.0;
+    s.objective_terms.push_back(line);
+  }
+  s.optimizer_id = variables.optimizer_name;
+  s.optimization_mode = variables.optimization_mode;
+  s.max_iter = variables.it_max;
+  if (optimizer != nullptr) {
+    s.ftol = static_cast<double>(optimizer->getFtol());
+    s.gtol = static_cast<double>(optimizer->getGtol());
+  }
+  s.linesearch_id = variables.linesearch_name.empty() ? "Brent" : variables.linesearch_name;
+  s.seeder_id = variables.seeder_name.empty() ? "none" : variables.seeder_name;
+  s.lbfgs_m = variables.lbfgs_corrections;
+  Fi* chi2 = (of != nullptr) ? of->getFiByName("Chi2") : nullptr;
+  s.normalize_chi2 = (chi2 != nullptr && chi2->getNormalize());
+  s.minpix = MINPIX;
+  s.noise_cut_eff = noise_cut;
+  if (variables.user_mask != "NULL" && !variables.user_mask.empty()) {
+    s.mask_description = "user:" + variables.user_mask;
+  } else if (radius_mask) {
+    s.mask_description = "radius";
+  } else {
+    s.mask_description = "noise";
+  }
+  s.gpu_first = firstgpu;
+  s.gpu_count = num_gpus;
+  cudaDeviceProp prop{};
+  if (cudaGetDeviceProperties(&prop, firstgpu) == cudaSuccess) {
+    s.gpu_name = prop.name;
+    s.gpu_mem_gib = prop.totalGlobalMem / std::pow(2.0, 30.0);
+  }
+  return s;
+}
+
+void MFS::emit_run_summary() const {
+  if (run_observer_ == nullptr) return;
+  run_observer_->on_run_summary(build_run_summary());
+}
 
 void MFS::run() {
   optimizer->getObjectiveFunction()->setIo(ioImageHandler);
@@ -1288,53 +1359,72 @@ void MFS::run() {
   // This avoids recalculating N_eff on every iteration
   bool normalize = (NULL != chi2 && chi2->getNormalize());
   if (normalize) {
-    std::cout << "Pre-computing effective sample count N_eff for normalized chi^2...\n";
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose,
+                   "Pre-computing effective sample count N_eff for normalized chi^2...\n");
     precomputeNeff(true);
   }
 
-  std::cout << "\n--- Non-linear optimization ---\nStarting the optimizer...\n";
-  // Four modes: joint (I_nu_0+alpha), block (alternate), one (single image), alpha_static (I_nu_0 only, alpha fixed)
+  optimizer->setRunObserver(run_observer_.get());
+  emit_run_summary();
+
+  gpuvmem::cli::OptimizationBeginInfo begin_info;
+  begin_info.optimizer_id = variables.optimizer_name;
+  begin_info.max_iterations = variables.it_max;
   const std::string& mode = variables.optimization_mode;
 
+  auto start_optimization = [&](const std::string& mode_desc, int sub_run, int sub_total,
+                                const std::string& plane) {
+    begin_info.mode_description = mode_desc;
+    if (run_observer_ != nullptr) {
+      run_observer_->on_optimization_begin(begin_info);
+      run_observer_->reset_iteration_progress();
+    }
+    optimizer->setOptimizationSubRunContext(sub_run, sub_total, plane);
+  };
+
   if (image_count == 1) {
-    // One image mode: single run (flag 0 = single block)
-    if (verbose_flag)
-      std::cout << "Mode: single image plane (Stokes or one-parameter reconstruction).\n";
+    start_optimization("Mode: single image plane (Stokes or one-parameter reconstruction).", 0, 0,
+                       "");
     optimizer->setImage(image);
     optimizer->setFlag(0);
     optimizer->optimize();
   } else if (image_count == 2) {
     optimizer->setImage(image);
     if (mode == "joint") {
-      if (verbose_flag)
-        std::cout << "Mode: joint — I(nu_0) and spectral index alpha updated together.\n";
-      optimizer->setFlag(-1);  // -1 = joint: gradient for all images
+      start_optimization("Mode: joint — I(nu_0) and spectral index alpha updated together.", 0, 0,
+                         "");
+      optimizer->setFlag(-1);
       optimizer->optimize();
     } else if (mode == "alpha_static") {
-      if (verbose_flag)
-        std::cout << "Mode: alpha fixed — only I(nu_0); spectral index held constant.\n";
-      optimizer->setFlag(0);  // I_nu_0 only
-      optimizer->optimize();
-    } else if (mode == "block" && this->Order != NULL) {
-      if (verbose_flag)
-        std::cout << "Mode: alternating blocks — I(nu_0) and alpha in separate sub-problems.\n";
-      (this->Order)(optimizer, image);
-    } else {
-      // block with Order==NULL, or unknown mode: fallback to alternating
-      if (verbose_flag)
-        std::cout << "Mode: alternating blocks — I(nu_0) and alpha in separate sub-problems.\n";
+      start_optimization("Mode: alpha fixed — only I(nu_0); spectral index held constant.", 0, 0,
+                         "");
       optimizer->setFlag(0);
       optimizer->optimize();
+    } else if (mode == "block" && this->Order != NULL) {
+      start_optimization(
+          "Mode: alternating blocks — I(nu_0) and alpha in separate sub-problems.", 0, 0, "");
+      (this->Order)(optimizer, image);
+    } else {
+      start_optimization(
+          "Mode: alternating blocks — I(nu_0) and alpha in separate sub-problems.", 0, 0, "");
+      optimizer->setOptimizationSubRunContext(1, 4, "I_nu_0");
+      optimizer->setFlag(0);
+      optimizer->optimize();
+      optimizer->setOptimizationSubRunContext(2, 4, "alpha");
       optimizer->setFlag(1);
       optimizer->optimize();
+      optimizer->setOptimizationSubRunContext(3, 4, "block_2");
       optimizer->setFlag(2);
       optimizer->optimize();
+      optimizer->setOptimizationSubRunContext(4, 4, "block_3");
       optimizer->setFlag(3);
       optimizer->optimize();
     }
   } else if (this->Order != NULL) {
+    start_optimization("Mode: custom multi-plane order.", 0, 0, "");
     (this->Order)(optimizer, image);
   } else if (imagesChanged) {
+    start_optimization("Mode: auxiliary image plane.", 0, 0, "");
     optimizer->setImage(image);
     optimizer->optimize();
   }
@@ -1344,27 +1434,43 @@ void MFS::run() {
   const double cpu_time_s = static_cast<double>(t) / CLOCKS_PER_SEC;
   const double wall_time_s = end - start;
 
-  std::cout << "Optimizer finished successfully.\n\n";
   if (verbose_flag) {
-    std::cout << "--- Run configuration (verbose) ---\n"
-              << "  Grid: M(rows)=" << M << "  N(cols)=" << N << "  image planes=" << image_count
-              << "  primary GPU=" << firstgpu << '\n'
-              << "  Weighting: " << variables.weighting_scheme << "  Optimizer: "
-              << variables.optimizer_name << "  Mode: " << variables.optimization_mode << '\n'
-              << "  Line search: \"" << variables.linesearch_name << "\"  Seeder: \""
-              << variables.seeder_name << "\"  L-BFGS history M=" << variables.lbfgs_corrections
-              << '\n';
+    std::ostringstream oss;
+    oss << "--- Run configuration (verbose) ---\n"
+        << "  Grid: M(rows)=" << M << "  N(cols)=" << N << "  image planes=" << image_count
+        << "  primary GPU=" << firstgpu << '\n'
+        << "  Weighting: " << variables.weighting_scheme << "  Optimizer: "
+        << variables.optimizer_name << "  Mode: " << variables.optimization_mode << '\n'
+        << "  Line search: \"" << variables.linesearch_name << "\"  Seeder: \""
+        << variables.seeder_name << "\"  L-BFGS history M=" << variables.lbfgs_corrections << '\n';
+    cli_diagnostic(gpuvmem::cli::DiagnosticLevel::Verbose, oss.str());
   }
 
-  mfs_write_post_optimization_metrics(std::cout, optimizer, image, wall_time_s, cpu_time_s);
+  ObjectiveFunction* of = optimizer->getObjectiveFunction();
+  const gpuvmem::cli::FinalRunMetrics final_metrics = gpuvmem::cli::build_final_run_metrics(
+      optimizer, of, image->getImage(), variables.optimizer_name, variables.optimization_mode,
+      variables.it_max, cpu_time_s, wall_time_s);
 
-  if (variables.ofile != "NULL") {
+  if (run_observer_ != nullptr) {
+    run_observer_->on_final_metrics(final_metrics);
+    std::string out_path;
+    if (variables.output_image != "NULL" && !variables.output_image.empty()) {
+      out_path = variables.output_image;
+    } else if (variables.path != "NULL" && !variables.path.empty()) {
+      out_path = variables.path;
+    }
+    run_observer_->on_run_finished_quiet(final_metrics.iteration_last, final_metrics.iteration_budget,
+                                         static_cast<double>(final_metrics.phi_total), wall_time_s,
+                                         out_path);
+  }
+
+  if (variables.ofile != "NULL" && !variables.ofile.empty()) {
     std::ofstream outfile(variables.ofile);
     if (!outfile) {
       std::cerr << "ERROR: could not open metrics file for writing: " << variables.ofile << '\n';
       goToError();
     }
-    mfs_write_post_optimization_metrics(outfile, optimizer, image, wall_time_s, cpu_time_s);
+    gpuvmem::cli::write_final_metrics(outfile, final_metrics);
   }
 };
 

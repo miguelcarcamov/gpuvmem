@@ -31,9 +31,9 @@ class Fi {
   virtual void setFgScale(float fg_scale) {};
   virtual float getFgScale() {};
 
-  std::string getName() { return this->name; };
+  const std::string& getName() const { return this->name; }
 
-  std::string setName(std::string name) { this->name = name; };
+  void setName(const std::string& name) { this->name = name; }
 
   float get_fivalue() { return this->fi_value; };
   bool getNormalize() { return this->normalize; };

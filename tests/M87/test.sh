@@ -1,16 +1,41 @@
-function valid () {
-    if [ $? -eq 0 ]; then
-        echo OK
-    else
-        echo ERROR
-        exit 1
-    fi
-}
+#!/usr/bin/env bash
+# M87 end-to-end scenarios (multiple CLI / optimization parameter sets).
+set -euo pipefail
 
-test=$($1 -i $2/SR1_M87_2017_101_hi_hops_netcal_StokesI.selfcal.LLRR.ms -o $2/residuals.ms -O $2/mod_out.fits -m $2/mod_in_0.fits -p $2/mem/ -X 16 -Y 16 -V 256 --verbose --print-images -z 0.0,0.0 -Z 0.0,0.001,0.005 -R -2.0 -t 500000000 --use-radius-mask)
-valid $test
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../common/e2e_lib.sh
+source "${SCRIPT_DIR}/../common/e2e_lib.sh"
 
-#Comment the following lines to see the results of the test
-rm -rf $2/residuals.ms
-rm -rf $2/mem/
-rm -f "$2/alpha.fits" "$2/mod_out.fits"
+GPUVMEM=${1:?gpuvmem binary required}
+DIR=${2:?dataset directory required}
+
+COMMON=(
+  -i "${DIR}/SR1_M87_2017_101_hi_hops_netcal_StokesI.selfcal.LLRR.ms"
+  -o "${DIR}/residuals.ms"
+  -O "${DIR}/mod_out.fits"
+  -m "${DIR}/mod_in_0.fits"
+  -p "${DIR}/mem/"
+  -X 16 -Y 16 -V 256
+  -z 0.0,0.0
+  -Z 0.0,0.001,0.005
+  -R -2.0
+)
+
+ARGS=("${COMMON[@]}" --verbose --use-radius-mask)
+e2e_append_iter_flag ARGS
+e2e_gpuvmem_run "default_verbose_radius_mask" "${GPUVMEM}" "${DIR}" -- "${ARGS[@]}"
+
+ARGS=("${COMMON[@]}" -q --progress plain)
+e2e_append_iter_flag ARGS
+e2e_gpuvmem_run "quiet_plain_progress" "${GPUVMEM}" "${DIR}" -- "${ARGS[@]}"
+
+ARGS=("${COMMON[@]}" --verbose --metrics-file "${DIR}/metrics.txt")
+e2e_append_iter_flag ARGS
+e2e_gpuvmem_run "verbose_metrics_file" "${GPUVMEM}" "${DIR}" -- "${ARGS[@]}"
+
+ARGS=("${COMMON[@]}" --verbose -J joint)
+e2e_append_iter_flag ARGS
+e2e_gpuvmem_run "joint_optimization_mode" "${GPUVMEM}" "${DIR}" -- "${ARGS[@]}"
+
+e2e_cleanup_artifacts "${DIR}"
+echo "All M87 E2E scenarios passed."

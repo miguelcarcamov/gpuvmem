@@ -6,10 +6,13 @@
 #include <measures/Measures.h>
 #include <measures/Measures/MDirection.h>
 #include "utils/direction_cosines.cuh"
+#include "cli/run_observer.hh"
 #include "framework.cuh"
 #include "classes/imaging_header.hh"
 #include "optimizers/conjugategradient.cuh"
 #include "framework.cuh"
+
+#include <memory>
 
 class MFS : public Synthesizer {
  public:
@@ -35,9 +38,13 @@ class MFS : public Synthesizer {
 
  private:
   GpuvmemCliConfig cli_config_;
+  std::unique_ptr<gpuvmem::cli::IRunObserver> run_observer_;
   /** Model image astrometry (in-memory, 0-based reference pixel) copied onto Image in setDevice(). */
   gpuvmem::ImagingHeader resolved_model_header_{};
   void syncLegacyGlobalsFromCli_(const GpuvmemCliConfig& cfg);
+  void cli_diagnostic(gpuvmem::cli::DiagnosticLevel level, const std::string& message) const;
+  gpuvmem::cli::RunSummary build_run_summary() const;
+  void emit_run_summary() const;
 };
 
 #endif

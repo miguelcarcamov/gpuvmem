@@ -36,8 +36,9 @@ class LBFGS : public Optimizer {
  public:
   __host__ LBFGS();
   
-  __host__ int getK() override;
-  __host__ void setK(int K) override;
+  /** L-BFGS memory M: maximum number of (s,y) correction pairs retained. */
+  __host__ int getHistorySize() const;
+  __host__ void setHistorySize(int history_size);
   __host__ void allocateMemoryGpu() override;
   __host__ void deallocateMemoryGpu() override;
   __host__ void optimize() override;
@@ -175,7 +176,7 @@ class LBFGS : public Optimizer {
   float last_objective_value_ = 0.0f;
   float max_per_it = 0.0f;  // Maximum gradient component
   int configured = 1;   // Configuration flag (1 = needs configuration)
-  int K = 100;          // Maximum number of correction pairs (memory limit)
+  int history_size_ = 100;  // Maximum number of correction pairs (memory limit)
   
   // Line search (opaque pointer to avoid circular dependency in header)
   void* linesearcher_ptr;  // Line search algorithm (LineSearcher*)

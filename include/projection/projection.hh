@@ -22,7 +22,8 @@ class Projection {
   /** Legacy MEM `η` (reserved; fused kernels removed). */
   virtual float positivityEta() const;
 
-  /** Per-image reference level along the line (legacy `initial_values[image]`). */
+  /** Per-image reference level along the line (legacy `initial_values[image]`).
+   *  Falls back to `minimalValue` when no reference vector entry exists. */
   virtual float referenceValue(int image_index) const;
 
   /** Per-image minimum pixel floor (legacy `Image::minimal_pixel_values`). */

@@ -189,7 +189,9 @@ __host__ int main(int argc, char** argv) {
 
   Optimizer* cg =
       createObject<Optimizer, std::string>(cli.vars.optimizer_name);
-  cg->setK(cli.vars.lbfgs_corrections);
+  if (auto* lbfgs = dynamic_cast<LBFGS*>(cg)) {
+    lbfgs->setHistorySize(cli.vars.lbfgs_corrections);
+  }
 
   std::string linesearch_id = cli.vars.linesearch_name;
   const std::string& seeder_id = cli.vars.seeder_name;

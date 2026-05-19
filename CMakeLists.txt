@@ -108,6 +108,9 @@ option(GPUVMEM_INSTALL_STATIC_LIBS
 option(GPUVMEM_INSTALL_HEADERS
        "Install include/ tree to CMAKE_INSTALL_INCLUDEDIR/gpuvmem (recommended with GPUVMEM_INSTALL_STATIC_LIBS)"
        OFF)
+option(GPUVMEM_BUILD_TESTS "Build GoogleTest unit and integration tests" ON)
+option(GPUVMEM_TEST_MFS_FACTORY
+       "Build heavy MFS synthesizer factory unit test (links all static libs)" OFF)
 
 # ============================================================================
 # C++ Standard Configuration
@@ -165,7 +168,9 @@ endif()
 # Domain source groups (STATIC libraries)
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-file(GLOB APP_CORE_SOURCES ${SRC_DIR}/options.cu)
+file(GLOB APP_CORE_CUDA_SOURCES ${SRC_DIR}/options.cu ${SRC_DIR}/cli/*.cu)
+file(GLOB APP_CORE_CXX_SOURCES ${SRC_DIR}/cli/*.cc)
+set(APP_CORE_SOURCES ${APP_CORE_CUDA_SOURCES} ${APP_CORE_CXX_SOURCES})
 file(GLOB MFS_CUDA_SOURCES ${SRC_DIR}/mfs/*.cu)
 file(GLOB MFS_CPP_SOURCES ${SRC_DIR}/mfs/*.cc)
 set(MFS_SOURCES ${MFS_CUDA_SOURCES} ${MFS_CPP_SOURCES})
@@ -200,6 +205,9 @@ file(GLOB COMMON_CUDA_SOURCES ${SRC_DIR}/utils/*.cu)
 file(GLOB COMMON_CPP_SOURCES ${SRC_DIR}/utils/*.cc ${SRC_DIR}/rng/*.cc)
 
 add_library(gpuvmem_appcore_static STATIC ${APP_CORE_SOURCES})
+foreach(CC_FILE ${APP_CORE_CXX_SOURCES})
+  set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
+endforeach()
 add_library(gpuvmem_mfs_static STATIC ${MFS_SOURCES})
 foreach(CC_FILE ${MFS_CPP_SOURCES})
   set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
@@ -706,17 +714,23 @@ endif()
 # ============================================================================
 
 enable_testing()
+
+if(GPUVMEM_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
+
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
-# Test cases
-# Directory names are case-sensitive on Linux (FREQ78, M87).
+# End-to-end dataset tests: each test.sh runs several scenarios (see tests/common/e2e_lib.sh).
+# Override iteration budget: GPUVMEM_E2E_MAX_ITER=25 ctest -L e2e
 set(TEST_CASES antennae co65 FREQ78 M87 selfcalband9)
 
-# Add all test cases
 foreach(TEST_NAME ${TEST_CASES})
-  add_test(NAME ${TEST_NAME}
-           COMMAND bash ${TEST_DIR}/${TEST_NAME}/test.sh ${BINARY_DIR}/gpuvmem
-                   ${TEST_DIR}/${TEST_NAME})
+  add_test(
+    NAME "e2e_${TEST_NAME}"
+    COMMAND bash ${TEST_DIR}/${TEST_NAME}/test.sh ${BINARY_DIR}/gpuvmem
+            ${TEST_DIR}/${TEST_NAME})
+  set_tests_properties("e2e_${TEST_NAME}" PROPERTIES LABELS "e2e")
 endforeach()
 
 # ============================================================================
@@ -738,5 +752,6 @@ message(STATUS "Fast math: ${USE_FAST_MATH}")
 message(STATUS "Install executable: ${GPUVMEM_INSTALL_EXECUTABLE}")
 message(STATUS "Install static libraries: ${GPUVMEM_INSTALL_STATIC_LIBS}")
 message(STATUS "Install headers: ${GPUVMEM_INSTALL_HEADERS}")
+message(STATUS "Build unit tests: ${GPUVMEM_BUILD_TESTS}")
 message(STATUS "===========================")
 message(STATUS "")

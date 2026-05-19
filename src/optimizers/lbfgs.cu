@@ -39,6 +39,10 @@
 #include "linesearch/brent.cuh"  // For Brent class
 #include "error.cuh"
 #include "cli/gpuvmem_cli_config.hh"
+#include "cli/cli_metrics.hh"
+#include "cli/run_observer.hh"
+
+#include <sstream>
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -75,12 +79,10 @@ extern int firstgpu;
   cudaFree(d_r);             \
   d_r = nullptr;
 
-__host__ int LBFGS::getK() {
-  return this->K;
-}
+__host__ int LBFGS::getHistorySize() const { return history_size_; }
 
-__host__ void LBFGS::setK(int K) {
-  this->K = K;
+__host__ void LBFGS::setHistorySize(int history_size) {
+  history_size_ = history_size;
 }
 
 __host__ void LBFGS::allocateMemoryGpu() {
@@ -91,14 +93,16 @@ __host__ void LBFGS::allocateMemoryGpu() {
   int image_count_local = image->getImageCount();
   
   checkCudaErrors(cudaMalloc(
-      (void**)&d_y, sizeof(float) * M_local * N_local * K * image_count_local));
-  checkCudaErrors(
-      cudaMemset(d_y, 0, sizeof(float) * M_local * N_local * K * image_count_local));
+      (void**)&d_y,
+      sizeof(float) * M_local * N_local * history_size_ * image_count_local));
+  checkCudaErrors(cudaMemset(
+      d_y, 0, sizeof(float) * M_local * N_local * history_size_ * image_count_local));
 
   checkCudaErrors(cudaMalloc(
-      (void**)&d_s, sizeof(float) * M_local * N_local * K * image_count_local));
-  checkCudaErrors(
-      cudaMemset(d_s, 0, sizeof(float) * M_local * N_local * K * image_count_local));
+      (void**)&d_s,
+      sizeof(float) * M_local * N_local * history_size_ * image_count_local));
+  checkCudaErrors(cudaMemset(
+      d_s, 0, sizeof(float) * M_local * N_local * history_size_ * image_count_local));
 
   checkCudaErrors(cudaMalloc((void**)&p_old,
                              sizeof(float) * M_local * N_local * image_count_local));
@@ -187,7 +191,7 @@ __host__ void LBFGS::deallocateMemoryGpu() {
 __host__ int LBFGS::mapToCircularBuffer(int k, int par_M, int lbfgs_it) {
   // Map logical index k to circular buffer index
   // Most recent is lbfgs_it, previous is (lbfgs_it-1+K)%K, etc.
-  return (lbfgs_it - (par_M - 1 - k) + this->K) % this->K;
+  return (lbfgs_it - (par_M - 1 - k) + history_size_) % history_size_;
 }
 
 __host__ float LBFGS::initializeOptimizationState() {
@@ -432,7 +436,7 @@ __host__ void LBFGS::computeDirection(float* gradient) {
   long N_local = image->getN();
   int image_count_local = image->getImageCount();
   
-  int par_M = std::min(this->K, lbfgs_stored_pairs);
+  int par_M = std::min(history_size_, lbfgs_stored_pairs);
 
   if (par_M == 0) {
     // No history available - use steepest descent
@@ -445,7 +449,7 @@ __host__ void LBFGS::computeDirection(float* gradient) {
   }
 
   const int lbfgs_it =
-      (lbfgs_stored_pairs > 0) ? ((lbfgs_stored_pairs - 1) % this->K) : 0;
+      (lbfgs_stored_pairs > 0) ? ((lbfgs_stored_pairs - 1) % history_size_) : 0;
 
   std::vector<std::vector<float>> alpha_coeffs(
       static_cast<size_t>(image_count_local),
@@ -523,7 +527,7 @@ __host__ void LBFGS::updateHistory() {
     if (clear_history_on_curvature_failure_) {
       const size_t hist_bytes =
           sizeof(float) * static_cast<size_t>(M_local) * static_cast<size_t>(N_local) *
-          static_cast<size_t>(K) * static_cast<size_t>(image_count_local);
+          static_cast<size_t>(history_size_) * static_cast<size_t>(image_count_local);
       checkCudaErrors(cudaMemset(d_s, 0, hist_bytes));
       checkCudaErrors(cudaMemset(d_y, 0, hist_bytes));
       lbfgs_stored_pairs = 0;
@@ -534,7 +538,7 @@ __host__ void LBFGS::updateHistory() {
     return;
   }
 
-  const int hist_idx = lbfgs_stored_pairs % this->K;
+  const int hist_idx = lbfgs_stored_pairs % history_size_;
   for (int i = 0; i < image_count_local; i++) {
     calculateSandY<<<numBlocksNN, threadsPerBlockNN>>>(
         d_y, d_s, image->getImage(), xi, p_old, xi_old, hist_idx, M_local, N_local, i);
@@ -603,16 +607,14 @@ __host__ float LBFGS::performIteration(int iteration, float prev_function_value)
   // Compute new search direction using two-loop recursion (overwrites `xi`)
   computeDirection(xi);
 
-  if (gpuvmem_cli_verbose()) {
-    double end = omp_get_wtime();
-    std::cout << "  Wall time this iteration: " << std::setprecision(4) << (end - start) << " s\n";
-  }
+  const double end = omp_get_wtime();
+  reportIteration(new_function_value, end - start);
 
   return new_function_value;
 }
 
 __host__ void LBFGS::optimize() {
-  if (gpuvmem_cli_verbose()) {
+  if (gpuvmem_cli_debug() && run_observer_ == nullptr) {
     std::cout << "\n--- L-BFGS limited-memory quasi-Newton ---\n";
   }
 
@@ -631,27 +633,28 @@ __host__ void LBFGS::optimize() {
 
     // Check for function convergence (includes stagnation: |df| == 0 in float)
     if (checkFunctionConvergence(new_function_value, prev_function_value)) {
-      if (gpuvmem_cli_verbose()) {
+      if (run_observer_ != nullptr) {
+        gpuvmem::cli::OptimizationEndInfo end_info;
+        end_info.iteration = iteration;
         const float df = fabsf(new_function_value - prev_function_value);
-        if (!(df > 0.0f)) {
-          std::cout << "L-BFGS stopped at iteration " << iteration
-                    << ": objective unchanged at float precision (line search / plateau).\n";
-        } else {
-          std::cout << "L-BFGS converged: relative change in objective below ftol.\n";
-        }
+        end_info.reason = (!(df > 0.0f)) ? gpuvmem::cli::OptimizationStopReason::ObjectivePlateau
+                                           : gpuvmem::cli::OptimizationStopReason::FunctionTolerance;
+        run_observer_->on_optimization_end(end_info);
       }
-      // Use optimizer's image member instead of extern Image* I
       of->calcFunction(image->getImage());
       deallocateMemoryGpu();
       return;
     }
 
-    // Check for gradient convergence (uses true gradient before computeDirection)
     if (gradient_tolerance_met_) {
-      if (gpuvmem_cli_verbose()) {
-        std::cout << "L-BFGS converged: max|gradient| " << std::setprecision(6) << std::scientific
-                  << max_per_it << " <= gtol " << this->gtol << std::fixed << ".\n"
-                  << std::defaultfloat;
+      if (run_observer_ != nullptr) {
+        gpuvmem::cli::OptimizationEndInfo end_info;
+        end_info.iteration = iteration;
+        end_info.reason = gpuvmem::cli::OptimizationStopReason::GradientTolerance;
+        std::ostringstream oss;
+        oss << std::scientific << "max|grad|=" << max_per_it << " <= gtol " << this->gtol;
+        end_info.detail = oss.str();
+        run_observer_->on_optimization_end(end_info);
       }
       of->calcFunction(image->getImage());
       deallocateMemoryGpu();
@@ -662,8 +665,11 @@ __host__ void LBFGS::optimize() {
     prev_function_value = new_function_value;
   }
 
-  if (gpuvmem_cli_verbose()) {
-    std::cout << "L-BFGS: reached maximum iteration budget without meeting tolerances.\n";
+  if (run_observer_ != nullptr) {
+    gpuvmem::cli::OptimizationEndInfo end_info;
+    end_info.iteration = this->total_iterations;
+    end_info.reason = gpuvmem::cli::OptimizationStopReason::MaxIterations;
+    run_observer_->on_optimization_end(end_info);
   }
 
   of->calcFunction(image->getImage());
