@@ -4,6 +4,7 @@
 #include <boost/type_index.hpp>
 #include <exception>
 #include <iostream>
+#include <map>
 
 template <class T>
 class Singleton {
@@ -87,4 +88,4 @@ template <class T, class V, class Creator = T* (*)()>
 bool registerCreationFunction(V value, Creator function) {
   return Singleton<Factory<T, V>>::Instance().Register(value, function);
 }
-#endif FACTORY_CUH
+#endif  // FACTORY_CUH

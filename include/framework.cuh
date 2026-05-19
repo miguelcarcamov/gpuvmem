@@ -35,7 +35,6 @@
 #include <uvtaper.cuh>
 #include <vector>
 #include <virtualimageprocessor.cuh>
-#include <visibilities.cuh>
 #include <weightingscheme.cuh>
 
 #include "copyrightwarranty.cuh"
@@ -54,31 +53,7 @@ typedef struct varsPerGPU {
   cufftComplex* device_V;
 } varsPerGPU;
 
-typedef struct variables {
-  std::string input;
-  std::string output;
-  std::string inputdat;
-  std::string modin;
-  std::string ofile;
-  std::string path;
-  std::string output_image;
-  std::string gpus;
-  std::string initial_values;
-  std::string penalization_factors;
-  std::string user_mask;
-  int blockSizeX;
-  int blockSizeY;
-  int blockSizeV;
-  int it_max;
-  int gridding;
-  float noise;
-  float noise_cut;
-  float randoms;
-  float eta;
-  float nu_0;
-  float robust_param;
-  float threshold;
-} Vars;
+#include "framework/vars.hh"
 
 class SynthesizerFactory {
  public:

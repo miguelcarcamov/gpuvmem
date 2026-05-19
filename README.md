@@ -1,248 +1,413 @@
 <h1 align="center">
-   <img src="https://github.com/miguelcarcamov/gpuvmem/wiki/images/logos/logo2.png" height="400">
+  <img src="https://github.com/miguelcarcamov/gpuvmem/wiki/images/logos/logo2.png" height="320" alt="gpuvmem logo">
 </h1>
 
-# Papers and documentation
+<p align="center">
+  <strong>Multi-GPU regularized imaging for radio astronomy</strong><br>
+  <strong>C++/CUDA framework (RML-style: data term + regularizers)</strong><br>
+  <em>Originally maximum-entropy (MEM) synthesis — see paper below.</em>
+</p>
 
-- Paper: <https://doi.org/10.1016/j.ascom.2017.11.003>
-- Wiki: <https://github.com/miguelcarcamov/gpuvmem/wiki>
+<p align="center">
+  <em>In one line:</em> turn measurement sets and a sky grid into an image by minimizing <strong>data fidelity + priors</strong> on the GPU, with optimizers and regularizers you can swap like LEGO bricks.
+</p>
 
-# Citing
+<p align="center">
+  <a href="https://doi.org/10.1016/j.ascom.2017.11.003"><img src="https://img.shields.io/badge/A%26C-Paper-006599?logo=academia&logoColor=white" alt="Paper"></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
+  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/CMake-%E2%89%A53.18-064F8C?logo=cmake&logoColor=white" alt="CMake"></a>
+  <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/C%2B%2B-17-00599C?logo=c%2B%2B&logoColor=white" alt="C++17"></a>
+  <a href="https://developer.nvidia.com/cuda-zone"><img src="https://img.shields.io/badge/CUDA-GPU-76B900?logo=nvidia&logoColor=white" alt="CUDA GPU"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/miguelcarcamov/gpuvmem/actions/workflows/workflow.yml"><img src="https://github.com/miguelcarcamov/gpuvmem/actions/workflows/workflow.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/pkgs/container/gpuvmem"><img src="https://img.shields.io/badge/ghcr.io-container-2496ED?logo=github" alt="Container"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/stargazers"><img src="https://img.shields.io/github/stars/miguelcarcamov/gpuvmem?style=social&logo=github" alt="GitHub stars"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/commits/master"><img src="https://img.shields.io/github/last-commit/miguelcarcamov/gpuvmem?logo=github&logoColor=white&label=last%20commit" alt="Last commit"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/miguelcarcamov/gpuvmem/issues"><img src="https://img.shields.io/github/issues/miguelcarcamov/gpuvmem?logo=github" alt="Issues"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/pulls"><img src="https://img.shields.io/github/issues-pr/miguelcarcamov/gpuvmem?logo=github" alt="Pull requests"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem/graphs/contributors"><img src="https://img.shields.io/github/contributors/miguelcarcamov/gpuvmem?logo=github" alt="Contributors"></a>
+  <a href="https://github.com/miguelcarcamov/gpuvmem"><img src="https://img.shields.io/github/repo-size/miguelcarcamov/gpuvmem?logo=github&label=repo%20size" alt="Repo size"></a>
+  <a href="https://github.com/pre-commit/pre-commit"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white" alt="pre-commit"></a>
+  <a href="https://gitlab.com/clirai/pyralysis"><img src="https://img.shields.io/badge/Pyralysis-GitLab-FC6D26?logo=gitlab&logoColor=white" alt="Pyralysis on GitLab"></a>
+</p>
 
-If you use GPUVMEM for your research please do not forget to cite Cárcamo et al.
+---
 
-   ```tex
-   @article{CARCAMO201816,
-   title = "Multi-GPU maximum entropy image synthesis for radio astronomy",
-   journal = "Astronomy and Computing",
-   volume = "22",
-   pages = "16 - 27",
-   year = "2018",
-   issn = "2213-1337",
-   doi = "https://doi.org/10.1016/j.ascom.2017.11.003",
-   url = "http://www.sciencedirect.com/science/article/pii/S2213133717300094",
-   author = "M. Cárcamo and P.E. Román and S. Casassus and V. Moral and F.R. Rannou",
-   keywords = "Maximum entropy, GPU, ALMA, Inverse problem, Radio interferometry, Image synthesis"
-   }
-   ```
+## What is gpuvmem?
 
-# Installation
+**gpuvmem** began as a CUDA implementation of **maximum-entropy (MEM)** image synthesis for radio interferometry, described in the **2018 *Astronomy & Computing* paper** linked below. Since then it has grown into a broader **regularized imaging** tool: a **C++/CUDA framework** in the spirit of **regularized maximum likelihood (RML)**. You minimize **data fidelity** (χ² on visibilities) plus **priors and penalties** (entropy, L1, TV, …), and you can swap **optimizers**, **line searches**, **seeders**, **gridding kernels**, and **weighting schemes** without rewriting the whole pipeline.
 
-1. Install git-lfs
+The **name and paper** still say MEM; the **architecture** is a pragmatic **multi-GPU RML workbench** on **measurement sets** and **FITS**, built on **casacore**, **CCfits**, and friends.
 
-    a. `sudo apt-get install git-lfs`
 
-2. Install casacore latest stable version v3.2.1
+|                        |                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Paper**              | [doi:10.1016/j.ascom.2017.11.003](https://doi.org/10.1016/j.ascom.2017.11.003)                               |
+| **Wiki**               | [github.com/miguelcarcamov/gpuvmem/wiki](https://github.com/miguelcarcamov/gpuvmem/wiki)                     |
+| **Contributing**       | [CONTRIBUTING.md](CONTRIBUTING.md)                                                                           |
+| **Changelog**          | [CHANGELOG.md](CHANGELOG.md)                                                                                 |
+| **Pyralysis (Python)** | [gitlab.com/clirai/pyralysis](https://gitlab.com/clirai/pyralysis) — see [below](#pyralysis-and-the-roadmap) |
 
-    a. `git clone --single-branch --branch v3.2.1 https://github.com/casacore/casacore.git`
 
-    b. `sudo apt-get install -y build-essential cmake gfortran g++ libncurses5-dev libreadline-dev flex bison libblas-dev liblapacke-dev libcfitsio-dev wcslib-dev libhdf5-serial-dev libfftw3-dev python-numpy libboost-python-dev libpython2.7-dev`
+---
 
-    b. `cd casacore`
+## Pyralysis and the roadmap
 
-    c. `mkdir build`
+A more **modular, flexible, and extensible** Python stack for radio astronomy analysis and image synthesis — **[Pyralysis](https://gitlab.com/clirai/pyralysis)** (*PYthon Radio Astronomy anaLYSis and Image Synthesis*) — is under active development on GitLab.
 
-    d. `cd build`
+**Today:** Pyralysis does **not** yet ship a **GPU** imaging backend comparable to gpuvmem’s CUDA path, so **this repository remains the reference for high-performance GPU regularized imaging** in that line of work.
 
-    e. `cmake -DUSE_FFTW3=ON -DUSE_OPENMP=ON -DUSE_HDF5=ON -DUSE_THREADS=ON ..`
+**Future:** Once Pyralysis offers a **full CPU + GPU backend** with **Dask**-scale execution end-to-end, **gpuvmem is expected to be discontinued or deprecated** in favour of that stack. Until then, both projects can coexist: Pyralysis for Python-first workflows and experimentation, gpuvmem for CUDA-accelerated production runs tied to the current C++/CUDA architecture.
 
-    f. `make -j`
+---
 
-    g. `sudo make install`
+## Table of contents
 
-3. Install Boost
+- [Pyralysis and the roadmap](#pyralysis-and-the-roadmap)
+- [Quick start](#quick-start)
+- [Requirements](#requirements)
+- [Dependencies (detailed)](#dependencies-detailed)
+- [Build and run](#build-and-run)
+- [Install on the system](#install-on-the-system)
+- [Usage (CLI)](#usage-cli)
+- [Extending the framework](#extending-the-framework)
+- [Image restoration](#image-restoration)
+- [Tests](#tests)
+- [Docker](#docker)
+- [Citing](#citing)
+- [Contributors](#contributors)
+- [Star history](#star-history)
 
-    a. `sudo apt-get -y install libboost-all-dev`
+---
 
-4. Install cfitsio
+## Quick start
 
-    a. `sudo apt-get -y install libcfitsio-dev`
+```bash
+git clone https://github.com/miguelcarcamov/gpuvmem.git
+cd gpuvmem
+git lfs install && git lfs pull    # large test assets; needed for ctest
+mkdir build && cd build
+cmake ..
+cmake --build . -j$(nproc)
+./../bin/gpuvmem --help            # lists every flag; works before CUDA sees a GPU
+```
 
-5. Download or clone gpuvmem.
+After build, the **executable** lives in **`bin/`** at the **repository root**, and the internal **static libraries** in **`lib/`** (see [Build and run](#build-and-run)). From there, jump to [Usage (CLI)](#usage-cli) when you are ready to wire a real dataset.
 
-6. To compile GPUVMEM you will need:
+---
 
-   - cfitsio - Usually the package is called `libcfitsio-dev`.
-   - cmake >= 3.8
-   - git-lfs - `git-lfs`
-   - casacore >= v3.1.2 (<https://github.com/casacore/casacore> - branch v3.1.2. please make sure you have installed the github version, Ubuntu package doesn't work well since doesn't have the `put()` function).
-   - CUDA 9, 9.1, 9.2, 10.0 and 11.0. Remember to add binaries and libraries to the **PATH** and **LD_LIBRARY_PATH** environment variables, respectively.
-   - OpenMP
+## Requirements
 
-7. To run the cmake tests you need to run `git lfs install` if not installled and then `git-lfs pull` to pull the measurement sets and model input FITS images.
 
-# Installation using Docker
+| Component            | Notes                                                                            |
+| -------------------- | -------------------------------------------------------------------------------- |
+| **CMake**            | ≥ **3.18** (see `cmake_minimum_required` in `CMakeLists.txt`)                    |
+| **CUDA**             | Toolkit on **PATH**; GPU compute capability detected or set with `-DCUDA_ARCH=…` |
+| **C++**              | **C++17** by default (CUDA 13+ needs it)                                         |
+| **casacore**         | Build from source recommended; distro packages often lag features gpuvmem needs  |
+| **CFITSIO / CCfits** | FITS I/O                                                                         |
+| **Boost**            | Headers + libraries used by the project                                          |
+| **OpenMP**           | Used for host parallel sections                                                  |
+| **git-lfs**          | For test measurement sets and FITS data                                          |
+
+
+---
+
+## Dependencies (detailed)
+
+### git-lfs
+
+```bash
+sudo apt-get install git-lfs
+```
+
+### casacore (example: v3.2.1 from source)
+
+```bash
+git clone --single-branch --branch v3.2.1 https://github.com/casacore/casacore.git
+cd casacore
+# Install build deps for your distro (example for Debian/Ubuntu):
+sudo apt-get install -y build-essential cmake gfortran g++ libncurses5-dev libreadline-dev \
+  flex bison libblas-dev liblapacke-dev libcfitsio-dev wcslib-dev libhdf5-serial-dev \
+  libfftw3-dev libboost-all-dev
+mkdir build && cd build
+cmake -DUSE_FFTW3=ON -DUSE_OPENMP=ON -DUSE_HDF5=ON -DUSE_THREADS=ON ..
+make -j$(nproc)
+sudo make install
+```
+
+Use a **casacore** version compatible with your workflows (≥ ~3.1.2 has been referenced historically; prefer a maintained release).
+
+### Boost and CFITSIO (Debian/Ubuntu examples)
 
    ```bash
-   docker pull ghcr.io/miguelcarcamov/gpuvmem:latest
-   ```
+sudo apt-get install -y libboost-all-dev libcfitsio-dev
+```
 
-# Compiling
+### CUDA
+
+Install the NVIDIA CUDA toolkit matching your driver. Put **`nvcc`** and the CUDA libraries on your **`PATH`** / **`LD_LIBRARY_PATH`** (or use environment modules).
+
+---
+
+## Build and run
 
    ```bash
    cd gpuvmem
-   mkdir build
+mkdir build && cd build
+cmake ..
+cmake --build . -j$(nproc)
+```
+
+**Outputs (outside `build/` only):**
+
+
+| Path                           | Content                                         |
+| ------------------------------ | ----------------------------------------------- |
+| `../bin/gpuvmem`               | Main program (`src/main.cu`)                    |
+| `../lib/libgpuvmem_*_static.a` | Internal static archives linked into the binary |
+
+
+Optional: pass **`-DPREFIX=/path`** at configure time to change where the **runtime** binary is written (see `CMakeLists.txt`).
+
+**Antenna configurations** are read from the measurement set; no separate antenna file is required for that part of the pipeline.
+
+---
+
+## Install on the system
+
+CMake generates install rules. With **Makefiles**, **`make install`** is the same idea as **`cmake --install .`** from the build directory.
+
+```bash
    cd build
-   cmake ..
-   make -j
-   ```
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+cmake --build . -j$(nproc)
+sudo cmake --install . --prefix /usr/local
+# or: sudo make install
+```
 
-## Now antenna configurations are read directly from the MS file
+**Staged install** (packaging):
 
-# Usage
+```bash
+make install DESTDIR=/tmp/stage
+# → /tmp/stage/usr/local/... when CMAKE_INSTALL_PREFIX=/usr/local
+```
 
-Create your FITS model input astrometry data on the header, typically we use the resulting dirty image from CASA's tclean.
+### CMake install switches
 
-# Use GPUVMEM
 
-Usage: `./bin/gpuvmem [options]`
+| Option                        | Default | Role                                                             |
+| ----------------------------- | ------- | ---------------------------------------------------------------- |
+| `GPUVMEM_INSTALL_EXECUTABLE`  | **ON**  | Install `gpuvmem` to `CMAKE_INSTALL_BINDIR` (e.g. `prefix/bin`). |
+| `GPUVMEM_INSTALL_STATIC_LIBS` | **OFF** | Install internal `.a` libraries to `CMAKE_INSTALL_LIBDIR`.       |
+| `GPUVMEM_INSTALL_HEADERS`     | **OFF** | Install `include/` under `CMAKE_INSTALL_INCLUDEDIR/gpuvmem`.     |
 
-   ```text
-      -O --output_image [default: mod_out.fits]
-          Name of the output visibility file/s (separated by a comma)
-      -e --eta [default: -1]
-          Variable that controls the minimum image value in the entropy prior
-      -T --threshold [default: 0]
-          Threshold to calculate the spectral index image above a certain number of
-          sigmas in I_nu_0
-      -p --path [default: mem/]
-          Path to save FITS images. With last trail / included. (Example ./../mem/)
-      -G --gpus [default: 0]
-          Index of the GPU/s you are going to use separated by a comma
-      -R --robust_parameter [default: 2]
-          Robust weighting parameter when gridding. -2.0 for uniform weighting, 2.0
-          for natural weighting and 0.0 for a tradeoff between these two.
-      -X --blockSizeX [default: -1]
-          GPU block X Size for image/Fourier plane (Needs to be pow of 2)
-      -Y --blockSizeY [default: -1]
-          GPU block Y Size for image/Fourier plane (Needs to be pow of 2)
-      -V --blockSizeV [default: -1]
-          GPU block V Size for visibilities (Needs to be pow of 2)
-      -t --iterations [default: 500]
-          Number of iterations for optimization
-      -g --gridding [default: 0]
-          Use gridded visibilities. This is done in CPU (Need to select the CPU thre
-          ads that will grid the input visibilities)
-      -z --initial_values [default: NULL]
-          Initial values for image/s
-      -Z --regularization_factors [default: NULL]
-          Regularization factors for each regularization (separated by a comma)
 
-    Flags:
-      -v --verbose [default: (unset)]
-          Shows information through all the execution
-      -x --nopositivity [default: (unset)]
-          Runs gpuvmem with no positivity restrictions on the images
-      -a --apply-noise [default: (unset)]
-          Applies random gaussian noise to visibilities
-      -P --print-images [default: (unset)]
-          Prints images per iteration
-      -E --print-errors [default: (unset)]
-          Prints final error maps
-      -s --save_modelcolumn [default: (unset)]
-          Saves the model visibilities on the model column of the input MS
-      -M --use-radius-mask [default: (unset)]
-          Use a mask based on a radius instead of the noise estimation
+**End user (binary only):** defaults are enough.
 
-    Help:
-      -h --help [default: (unset)]
-          Shows this help
-      -w --warranty [default: (unset)]
-          Shows warranty details
-      -c --copyright [default: (unset)]
-          Shows copyright conditions
+**Developer (custom `main` against installed libs):**
 
-    Mandatory:
-      -i --input [default: NULL]
-          Name of the input visibility file/s (separated by a comma)
-      -o --output [default: NULL]
-          Name of the output visibility file/s (separated by a comma)
-      -m --model_input [default: mod_in_0.fits]
-          FITS file including a complete header for astrometry
+```bash
+cmake .. -DCMAKE_INSTALL_PREFIX=/opt/gpuvmem \
+      -DGPUVMEM_INSTALL_STATIC_LIBS=ON \
+      -DGPUVMEM_INSTALL_HEADERS=ON
+cmake --build . -j$(nproc) && sudo cmake --install . --prefix /opt/gpuvmem
+```
 
-    Optional:
-      -n --noise [default: -1]
-          Noise factor parameter
-      -N --noise_cut [default: 10]
-          Noise-cut Parameter
-      -F --ref_frequency [default: -1]
-          Reference frequency in Hz (if alpha is not zero). It will be calculated fr
-          om the measurement set if not set
-      -r --random_sampling [default: 1]
-          Percentage of data used when random sampling
-      -f --output_file [default: NULL]
-          Output file where final objective function values are saved
-   ```
+Re-run **`cmake ..`** after changing install options, then rebuild and install again.
 
-# Framework usage
+---
 
-- The normal flow of the program starts by creating a synthesizer, creating an optimizer, creating an objective function, and adding the terms to the objective function. It is also possible to add a convolution kernel for gridding and a weighting scheme.
+## Usage (CLI)
 
-- Objects can be created by their respective factory or by their constructors.
+You describe **where the data lives**, **what pixel grid to use**, and **how to start the image**. gpuvmem does the rest on the GPU: χ² on visibilities plus whichever regularizers you turn on, with your choice of optimizer and line search.
 
-- The configuration of each objective function term is parameterized by the penalty factor (-Z), the index of the image from where data will be calculated and the index of the image where results are going to be applied.
+### The mental model (three pieces)
 
-# TO RESTORE YOUR IMAGE PLEASE SEE CARCAMO ET AL. 2018 FOR MORE INFORMATION
+1. **Visibilities** — Measurement sets in with **`-i`**, products out with **`-o`** (comma-separated lists, same length).
+2. **Grid on the sky** — Either a **FITS template** with WCS (**`-m` / `--model_input`**, e.g. a dirty image from **CASA tclean**), *or* a **synthetic grid**: **`--imsize M,N`**, **`--cellsize`** (arcseconds), **`--phase-center RA,DEC`** in degrees (ICRS). If you pass both a FITS and synthetic flags, **the FITS wins** (synthetic flags are ignored on purpose).
+3. **Starting pixels** — **`-z`** gives **constant** values per image plane: the **first number is MINPIX** (positivity floor); extra numbers set planes like spectral index. Optional **`-I` / `--initial-model`** loads **plane 0** from a **2D float FITS** (same `M,N` as the grid); other planes still follow **`-z`**.
 
-- This will return a restored image: A convolution of the model image with the CLEAN beam + residuals (Jy/beam)
-- Residuals (Jy/beam)
-- The script file is on the scripts folder and it is named `restore.py`
+```bash
+./bin/gpuvmem [options]
+```
 
-Restoring usage:
+### Help, warranty, and “no GPU yet”
+
+You can run **`-h` / `--help`** before CUDA is touched, so listing flags works even on a login node without a GPU. **`-w` / `--warranty`** and **`-c` / `--copyright`** print GPL text and exit cleanly when you are **not** starting a real run (no **`-i`**). If **`-i`** is set, those flags are **ignored** so a stray **`-w`** never skips validation.
+
+Authoritative list of every flag lives in **`src/options.cu`**; **`--help`** tracks it automatically. **Note:** empty-string defaults print as **`[default: ]`** in the generated help; the **`-L`** / **`-B`** descriptions spell out the real runtime behavior (**Brent**, no seeder). **Parsing:** a **`Flags` / getopt** fix ensures spaced **`-O out.fits`** no longer corrupts short-option parsing for later flags such as **`-m`**.
+
+### Cheat sheet by topic
+
+**Data & I/O**
+
+| Flag | Remember it as… |
+|------|------------------|
+| `-i` / `--input` | Input MS path(s). |
+| `-o` / `--output` | Output MS path(s). |
+| `-p` / `--path` | Where FITS cubes land (e.g. `mem/`). |
+| `-O` / `--output_image` | Basename for images. |
+| `-G` / `--gpus` | Which GPUs (`0`, `0,1`, …). |
+| `-s` | Write the model to the **MODEL** column. |
+
+**Grid & weights**
+
+| Flag | Remember it as… |
+|------|------------------|
+| `-m` / `--model_input` | FITS = geometry + WCS template. |
+| `--imsize`, `--cellsize`, `--phase-center` | Headless grid when you skip `-m`. |
+| `-W` / `--weighting` | `natural`, `uniform`, `radial`, `briggs`, `robust` (pair **`-R`** with Briggs-style robustness). |
+
+**Starting image & Stokes**
+
+| Flag | Remember it as… |
+|------|------------------|
+| `-z` / `--initial_values` | Constants per plane; **first = MINPIX**. |
+| `-I` / `--initial-model` | Optional FITS for **plane 0** only. |
+| `-S` / `--stokes` | e.g. `I` or `I,Q,U,V` (multi-Stokes runs). |
+
+**Optimization stack**
+
+| Flag | Remember it as… |
+|------|------------------|
+| `-C` / `--optimizer` | Factory name (default **LBFGS**). |
+| `-L` / `--linesearch` | Line search factory id; if omitted, **LBFGS** / **CG** use built-in **Brent** (`main` does not replace an empty `-L`). |
+| `-B` / `--seeder` | Step-size seeder; if omitted, **none**. If you pass **`-B`** without **`-L`**, the driver sets **`-L` Brent** so the seeder attaches. |
+| `-K` / `--lbfgs-m` | L-BFGS memory (ignored for other optimizers). |
+| `-J` / `--optimization_mode` | `joint`, `block`, `one`, `alpha_static`. |
+| `-Z` / `--regularization_factors` | Comma-separated **λ** weights (`regularization_weights` in code). **Fewer than five** values: χ² stays at **λ = 1**, then **entropy, L1, total squared variation (TSV)** (extra commas ignored). **Five or more:** first value is **χ²**, then entropy, L1, TSV. Default **Fi** wired in `main.cu`: those four terms only (no **L2ConstantPrior** in the stock binary). |
+
+**Physics & tuning (short list)**
+
+| Flag | Role |
+|------|------|
+| `-t` iterations | How long to iterate (default **1000**). |
+| `-g` gridding | CPU gridding / thread count (default **1**). |
+| `-e` eta | Entropy / positivity coupling (default **-1**). |
+| `-F` ref_frequency | Reference ν in Hz. |
+| `-n`, `-N`, `-r` | Noise, noise cut, random subsampling of data. |
+| `-T`, `-A` | Thresholding / alpha masking knobs. |
+| `-X`, `-Y`, `-V` | GPU block sizes (**`-1`** = pick for you). |
+
+**Long-only & toggles**
+
+| Long / flag | Role |
+|-------------|------|
+| `--metrics-file` | Write the **final metrics** block (same as stdout) to a file: **φ**, **chi2_w**, **reg_w**, per-Fi lines, times. |
+| `--normalize` | Normalize χ² / effective samples. |
+| `--modify-weights` | Experimental weight tweaks. |
+| `-q` / `--quiet` | Minimal stdout (one-line finish + paths). |
+| `-v` / `--verbose` | Extra MS/WCS/field detail and optimizer stop reasons. |
+| `--debug` | CUDA grid, GPU inventory, gridding kernel dumps, internal optimizer notes. |
+| `--progress` | `auto` (bar on TTY, plain lines in log files), `bar`, `plain`, or `off`. |
+| `--log-interval` | In `plain`/`auto` file mode, print every **N** iterations (default **1**). |
+| `-x`, `-a`, `-P`, `-E`, `-M` | No positivity, noise on data, FITS every iteration, error maps, radius mask. |
+
+### CLI output (normal run)
+
+Before optimization, gpuvmem prints a **`=== gpuvmem run summary ===`** block (sky frame, grid, band, beam, active λ, GPU). During optimization, each iteration reports **`phi`**, **`chi2_w`** (λ·χ²), **`reg_w`** (remaining weighted terms), optional **ETA**, and wall time. After the run, **`=== gpuvmem final metrics ===`** repeats objective numbers plus per-Fi breakdown. Snow-style pipelines can ignore stdout and use the output FITS/MS only; use **`--metrics-file`** if you want a machine-readable log of the final numbers.
+
+### Defaults worth knowing
+
+Out of the box you get **1000** iterations, **natural** weighting, **LBFGS**, **joint** mode, **L-BFGS memory 10**, and **α mask 5σ**. **`--help`** prints **`[default: ]`** for options whose registered default is an empty string (**`-L`**, **`-B`**); at runtime **LBFGS** / **CG** still construct with **Brent**, and no **seeder** is attached unless you pass **`-B`**. **`-Z`:** if you omit it, **`main.cu`** leaves entropy and L1 at **λ = 0** (those terms are **not** added — **`ObjectiveFunction::addFi`** skips **λ == 0**) and applies a legacy **λ = 0.05** to **TSV** only, beside **χ²** at **λ = 1**. Pass **`-Z`** to supply comma-separated weights (layout in the table above). Full literals live in **`setDefaultVars`** (`src/options.cu`).
+
+### Testing
+
+See [tests/README.md](tests/README.md): **Google Test** unit tests per class (`ctest -L unit`), integration tests between modules (`ctest -L integration`), and **multi-scenario E2E** per dataset (`ctest -L e2e`, `GPUVMEM_E2E_MAX_ITER` controls iteration budget).
+
+### What we might add next
+
+Multi-plane **`-I`** (e.g. one FITS per Stokes), a small **config file** beside argv, and richer **MS-specific** flags are natural extensions; today everything is explicit on the command line.
+
+---
+
+## Extending the framework
+
+Think **pipeline, not monolith**: a **synthesizer** (data + coordinates), an **optimizer** (CG family, L-BFGS, …), an **objective function**, and **Fi** terms you register (χ² plus any regularizer). Factories pick concrete classes at runtime. Weights for those terms come from **`-Z`**. If you have ever added a penalty to a likelihood, you already know the pattern — gpuvmem just does it with CUDA and radio datasets.
+
+---
+
+## Image restoration
+
+For a **restored** image (model convolved with the CLEAN beam plus residuals in Jy/beam), follow **Cárcamo et al. (2018)**. A helper script lives in `scripts/restore.py`:
+
+```bash
+python scripts/restore.py residual_folder.ms mem_model.fits restored_output 2.0
+```
+
+The last argument is the **robust** parameter used when cleaning residuals.
+
+---
+
+## Tests
+
+After **`git lfs pull`**, from the build directory:
 
    ```bash
-   python restore.py residual_folder.ms mem_model.fits restored_output 2.0
-   ```
+ctest --output-on-failure
+```
 
-The last parameter, is the robust parameter that you want to use to clean the residuals.
+Individual cases live under `tests/` (e.g. `antennae`, `co65`, …).
 
-# CONTRIBUTORS
+---
 
-- Miguel Cárcamo - The University of Manchester - miguel.carcamo@postgrad.manchester.ac.uk
-- Nicolás Muñoz - Universidad de Santiago de Chile
-- Fernando Rannou - Universidad de Santiago de Chile
-- Pablo Román - Universidad de Santiago de Chile
-- Simón Casassus - Universidad de Chile
-- Axel Osses - Universidad de Chile
-- Victor Moral - Universidad de Chile
+## Docker
 
-# CONTRIBUTION AND BUG REPORTS
+```bash
+docker pull ghcr.io/miguelcarcamov/gpuvmem:latest
+```
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+See GitHub Container Registry and workflow files under `.github/workflows/` for build details.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1\. Go to '...'
-2\. Click on '....'
-3\. Scroll down to '....'
-4\. See error
+---
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## Citing
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+If you use gpuvmem in research, please cite **Cárcamo et al.**:
 
-**Desktop (please complete the following information):**
+```bibtex
+@article{CARCAMO201816,
+  title   = "Multi-GPU maximum entropy image synthesis for radio astronomy",
+  journal = "Astronomy and Computing",
+  volume  = "22",
+  pages   = "16 - 27",
+  year    = "2018",
+  issn    = "2213-1337",
+  doi     = "https://doi.org/10.1016/j.ascom.2017.11.003",
+  url     = "http://www.sciencedirect.com/science/article/pii/S2213133717300094",
+  author  = "M. Cárcamo and P.E. Román and S. Casassus and V. Moral and F.R. Rannou",
+  keywords = "Maximum entropy, GPU, ALMA, Inverse problem, Radio interferometry, Image synthesis"
+}
+```
 
-- OS: [e.g. Ubuntu 16.04]
-- CUDA version [e.g. 9]
-- gpuvmem Version [e.g. 22]
+---
 
-**Additional context**
-Add any other context about the problem here.
+## Contributors
 
-# FEATURE REQUEST
+- **Miguel Cárcamo** — Universidad de Santiago de Chile (USACH) — [github.com/miguelcarcamov](https://github.com/miguelcarcamov/) — [miguel.carcamo@usach.cl](mailto:miguel.carcamo@usach.cl)  
+- **Nicolás Muñoz** — Universidad de Santiago de Chile  
+- **Fernando Rannou** — Universidad de Santiago de Chile  
+- **Pablo Román** — Universidad de Santiago de Chile  
+- **Simón Casassus** — Universidad de Chile  
+- **Axel Osses** — Universidad de Chile  
+- **Victor Moral** — Universidad de Chile
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+**Bugs and features:** use [GitHub Issues](https://github.com/miguelcarcamov/gpuvmem/issues) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**License:** [GNU General Public License v3.0](LICENSE.txt).
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+---
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+## Star history
+
+<a href="https://www.star-history.com/?repos=miguelcarcamov%2Fgpuvmem&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=miguelcarcamov/gpuvmem&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=miguelcarcamov/gpuvmem&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=miguelcarcamov/gpuvmem&type=date&legend=top-left" />
+ </picture>
+</a>

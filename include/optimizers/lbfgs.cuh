@@ -1,0 +1,207 @@
+#ifndef LBFGS_CUH
+#define LBFGS_CUH
+
+// linmin.cuh removed - replaced by LineSearcher infrastructure
+#include "classes/optimizer.cuh"
+#include "framework.cuh"
+#include "linesearch/linesearcher.cuh"
+#include "linesearch/brent.cuh"
+#include <string>
+#include <memory>
+#include <vector>
+
+/** Device buffers: `d_s`/`d_y` are the L-BFGS pair ring; `xi` holds ∇f after calcGradient,
+ *  then the line-search direction; `p_old` / `xi_old` are previous image and gradient for
+ *  secant pairs. `norm_vector` is reduction scratch for |∇f|_∞. `aux_vector` is one M×N
+ *  plane for pairwise products before reduction; `d_q`/`d_r` are full multi-image vectors
+ *  for the two-loop recursion. Staging buffers are only for the yᵀs curvature gate.
+ */
+// Forward declaration to avoid circular dependency
+class StepSizeSeeder;
+
+/**
+ * @brief Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimizer.
+ * 
+ * This class implements the L-BFGS algorithm, a quasi-Newton optimization method
+ * that approximates the inverse Hessian matrix using limited memory. The algorithm
+ * is particularly suited for large-scale optimization problems where storing the
+ * full Hessian matrix is computationally infeasible.
+ * 
+ * The implementation uses a two-loop recursion to efficiently compute search
+ * directions without explicitly storing or forming the inverse Hessian matrix.
+ * It maintains a circular buffer of correction pairs (s, y) and associated rho
+ * scalars to approximate the Hessian inverse using limited historical information.
+ */
+class LBFGS : public Optimizer {
+ public:
+  __host__ LBFGS();
+  
+  /** L-BFGS memory M: maximum number of (s,y) correction pairs retained. */
+  __host__ int getHistorySize() const;
+  __host__ void setHistorySize(int history_size);
+  __host__ void allocateMemoryGpu() override;
+  __host__ void deallocateMemoryGpu() override;
+  __host__ void optimize() override;
+  
+  /**
+   * @brief Set the line search algorithm to use.
+   * 
+   * @param searcher Line searcher instance (ownership transferred)
+   * 
+   * Note: To set a seeder, use: searcher->setStepSizeSeeder(std::make_unique<BBMin1Seeder>())
+   * before calling setLineSearcher.
+   */
+  __host__ void setLineSearcher(std::unique_ptr<LineSearcher> searcher);
+
+  __host__ void setProjection(std::unique_ptr<Projection> projection) override;
+
+  /**
+   * @brief If true, a failed curvature test (y^T s <= 0) clears all L-BFGS pairs
+   *        (Pyralysis `clear_on_curvature_failure`). If false, the bad step is only
+   *        skipped for history (default, like Pyralysis default).
+   */
+  __host__ void setClearHistoryOnCurvatureFailure(bool v) {
+    clear_history_on_curvature_failure_ = v;
+  }
+
+  __host__ bool getClearHistoryOnCurvatureFailure() const {
+    return clear_history_on_curvature_failure_;
+  }
+
+ protected:
+  /**
+   * @brief Compute the descent direction using two-loop recursion.
+   * 
+   * Implements the two-loop recursion to compute H_k^(-1) * g_k where H_k^(-1)
+   * is approximated using limited memory BFGS updates. This avoids storing the
+   * full inverse Hessian matrix.
+   * 
+   * @param gradient Current gradient vector g_k
+   * @return Search direction vector H_k^(-1) * g_k (negative descent direction)
+   */
+  __host__ void computeDirection(float* gradient);
+
+  /**
+   * @brief Compute alpha coefficients for first loop of two-loop recursion.
+   * 
+   * Implements the iterative alpha computation as per standard L-BFGS algorithm.
+   * 
+   * @param gradient Current gradient vector g
+   * @param par_M Number of correction pairs to use
+   * @param lbfgs_it Current iteration index in circular buffer
+   * @param alpha_coeffs In/out: alpha coefficients (host; resized by caller to image_count × par_M)
+   */
+  __host__ void computeAlphaCoefficients(float* gradient, int par_M, int lbfgs_it,
+                                        std::vector<std::vector<float>>& alpha_coeffs);
+
+  /**
+   * @brief Compute beta coefficients and update r in second loop.
+   * 
+   * Implements the iterative second loop as per standard L-BFGS algorithm.
+   * 
+   * @param r Intermediate vector r = gamma * q from first loop
+   * @param alpha_coeffs Alpha coefficients from first loop (host; one row per spectral image)
+   * @param par_M Number of correction pairs to use
+   * @param lbfgs_it Current iteration index in circular buffer
+   */
+  __host__ void computeBetaCoefficients(float* r, std::vector<std::vector<float>>& alpha_coeffs,
+                                        int par_M, int lbfgs_it);
+
+  /**
+   * @brief Compute gamma scaling factor for Hessian approximation.
+   *
+   * Computes gamma = (s^T y) / (y^T y) using the most recent correction pair
+   * in the active L-BFGS window (same convention as Pyralysis / Nocedal & Wright).
+   *
+   * @param par_M Number of correction pairs to use
+   * @param lbfgs_it Current iteration index in circular buffer
+   * @return Gamma scaling factor
+   */
+  __host__ float computeScalingFactor(int par_M, int lbfgs_it);
+
+  /**
+   * @brief Update L-BFGS history with the latest (s, y) pair if curvature y^T s > 0.
+   *
+   * Skips storing the pair when the curvature test fails (Pyralysis-style).
+   * Optionally clears all history when `setClearHistoryOnCurvatureFailure(true)`.
+   */
+  __host__ void updateHistory();
+
+  /**
+   * @brief Perform a single optimization iteration.
+   * 
+   * @param iteration Current iteration number
+   * @param prev_function_value Previous function value
+   * @return New function value after iteration
+   */
+  __host__ float performIteration(int iteration, float prev_function_value);
+
+  /**
+   * @brief Check for function convergence.
+   * 
+   * @param new_value New function value
+   * @param prev_value Previous function value
+   * @return true if converged, false otherwise
+   */
+  __host__ bool checkFunctionConvergence(float new_value, float prev_value);
+
+  /**
+   * @brief Check for gradient convergence.
+   * 
+   * @return true if converged, false otherwise
+   */
+  __host__ bool checkGradientConvergence();
+
+  /**
+   * @brief Initialize optimization state.
+   * 
+   * @return Initial function value
+   */
+  __host__ float initializeOptimizationState();
+
+  // Memory pointers for CUDA operations
+  float* d_s = nullptr;           // Correction pairs: s_k = x_{k+1} - x_k
+  float* d_y = nullptr;           // Correction pairs: y_k = g_{k+1} - g_k
+  float* xi = nullptr;            // Current gradient / search direction
+  float* xi_old = nullptr;        // Previous gradient g_k (for y = g_{k+1} - g_k)
+  float* p_old = nullptr;         // Previous parameter values
+  float* norm_vector = nullptr;   // Reduction scratch for gradient stopping
+  float* d_r = nullptr;           // Two-loop workspace (second loop, size M×N×#images)
+  float* d_q = nullptr;           // Two-loop workspace (first loop, q vector)
+  float* aux_vector = nullptr;    // One M×N plane: per-pixel products before reduction
+  float* lbfgs_scratch_s = nullptr;  // Staged s for curvature check (M*N*image_count)
+  float* lbfgs_scratch_y = nullptr;  // Staged y for curvature check
+
+  // Optimization state
+  float last_objective_value_ = 0.0f;
+  float max_per_it = 0.0f;  // Maximum gradient component
+  int configured = 1;   // Configuration flag (1 = needs configuration)
+  int history_size_ = 100;  // Maximum number of correction pairs (memory limit)
+  
+  // Line search (opaque pointer to avoid circular dependency in header)
+  void* linesearcher_ptr;  // Line search algorithm (LineSearcher*)
+                          // Note: LineSearcher owns its own seeder internally
+  
+  // Previous step size (used as fallback initial_alpha for line search)
+  float prev_step_size;   // Previous step size
+
+  /** Set in performIteration after calcGradient, before computeDirection overwrites `xi`. */
+  bool gradient_tolerance_met_ = false;
+
+  /** Number of correction pairs successfully stored (drives two-loop window). */
+  int lbfgs_stored_pairs = 0;
+  bool clear_history_on_curvature_failure_ = false;
+
+ private:
+  /**
+   * @brief Map logical index k to circular buffer index.
+   * 
+   * @param k Logical index (0 = oldest, par_M-1 = newest)
+   * @param par_M Number of correction pairs
+   * @param lbfgs_it Current iteration index in circular buffer
+   * @return Circular buffer index
+   */
+  __host__ int mapToCircularBuffer(int k, int par_M, int lbfgs_it);
+};
+
+#endif  // LBFGS_CUH

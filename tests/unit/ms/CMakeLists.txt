@@ -1,0 +1,3 @@
+gpuvmem_add_unit_test(gpuvmem_unit_ms_metadata SOURCES test_ms_metadata.cc)
+
+gpuvmem_add_unit_test(gpuvmem_unit_ms_field SOURCES test_field.cc)

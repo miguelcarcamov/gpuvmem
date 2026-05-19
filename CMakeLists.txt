@@ -2,8 +2,9 @@
 # gpuvmem - GPU-Accelerated Radio Astronomy Maximum Entropy Image Synthesis
 # ============================================================================
 #
-# This CMakeLists.txt builds gpuvmem, a CUDA-accelerated implementation for
-# radio astronomy image deconvolution using GPU memory.
+# This CMakeLists.txt builds gpuvmem: a CUDA-accelerated C++ framework for
+# regularized (RML-style) radio interferometric imaging — data fidelity plus
+# modular regularizers — evolved from the original maximum-entropy (MEM) code.
 #
 # USE CASES:
 # ----------
@@ -20,14 +21,23 @@
 #
 # 1. Custom Install Prefix: cmake -DPREFIX=/custom/path ..
 #
+# 1. Install program only (default): cmake --install . --prefix /usr/local
+#    (installs gpuvmem to bindir; static libs not installed unless enabled)
+#
+# 1. Install static libs + headers for custom mains:
+#    cmake .. -DGPUVMEM_INSTALL_STATIC_LIBS=ON -DGPUVMEM_INSTALL_HEADERS=ON
+#    cmake --install . --prefix /path
+#
 # REQUIREMENTS: - CUDA Toolkit 10.0+ (13.0+ requires C++17) - CMake 3.18+ -
-# Boost libraries - CFITSIO - Casacore (casa, ms, tables, measures, meas
-# components) - NVIDIA GPU with compute capability >= 5.0
+# Boost libraries - CCfits (C++ FITS I/O; requires CFITSIO) - Casacore (casa, ms,
+# tables, measures, meas components) - NVIDIA GPU with compute capability >= 5.0
 #
 # ============================================================================
 
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 project(gpuvmem LANGUAGES C CXX CUDA)
+
+include(GNUInstallDirs)
 
 # ============================================================================
 # CMake Policies
@@ -72,7 +82,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 # Find required packages
 find_package(CUDAToolkit REQUIRED)
 find_package(Boost REQUIRED)
-find_package(CFITSIO REQUIRED)
+find_package(CFITSIO REQUIRED)  # Required by CCfits
+find_package(CCfits REQUIRED)  # Mandatory C++ FITS I/O in gpuvmem
 
 # Casacore configuration Make external dependencies optional to avoid build
 # failures
@@ -86,6 +97,20 @@ find_package(Casacore REQUIRED COMPONENTS casa ms tables measures meas)
 option(MEMORY_DEBUG "Enable GDB debugging for CUDA code (adds -g -G flags)" OFF)
 option(USE_FAST_MATH
        "Use fast math functions (decreases precision, increases speed)" OFF)
+
+# Installation (cmake --install / make install under CMAKE_INSTALL_PREFIX)
+option(GPUVMEM_INSTALL_EXECUTABLE
+       "Install the gpuvmem program (built from src/main.cu) to CMAKE_INSTALL_BINDIR"
+       ON)
+option(GPUVMEM_INSTALL_STATIC_LIBS
+       "Install internal static libraries to CMAKE_INSTALL_LIBDIR (for custom mains / other projects)"
+       OFF)
+option(GPUVMEM_INSTALL_HEADERS
+       "Install include/ tree to CMAKE_INSTALL_INCLUDEDIR/gpuvmem (recommended with GPUVMEM_INSTALL_STATIC_LIBS)"
+       OFF)
+option(GPUVMEM_BUILD_TESTS "Build GoogleTest unit and integration tests" ON)
+option(GPUVMEM_TEST_MFS_FACTORY
+       "Build heavy MFS synthesizer factory unit test (links all static libs)" OFF)
 
 # ============================================================================
 # C++ Standard Configuration
@@ -140,22 +165,100 @@ if(NOT Boost_FOUND)
   message(FATAL_ERROR "Boost is required but not found. Please install Boost.")
 endif()
 
-# Create executable target
+# Domain source groups (STATIC libraries)
+set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+file(GLOB APP_CORE_CUDA_SOURCES ${SRC_DIR}/options.cu ${SRC_DIR}/cli/*.cu)
+file(GLOB APP_CORE_CXX_SOURCES ${SRC_DIR}/cli/*.cc)
+set(APP_CORE_SOURCES ${APP_CORE_CUDA_SOURCES} ${APP_CORE_CXX_SOURCES})
+file(GLOB MFS_CUDA_SOURCES ${SRC_DIR}/mfs/*.cu)
+file(GLOB MFS_CPP_SOURCES ${SRC_DIR}/mfs/*.cc)
+set(MFS_SOURCES ${MFS_CUDA_SOURCES} ${MFS_CPP_SOURCES})
+file(GLOB OPTIMIZER_SOURCES CONFIGURE_DEPENDS ${SRC_DIR}/optimizers/*.cu)
+file(GLOB LINESEARCH_SOURCES ${SRC_DIR}/linesearch/*.cu ${SRC_DIR}/seeding/*.cu
+                              ${SRC_DIR}/projection/*.cu)
+file(
+  GLOB
+  REGULARIZER_SOURCES
+  ${SRC_DIR}/regularizer_kernels/*.cu
+  ${SRC_DIR}/objective_function/terms/chi2/*.cu
+  ${SRC_DIR}/objective_function/terms/regularizers/*.cu
+  ${SRC_DIR}/objective_function/fi_context.cu)
+file(
+  GLOB
+  IMAGING_SOURCES
+  ${SRC_DIR}/beam/*.cu
+  ${SRC_DIR}/chi2/*.cu
+  ${SRC_DIR}/errors/*.cu
+  ${SRC_DIR}/fft/*.cu
+  ${SRC_DIR}/gridding/*.cu
+  ${SRC_DIR}/idft/*.cu
+  ${SRC_DIR}/image_processing/*.cu
+  ${SRC_DIR}/kernels/*.cu
+  ${SRC_DIR}/measurement_operator/*.cu
+  ${SRC_DIR}/reduction/*.cu
+  ${SRC_DIR}/visibility/*.cu
+  ${SRC_DIR}/weighting/*.cu)
+file(GLOB IO_SOURCES ${SRC_DIR}/fits/*.cu ${SRC_DIR}/io/*.cu)
+file(GLOB MS_SOURCES ${SRC_DIR}/ms/*.cu)
+file(GLOB COMMON_CUDA_SOURCES ${SRC_DIR}/utils/*.cu)
+file(GLOB COMMON_CPP_SOURCES ${SRC_DIR}/utils/*.cc ${SRC_DIR}/rng/*.cc)
+
+add_library(gpuvmem_appcore_static STATIC ${APP_CORE_SOURCES})
+foreach(CC_FILE ${APP_CORE_CXX_SOURCES})
+  set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
+endforeach()
+add_library(gpuvmem_mfs_static STATIC ${MFS_SOURCES})
+foreach(CC_FILE ${MFS_CPP_SOURCES})
+  set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
+endforeach()
+add_library(gpuvmem_optimizers_static STATIC ${OPTIMIZER_SOURCES})
+add_library(gpuvmem_linesearch_static STATIC ${LINESEARCH_SOURCES})
+add_library(gpuvmem_regularizers_static STATIC ${REGULARIZER_SOURCES})
+add_library(gpuvmem_imaging_static STATIC ${IMAGING_SOURCES})
+add_library(gpuvmem_io_static STATIC ${IO_SOURCES})
+add_library(gpuvmem_ms_static STATIC ${MS_SOURCES})
+add_library(gpuvmem_common_static STATIC ${COMMON_CUDA_SOURCES} ${COMMON_CPP_SOURCES})
+
+foreach(CC_FILE ${COMMON_CPP_SOURCES})
+  set_source_files_properties(${CC_FILE} PROPERTIES LANGUAGE CXX)
+endforeach()
+
+# Main executable target
 add_executable(gpuvmem ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cu)
 
-# Add all CUDA source files
-file(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu)
-target_sources(gpuvmem PRIVATE ${SOURCE_FILES})
+set(
+  GPUVMEM_INTERNAL_TARGETS
+  gpuvmem_appcore_static
+  gpuvmem_mfs_static
+  gpuvmem_optimizers_static
+  gpuvmem_linesearch_static
+  gpuvmem_regularizers_static
+  gpuvmem_imaging_static
+  gpuvmem_io_static
+  gpuvmem_ms_static
+  gpuvmem_common_static)
 
-# Set C++ compile features based on standard
-target_compile_features(gpuvmem PUBLIC cxx_std_${CMAKE_CXX_STANDARD})
+set(GPUVMEM_ALL_TARGETS gpuvmem ${GPUVMEM_INTERNAL_TARGETS})
 
-# Configure output directory
+foreach(TGT ${GPUVMEM_ALL_TARGETS})
+  target_compile_features(${TGT} PUBLIC cxx_std_${CMAKE_CXX_STANDARD})
+endforeach()
+
+# Configure output directories (outside build/: project-root bin/ and lib/)
 set(BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bin)
+set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 if(PREFIX)
   set(BINARY_DIR ${PREFIX})
 endif()
 set_target_properties(gpuvmem PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${BINARY_DIR})
+foreach(_gpuvmem_lib ${GPUVMEM_INTERNAL_TARGETS})
+  set_target_properties(
+    ${_gpuvmem_lib}
+    PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${LIB_DIR}
+               # Windows / mixed: keep import libs with archives for static-only targets
+               LIBRARY_OUTPUT_DIRECTORY ${LIB_DIR})
+endforeach()
 
 # Include directories
 target_include_directories(
@@ -164,9 +267,65 @@ target_include_directories(
          ${CFITSIO_INCLUDE_DIR} # CFITSIO headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include # Project headers
          ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/ms
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/fits
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/io
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/projection
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizer_kernels
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/beam
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/chi2
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/errors
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/fft
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/gridding
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/idft
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/measurement_operator
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/visibility
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/reduction
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/image_processing
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/weighting
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/mfs
+         ${CMAKE_CURRENT_SOURCE_DIR}/include/rng
          ${Boost_INCLUDE_DIRS} # Boost headers
          ${CUDAToolkit_LIBRARY_ROOT}/samples/common/inc # CUDA samples headers
 )
+foreach(TGT ${GPUVMEM_INTERNAL_TARGETS})
+  target_include_directories(${TGT} PUBLIC ${CASACORE_INCLUDE_DIRS}
+                                           ${CFITSIO_INCLUDE_DIR}
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/classes
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/ms
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/fits
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/io
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/optimizers
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/linesearch
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/projection
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/regularizer_kernels
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/seeding
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/objective_function
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/beam
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/chi2
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/errors
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/fft
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/gridding
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/idft
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/measurement_operator
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/visibility
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/reduction
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/image_processing
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/weighting
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/mfs
+                                           ${CMAKE_CURRENT_SOURCE_DIR}/include/rng
+                                           ${Boost_INCLUDE_DIRS}
+                                           ${CUDAToolkit_LIBRARY_ROOT}/samples/common/inc)
+endforeach()
 
 # ============================================================================
 # CUDA Architecture Detection and Configuration
@@ -428,14 +587,18 @@ endif()
 
 # Set CUDA architectures
 set(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_LIST})
-set_target_properties(gpuvmem PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
+foreach(TGT ${GPUVMEM_ALL_TARGETS})
+  set_target_properties(${TGT} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
+endforeach()
 
 # For CUDA 12+, also add direct -arch=sm_X flags (CMake generates compute_X
 # which nvcc rejects)
 if(CUDA_VERSION_MAJOR GREATER_EQUAL 12)
   foreach(ARCH ${CUDA_ARCH_LIST})
-    target_compile_options(gpuvmem
-                           PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_${ARCH}>)
+    foreach(TGT ${GPUVMEM_ALL_TARGETS})
+      target_compile_options(${TGT}
+                             PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_${ARCH}>)
+    endforeach()
   endforeach()
   message(
     STATUS "CUDA 12+ detected: Using -arch=sm_X flags (${CUDA_ARCH_LIST})")
@@ -453,6 +616,10 @@ set_target_properties(
   PROPERTIES CUDA_SEPARABLE_COMPILATION ON # Enable separate compilation for
                                            # faster builds
              CUDA_STANDARD ${CMAKE_CUDA_STANDARD})
+foreach(TGT ${GPUVMEM_INTERNAL_TARGETS})
+  set_target_properties(${TGT} PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+                                          CUDA_STANDARD ${CMAKE_CUDA_STANDARD})
+endforeach()
 
 # Common CUDA flags (OpenMP support)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp")
@@ -460,18 +627,24 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp")
 # Build-specific compilation flags
 if(MEMORY_DEBUG)
   message(STATUS "Memory debugging: ON")
-  target_compile_options(gpuvmem PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-g -G
-                                         -D_FORCE_INLINES -w>)
+  foreach(TGT ${GPUVMEM_ALL_TARGETS})
+    target_compile_options(${TGT} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-g -G
+                                           -D_FORCE_INLINES -w>)
+  endforeach()
 else()
   if(USE_FAST_MATH)
     message(STATUS "Fast math: ON")
-    target_compile_options(
-      gpuvmem PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-D_FORCE_INLINES -w
-                      --use_fast_math -O3>)
+    foreach(TGT ${GPUVMEM_ALL_TARGETS})
+      target_compile_options(
+        ${TGT} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-D_FORCE_INLINES -w
+                        --use_fast_math -O3>)
+    endforeach()
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3")
   else()
-    target_compile_options(
-      gpuvmem PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-D_FORCE_INLINES -w -O3>)
+    foreach(TGT ${GPUVMEM_ALL_TARGETS})
+      target_compile_options(
+        ${TGT} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-D_FORCE_INLINES -w -O3>)
+    endforeach()
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xptxas -O3")
   endif()
 endif()
@@ -484,38 +657,80 @@ endif()
 set(CUDA_LIBS ${CUDA_cuda_LIBRARY} ${CUDA_cudart_LIBRARY} ${CUDA_cufft_LIBRARY})
 
 # External libraries
-set(EXTERNAL_LIBS ${CASACORE_LIBRARIES} ${CFITSIO_LIBRARY} ${Boost_LIBRARIES})
+target_include_directories(gpuvmem PUBLIC ${CCfits_INCLUDE_DIRS})
+foreach(TGT ${GPUVMEM_INTERNAL_TARGETS})
+  target_include_directories(${TGT} PUBLIC ${CCfits_INCLUDE_DIRS})
+endforeach()
+set(EXTERNAL_LIBS ${CASACORE_LIBRARIES} ${CCfits_LIBRARIES} ${CFITSIO_LIBRARIES} ${Boost_LIBRARIES})
+message(STATUS "FITS I/O: CCfits (mandatory)")
+message(STATUS "CCfits_LIBRARY=${CCfits_LIBRARY}")
+if(CCfits_LIBRARY)
+  get_filename_component(CCfits_LIBRARY_DIR "${CCfits_LIBRARY}" DIRECTORY)
+  target_link_directories(gpuvmem PRIVATE "${CCfits_LIBRARY_DIR}")
+endif()
 
-# Link all libraries
+# Link all libraries (CCfits and CFITSIO explicitly so host linker sees them when linking CUDA object files)
 target_link_libraries(
   gpuvmem
-  PRIVATE m # Math library
+  PRIVATE -Wl,--whole-archive
+          ${GPUVMEM_INTERNAL_TARGETS}
+          -Wl,--no-whole-archive
+          m # Math library
           stdc++ # C++ standard library
           gomp # OpenMP (GNU implementation)
           ${CUDA_LIBS}
-          ${EXTERNAL_LIBS})
+          ${CCfits_LIBRARIES}
+          ${CFITSIO_LIBRARIES}
+          ${CASACORE_LIBRARIES}
+          ${Boost_LIBRARIES})
 
 # ============================================================================
-# Installation
+# Installation (cmake --install . --prefix /path or CMAKE_INSTALL_PREFIX)
 # ============================================================================
+#
+# Typical uses:
+#   - End user: default ON for executable only → gpuvmem in prefix/bin
+#   - Developer: -DGPUVMEM_INSTALL_STATIC_LIBS=ON -DGPUVMEM_INSTALL_HEADERS=ON
+#     then link installed .a files and -I prefix/include/gpuvmem
+#
+if(GPUVMEM_INSTALL_EXECUTABLE)
+  install(TARGETS gpuvmem RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
-install(TARGETS gpuvmem DESTINATION bin)
+if(GPUVMEM_INSTALL_STATIC_LIBS)
+  install(
+    TARGETS ${GPUVMEM_INTERNAL_TARGETS}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+if(GPUVMEM_INSTALL_HEADERS)
+  install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+          DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/gpuvmem)
+endif()
 
 # ============================================================================
 # Testing
 # ============================================================================
 
 enable_testing()
+
+if(GPUVMEM_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
+
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
-# Test cases
-set(TEST_CASES antennae co65 freq78 m87 selfcalband9)
+# End-to-end dataset tests: each test.sh runs several scenarios (see tests/common/e2e_lib.sh).
+# Override iteration budget: GPUVMEM_E2E_MAX_ITER=25 ctest -L e2e
+set(TEST_CASES antennae co65 FREQ78 M87 selfcalband9)
 
-# Add all test cases
 foreach(TEST_NAME ${TEST_CASES})
-  add_test(NAME ${TEST_NAME}
-           COMMAND bash ${TEST_DIR}/${TEST_NAME}/test.sh ${BINARY_DIR}/gpuvmem
-                   ${TEST_DIR}/${TEST_NAME})
+  add_test(
+    NAME "e2e_${TEST_NAME}"
+    COMMAND bash ${TEST_DIR}/${TEST_NAME}/test.sh ${BINARY_DIR}/gpuvmem
+            ${TEST_DIR}/${TEST_NAME})
+  set_tests_properties("e2e_${TEST_NAME}" PROPERTIES LABELS "e2e")
 endforeach()
 
 # ============================================================================
@@ -530,8 +745,13 @@ message(STATUS "CUDA standard: ${CMAKE_CUDA_STANDARD}")
 message(STATUS "CUDA version: ${CUDAToolkit_VERSION}")
 message(STATUS "CUDA path: ${CUDAToolkit_LIBRARY_ROOT}")
 message(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
-message(STATUS "Output directory: ${BINARY_DIR}")
+message(STATUS "Runtime output directory: ${BINARY_DIR}")
+message(STATUS "Static library output directory: ${LIB_DIR}")
 message(STATUS "Memory debug: ${MEMORY_DEBUG}")
 message(STATUS "Fast math: ${USE_FAST_MATH}")
+message(STATUS "Install executable: ${GPUVMEM_INSTALL_EXECUTABLE}")
+message(STATUS "Install static libraries: ${GPUVMEM_INSTALL_STATIC_LIBS}")
+message(STATUS "Install headers: ${GPUVMEM_INSTALL_HEADERS}")
+message(STATUS "Build unit tests: ${GPUVMEM_BUILD_TESTS}")
 message(STATUS "===========================")
 message(STATUS "")

@@ -1,60 +1,81 @@
-
 #ifndef OPTIMIZER_CUH
 #define OPTIMIZER_CUH
 
+#include <memory>
+
+#include "projection/projection.hh"
+
+class Image;
+class ObjectiveFunction;
+class LineSearcher;
+
+namespace gpuvmem {
+namespace cli {
+class IRunObserver;
+}
+}  // namespace gpuvmem
+
 class Optimizer {
  public:
+  __host__ virtual ~Optimizer();
+
   __host__ virtual void allocateMemoryGpu() = 0;
   __host__ virtual void deallocateMemoryGpu() = 0;
   __host__ virtual void optimize() = 0;
-  __host__ virtual int getK(){};
-  __host__ virtual void setK(int K){};
   //__host__ virtual void configure() = 0;
 
-  __host__ Optimizer() {
-    this->ftol = 1E-12;
-    this->gtol = 1E-12;
-    this->total_iterations = 500;
-  };
+  __host__ Optimizer();
+  __host__ Optimizer(int total_iterations, float ftol);
+  __host__ Optimizer(int total_iterations, float ftol, float gtol);
 
-  __host__ Optimizer(int total_iterations, float ftol) {
-    this->ftol = ftol;
-    this->gtol = 1E-12;
-    this->total_iterations = total_iterations;
-  };
+  __host__ float getFtol();
+  __host__ float getGtol();
+  __host__ int getCurrentIteration();
+  __host__ int getTotalIterations() const;
 
-  __host__ Optimizer(int total_iterations, float ftol, float gtol) {
-    this->ftol = ftol;
-    this->gtol = gtol;
-    this->total_iterations = total_iterations;
-  };
+  __host__ void setRunObserver(gpuvmem::cli::IRunObserver* observer);
+  __host__ gpuvmem::cli::IRunObserver* getRunObserver() const;
 
-  __host__ float getFtol() { return this->ftol; };
+  /** Optional context for alternating / block optimization (reporting only). */
+  __host__ void setOptimizationSubRunContext(int sub_run, int sub_run_total,
+                                              const std::string& plane_label);
+  __host__ void getOptimizationSubRunContext(int& sub_run, int& sub_run_total,
+                                             std::string& plane_label) const;
 
-  __host__ float getGtol() { return this->gtol; };
+  __host__ void setImage(Image* image);
+  __host__ void setObjectiveFunction(ObjectiveFunction* of);
+  void setFlag(int flag);
 
-  __host__ int getCurrentIteration() { return this->current_iteration; };
+  void setFTol(float ftol);
+  void setGTol(float gtol);
+  void setTotalIterations(int iterations);
 
-  __host__ void setImage(Image* image) { this->image = image; };
-  __host__ void setObjectiveFunction(ObjectiveFunction* of) { this->of = of; };
-  void setFlag(int flag) { this->flag = flag; };
+  ObjectiveFunction* getObjectiveFunction();
 
-  void setFTol(float ftol) { this->ftol = ftol; };
+  __host__ virtual void setLineSearcher(std::unique_ptr<LineSearcher> searcher);
 
-  void setGTol(float gtol) { this->gtol = gtol; };
-
-  void setTotalIterations(int iterations) {
-    this->total_iterations = iterations;
-  };
-
-  ObjectiveFunction* getObjectiveFunction() { return this->of; };
+  __host__ virtual void setProjection(std::unique_ptr<Projection> projection);
 
  protected:
+  /**
+   * Objective stopping: scale-invariant on |f|,
+   *   |f_new − f_prev| ≤ ftol · (1 + max(|f_new|, |f_prev|)).
+   * Also stops on exact float equality of f (line search made no representable progress).
+   * Returns false if either value is non-finite.
+   */
+  __host__ bool objectiveSequenceWithinTolerance(float f_new, float f_prev) const;
+
+  __host__ void reportIteration(float phi, double wall_time_s);
+
   ObjectiveFunction* of;
+  gpuvmem::cli::IRunObserver* run_observer_;
+  int optimization_sub_run_;
+  int optimization_sub_run_total_;
+  std::string optimization_plane_label_;
   Image* image;
   int flag;
   int total_iterations;
-  int current_iteration = 0;
+  int current_iteration;
   float ftol;
   float gtol;
 };

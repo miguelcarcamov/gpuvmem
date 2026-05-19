@@ -1,7 +1,12 @@
 #ifndef IO_CUH
 #define IO_CUH
 
-#include "MSFITSIO.cuh"
+#include "classes/imaging_header.hh"
+#include <fitsio.h>  // For fitsfile forward declaration
+#include <optional>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
 
 typedef struct stat Stat;
 
@@ -34,9 +39,17 @@ class Io {
   virtual void setNormalizationFactor(int normalization_factor){};
   virtual void setPrintImages(bool print_images){};
 
-  virtual headerValues readHeader(){};
-  virtual headerValues readHeader(char* header_name){};
-  virtual headerValues readHeader(std::string header_name){};
+  /**
+   * When set, supplies primary-HDU geometry without a model FITS path (synthetic grid),
+   * or overrides file-based geometry for FITS writes. Pass std::nullopt to use only file input.
+   */
+  virtual void setModelFitsGeometry(std::optional<gpuvmem::ImagingHeader> geometry) {
+    (void)geometry;
+  }
+
+  virtual gpuvmem::ImagingHeader readHeader() { return {}; }
+  virtual gpuvmem::ImagingHeader readHeader(char* /*header_name*/) { return {}; }
+  virtual gpuvmem::ImagingHeader readHeader(std::string /*header_name*/) { return {}; }
   virtual std::vector<float> read_data_float_FITS(){};
   virtual std::vector<float> read_data_float_FITS(char* filename){};
   virtual std::vector<float> read_data_float_FITS(std::string filename){};
@@ -141,6 +154,13 @@ class Io {
                                        int iteration,
                                        int index,
                                        bool isInGPU){};
+  virtual void printNormalizedImage(float* I,
+                                    char* name_image,
+                                    char* units,
+                                    int iteration,
+                                    int index,
+                                    float scale,
+                                    bool isInGPU){};
   virtual void printNotPathNotNormalizedImage(float* I,
                                               char* name_image,
                                               char* units,
@@ -188,30 +208,30 @@ class Io {
                                    float equinox,
                                    bool isInGPU){};
   virtual void printcuFFTComplex(cufftComplex* I,
-                                 fitsfile* canvas,
+                                 fitsfile* /*canvas*/,
                                  char* out_image,
-                                 char* mempath,
+                                 char* /*mempath*/,
                                  int iteration,
-                                 float fg_scale,
+                                 float /*fg_scale*/,
                                  long M,
                                  long N,
                                  int option,
                                  bool isInGPU){};
   virtual void printcuFFTComplex(cufftComplex* I,
-                                 fitsfile* canvas,
+                                 fitsfile* /*canvas*/,
                                  char* out_image,
-                                 char* mempath,
+                                 char* /*mempath*/,
                                  int iteration,
                                  int option,
                                  bool isInGPU){};
   virtual void printcuFFTComplex(cufftComplex* I,
                                  char* input,
                                  char* path,
-                                 fitsfile* canvas,
+                                 fitsfile* /*canvas*/,
                                  char* out_image,
-                                 char* mempath,
+                                 char* /*mempath*/,
                                  int iteration,
-                                 float fg_scale,
+                                 float /*fg_scale*/,
                                  long M,
                                  long N,
                                  int option,
@@ -238,106 +258,8 @@ class Io {
   virtual void setDataColumns(std::string datacolumn_input,
                               std::string datacolumn_output){};
 
-  virtual void read(std::vector<MSAntenna>& antennas,
-                    std::vector<Field>& fields,
-                    MSData* data){};
-  virtual void read(char const* MS_name,
-                    std::vector<MSAntenna>& antennas,
-                    std::vector<Field>& fields,
-                    MSData* data,
-                    bool noise,
-                    bool W_projection,
-                    float random_probability,
-                    int gridding){};
-  virtual void read(char const* MS_name,
-                    std::vector<MSAntenna>& antennas,
-                    std::vector<Field>& fields,
-                    MSData* data){};
-  virtual void readSpecificColumn(std::vector<MSAntenna>& antennas,
-                                  std::vector<Field>& fields,
-                                  MSData* data){};
-  virtual void readSpecificColumn(std::vector<MSAntenna>& antennas,
-                                  std::vector<Field>& fields,
-                                  MSData* data,
-                                  std::string data_column){};
-  virtual void readSpecificColumn(char const* MS_name,
-                                  std::vector<MSAntenna>& antennas,
-                                  std::vector<Field>& fields,
-                                  MSData* data,
-                                  bool noise,
-                                  bool W_projection,
-                                  float random_probability,
-                                  int gridding){};
-  virtual void readSpecificColumn(char const* MS_name,
-                                  std::string data_column,
-                                  std::vector<MSAntenna>& antennas,
-                                  std::vector<Field>& fields,
-                                  MSData* data,
-                                  bool noise,
-                                  bool W_projection,
-                                  float random_probability,
-                                  int gridding){};
-  virtual void readSpecificColumn(char const* MS_name,
-                                  std::vector<MSAntenna>& antennas,
-                                  std::vector<Field>& fields,
-                                  MSData* data){};
-  virtual void readSpecificColumn(char const* MS_name,
-                                  std::string data_column,
-                                  std::vector<MSAntenna>& antennas,
-                                  std::vector<Field>& fields,
-                                  MSData* data){};
   virtual void copy(char const* infile, char const* outfile){};
   virtual void copy(){};
-  virtual void write(char const* outfile,
-                     char const* out_col,
-                     std::vector<Field>& fields,
-                     MSData data,
-                     float random_probability,
-                     bool store_model_vis_input,
-                     bool noise,
-                     bool W_projection){};
-  virtual void write(char const* out_col,
-                     std::vector<Field>& fields,
-                     MSData data){};
-  virtual void write(char const* outfile,
-                     char const* out_col,
-                     std::vector<Field>& fields,
-                     MSData data){};
-  virtual void write(char const* outfile,
-                     char const* out_col,
-                     std::vector<Field>& fields,
-                     MSData data,
-                     bool store_model_vis_input){};
-  virtual void write(char const* out_col,
-                     std::vector<Field>& fields,
-                     MSData data,
-                     bool store_model){};
-  virtual void writeSpecificColumn(char const* outfile,
-                                   std::vector<Field>& fields,
-                                   MSData data,
-                                   float random_probability,
-                                   bool store_model_vis_input,
-                                   bool noise,
-                                   bool W_projection){};
-  virtual void writeSpecificColumn(std::vector<Field>& fields, MSData data){};
-  virtual void writeSpecificColumn(char const* outfile,
-                                   std::vector<Field>& fields,
-                                   MSData data){};
-  virtual void writeSpecificColumn(char const* outfile,
-                                   std::vector<Field>& fields,
-                                   MSData data,
-                                   bool store_model_vis_input){};
-  virtual void writeModelVisibilities(char const* outfile,
-                                      std::vector<Field>& fields,
-                                      MSData data){};
-  virtual void writeModelVisibilities(std::vector<Field>& fields,
-                                      MSData data){};
-  virtual void writeResidualsAndModel(std::vector<Field>& fields,
-                                      MSData data){};
-  virtual void writeResidualsAndModel(std::string input,
-                                      std::string output,
-                                      std::vector<Field>& fields,
-                                      MSData data){};
 
   void setPath(std::string pip) {
     this->path = pip;

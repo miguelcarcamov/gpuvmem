@@ -2,13 +2,12 @@
 #define FI_CUH
 
 #include <cuda_runtime.h>
+#include <helper_cuda.h>
+#include <iostream>
 
 #include "ckernel.cuh"
 
-extern long M, N;
-extern int image_count;
-extern float* penalizators;
-extern int nPenalizators;
+class ObjectiveFunction;
 
 class Fi {
  public:
@@ -32,9 +31,9 @@ class Fi {
   virtual void setFgScale(float fg_scale) {};
   virtual float getFgScale() {};
 
-  std::string getName() { return this->name; };
+  const std::string& getName() const { return this->name; }
 
-  std::string setName(std::string name) { this->name = name; };
+  void setName(const std::string& name) { this->name = name; }
 
   float get_fivalue() { return this->fi_value; };
   bool getNormalize() { return this->normalize; };
@@ -54,39 +53,65 @@ class Fi {
   void setIteration(int iteration) { this->iteration = iteration; };
   void setNormalize(bool normalize) { this->normalize = normalize; };
 
+  /** Copy grid and -Z weight table pointer from the objective (call before configure). */
+  void attachToObjectiveFunction(ObjectiveFunction* o);
+
   virtual float calculateSecondDerivate() = 0;
   virtual void configure(int penalizatorIndex,
                          int imageIndex,
                          int imageToAdd,
                          bool normalize) {
     this->imageIndex = imageIndex;
-    this->order = order;
-    this->mod = mod;
+    this->order = imageIndex;
+    this->mod = imageToAdd;
     this->imageToAdd = imageToAdd;
     this->normalize = normalize;
 
-    if (imageIndex > image_count - 1 || imageToAdd > image_count - 1) {
-      printf("There is no image for the provided index %s\n", this->name);
+    if (grid_M_ <= 0 || grid_N_ <= 0 || grid_image_count_ <= 0) {
+      std::cerr << "Fi::configure: image grid not set (attach objective to Image first). Term \""
+                << this->name << "\"\n";
+      exit(-1);
+    }
+
+    if (imageIndex > grid_image_count_ - 1 || imageToAdd > grid_image_count_ - 1) {
+      std::cerr << "Fi::configure: image index out of range for term \"" << this->name << "\"\n";
       exit(-1);
     }
 
     if (penalizatorIndex != -1) {
       if (penalizatorIndex < 0) {
-        printf("invalid index for penalizator (%s)\n", this->name);
+        std::cerr << "Fi::configure: invalid regularizer index for term \"" << this->name << "\"\n";
         exit(-1);
-      } else if (penalizatorIndex > (nPenalizators - 1)) {
+      } else if (n_z_weights_ <= 0 || penalizatorIndex > (n_z_weights_ - 1)) {
         this->penalization_factor = 0.0f;
+      } else if (z_weights_ptr_ != nullptr) {
+        this->penalization_factor = z_weights_ptr_[penalizatorIndex];
       } else {
-        this->penalization_factor = penalizators[penalizatorIndex];
+        this->penalization_factor = 0.0f;
       }
     }
 
-    checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float) * M * N));
-    checkCudaErrors(cudaMemset(device_S, 0, sizeof(float) * M * N));
+    const size_t plane = static_cast<size_t>(grid_M_) * static_cast<size_t>(grid_N_);
+    checkCudaErrors(cudaMalloc((void**)&device_S, sizeof(float) * plane));
+    checkCudaErrors(cudaMemset(device_S, 0, sizeof(float) * plane));
 
-    checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float) * M * N));
-    checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * M * N));
+    checkCudaErrors(cudaMalloc((void**)&device_DS, sizeof(float) * plane));
+    checkCudaErrors(cudaMemset(device_DS, 0, sizeof(float) * plane));
   };
+
+ protected:
+  long gridM() const { return grid_M_; }
+  long gridN() const { return grid_N_; }
+  int gridImageCount() const { return grid_image_count_; }
+  const float* zWeights() const { return z_weights_ptr_; }
+  int zWeightCount() const { return n_z_weights_; }
+
+ private:
+  long grid_M_{0};
+  long grid_N_{0};
+  int grid_image_count_{0};
+  const float* z_weights_ptr_{nullptr};
+  int n_z_weights_{0};
 
  protected:
   float fi_value;

@@ -1,0 +1,2 @@
+gpuvmem_add_unit_test(gpuvmem_unit_flags SOURCES test_flags.cc)
+gpuvmem_add_cuda_unit_test(gpuvmem_unit_cuda_grid SOURCES test_cuda_grid.cc)

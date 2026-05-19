@@ -1,34 +1,35 @@
 name: gpuvmem CI
 
+# Uses container image ghcr.io/<repo>:base (see build-base-container workflow).
+# Changing Dockerfile does NOT rebuild :base here — run or wait for build-base-container.
+
 on:
   push:
-    branches: [master, framework_dev, development]
-    paths:
+    paths: &ci_paths
     - '**.cu'
     - '**.cuh'
     - '**.c'
     - '**.h'
+    - '**.hh'
     - '**.cpp'
     - '**.hpp'
     - '**.cmake'
+    - '**.cc'
+    - '**.sh'
     - CMakeLists.txt
+    - Dockerfile
+    - 'tests/**'
+    - '.github/workflows/**'
   pull_request:
-    branches: [master]
-    types: [opened, reopened]
-    paths:
-    - '**.cu'
-    - '**.cuh'
-    - '**.c'
-    - '**.h'
-    - '**.cpp'
-    - '**.hpp'
-    - '**.cmake'
-    - CMakeLists.txt
+    branches: [master, framework_dev, development]
+    types: [opened, reopened, synchronize]
+    paths: *ci_paths
+  workflow_dispatch:
 
 env:
   BUILD_DIR: build
   CONFIG: Debug
-  CUDA_ARCH: 75  # Default architecture for CI (Turing - widely supported)
+  CUDA_ARCH: 75
 
 permissions:
   contents: read
@@ -36,18 +37,17 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
+    container: &ci_container
       image: ghcr.io/${{ github.repository }}:base
       credentials:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.REGISTRY_TOKEN }}
 
     steps:
-    - name: Verify CUDA installation
+    - name: Verify CUDA toolkit
       run: |
         nvcc --version
         test -f /usr/local/cuda/bin/nvcc
-        echo "CUDA verified successfully"
 
     - name: Install Git LFS
       run: |
@@ -65,35 +65,82 @@ jobs:
       run: |
         cmake . -B ${{ env.BUILD_DIR }} \
                -DCMAKE_BUILD_TYPE=${{ env.CONFIG }} \
-               -DCUDA_ARCH=${{ env.CUDA_ARCH }}
+               -DCUDA_ARCH=${{ env.CUDA_ARCH }} \
+               -DGPUVMEM_BUILD_TESTS=ON
 
     - name: Show CMake configuration errors
       if: failure() && steps.configure.outcome == 'failure'
       working-directory: ${{ env.BUILD_DIR }}
       run: |
-        echo "=== CMake Configuration Errors ==="
         if [[ -f "CMakeFiles/CMakeOutput.log" ]]; then
-          echo "---- CMakeFiles/CMakeOutput.log ----"
           tail -100 CMakeFiles/CMakeOutput.log
-          echo "----"
         fi
         if [[ -f "CMakeFiles/CMakeError.log" ]]; then
-          echo "---- CMakeFiles/CMakeError.log ----"
           tail -100 CMakeFiles/CMakeError.log
-          echo "----"
         fi
 
-    - name: Build gpuvmem
+    - name: Build gpuvmem and test targets
       working-directory: ${{ env.BUILD_DIR }}
-      run: |
-        cmake --build . --target all --verbose -j$(nproc)
+      run: cmake --build . --verbose -j$(nproc)
 
-    - name: Verify build output
+    - name: Verify gpuvmem binary
       run: |
-        if [[ -f "${{ env.BUILD_DIR }}/bin/gpuvmem" ]]; then
-          echo "Build successful: gpuvmem binary found"
-          ls -lh ${{ env.BUILD_DIR }}/bin/gpuvmem
+        test -f bin/gpuvmem
+        ls -lh bin/gpuvmem
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-cmake-build
+        if-no-files-found: error
+        path: |
+          build
+          bin/gpuvmem
+        retention-days: 3
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    container: *ci_container
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ci-cmake-build
+        path: .
+
+    - name: Detect CUDA device
+      id: cuda
+      run: |
+        if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+          echo "GPU runner: $(nvidia-smi -L | head -1)"
+          echo "available=true" >> "$GITHUB_OUTPUT"
         else
-          echo "Warning: gpuvmem binary not found in expected location"
-          find ${{ env.BUILD_DIR }} -name "gpuvmem" -type f || true
+          echo "No GPU visible (expected on github-hosted runners)."
+          echo "available=false" >> "$GITHUB_OUTPUT"
         fi
+
+    - name: Unit tests (no GPU required)
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L unit -LE gpu --output-on-failure
+
+    - name: Integration tests (no GPU required)
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L integration -LE gpu --output-on-failure
+
+    - name: GPU unit tests
+      if: steps.cuda.outputs.available == 'true'
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L gpu -L unit --output-on-failure
+
+    - name: GPU integration tests
+      if: steps.cuda.outputs.available == 'true'
+      working-directory: ${{ env.BUILD_DIR }}
+      run: ctest -L gpu -L integration --output-on-failure
+
+    - name: GPU tests skipped (no device)
+      if: steps.cuda.outputs.available != 'true'
+      run: |
+        echo "Skipped ctest -L gpu (objective CUDA, projection kernels, optimizer smoke)."
+        echo "Run locally with a GPU or use a self-hosted runner with nvidia-smi."

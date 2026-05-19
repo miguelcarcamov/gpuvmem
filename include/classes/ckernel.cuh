@@ -2,6 +2,8 @@
 #define CKERNEL_CUH
 
 #include "io.cuh"
+#include <iostream>
+#include <helper_cuda.h>
 
 class CKernel {
  public:
@@ -57,7 +59,9 @@ class CKernel {
   };
   __host__ virtual void createMemberGCF(){};
   __host__ virtual void setGCF(CKernel* gcf) { this->gcf = gcf; };
-  __host__ virtual float* getGCFGPU() { return this->gcf->getGPUKernel(); };
+  __host__ virtual float* getGCFGPU() {
+    return this->gcf != nullptr ? this->gcf->getGPUKernel() : nullptr;
+  };
   __host__ virtual std::vector<float> getGCFCPU() {
     return this->gcf->getKernel();
   };
@@ -547,6 +551,34 @@ class CKernel {
     checkCudaErrors(cudaMemcpy(this->gpu_kernel, this->kernel.data(),
                                sizeof(float) * this->m_times_n,
                                cudaMemcpyHostToDevice));
+  };
+
+  /**
+   * Normalize kernel so that sum of all values equals 1.
+   * This ensures proper energy conservation for gridding/degridding operations.
+   * For convolution gridding: grid[i] = Σ(kernel * vis)
+   * For degridding: vis = Σ(kernel * grid[i])
+   * Normalization ensures these operations are properly matched.
+   */
+  __host__ void normalizeKernel() {
+    float kernel_sum = 0.0f;
+    
+    // Compute sum of all kernel values
+    for (int i = 0; i < this->m; i++) {
+      for (int j = 0; j < this->n; j++) {
+        kernel_sum += this->kernel[this->n * i + j];
+      }
+    }
+    
+    // Normalize kernel so sum = 1
+    if (kernel_sum > 0.0f) {
+      float norm_factor = 1.0f / kernel_sum;
+      for (int i = 0; i < this->m; i++) {
+        for (int j = 0; j < this->n; j++) {
+          this->kernel[this->n * i + j] *= norm_factor;
+        }
+      }
+    }
   };
 };
 #endif  // CKERNEL_CUH
