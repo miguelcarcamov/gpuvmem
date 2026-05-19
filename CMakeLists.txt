@@ -661,13 +661,23 @@ target_include_directories(gpuvmem PUBLIC ${CCfits_INCLUDE_DIRS})
 foreach(TGT ${GPUVMEM_INTERNAL_TARGETS})
   target_include_directories(${TGT} PUBLIC ${CCfits_INCLUDE_DIRS})
 endforeach()
-set(EXTERNAL_LIBS ${CASACORE_LIBRARIES} ${CCfits_LIBRARIES} ${CFITSIO_LIBRARIES} ${Boost_LIBRARIES})
+set(EXTERNAL_LIBS ${CASACORE_LIBRARIES} ${CCfits_LIBRARIES} ${CFITSIO_LIBRARIES}
+                  ${Boost_LIBRARIES})
 message(STATUS "FITS I/O: CCfits (mandatory)")
 message(STATUS "CCfits_LIBRARY=${CCfits_LIBRARY}")
+
+# Propagate CCfits / CFITSIO / Casacore / Boost to anything that links our static libs
+# (tests link a subset of gpuvmem_*_static without --whole-archive).
+add_library(gpuvmem_external_deps INTERFACE)
+target_link_libraries(gpuvmem_external_deps INTERFACE ${EXTERNAL_LIBS})
 if(CCfits_LIBRARY)
   get_filename_component(CCfits_LIBRARY_DIR "${CCfits_LIBRARY}" DIRECTORY)
+  target_link_directories(gpuvmem_external_deps INTERFACE "${CCfits_LIBRARY_DIR}")
   target_link_directories(gpuvmem PRIVATE "${CCfits_LIBRARY_DIR}")
 endif()
+foreach(TGT ${GPUVMEM_INTERNAL_TARGETS})
+  target_link_libraries(${TGT} PUBLIC gpuvmem_external_deps)
+endforeach()
 
 # Link all libraries (CCfits and CFITSIO explicitly so host linker sees them when linking CUDA object files)
 target_link_libraries(
@@ -679,10 +689,7 @@ target_link_libraries(
           stdc++ # C++ standard library
           gomp # OpenMP (GNU implementation)
           ${CUDA_LIBS}
-          ${CCfits_LIBRARIES}
-          ${CFITSIO_LIBRARIES}
-          ${CASACORE_LIBRARIES}
-          ${Boost_LIBRARIES})
+          ${EXTERNAL_LIBS})
 
 # ============================================================================
 # Installation (cmake --install . --prefix /path or CMAKE_INSTALL_PREFIX)

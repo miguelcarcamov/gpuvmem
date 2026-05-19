@@ -5,6 +5,10 @@ ENV PATH=/usr/local/cuda/bin${PATH:+:${PATH}} \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}} \
     DEBIAN_FRONTEND=noninteractive
 
+# libccfits-dev is in universe on Ubuntu 22.04
+RUN sed -i '/^Components:/ s/ main$/ main universe/' /etc/apt/sources.list \
+    && sed -i '/^Components:/ s/ main restricted$/ main restricted universe/' /etc/apt/sources.list || true
+
 # Install system dependencies and build tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -60,11 +64,14 @@ RUN cd /usr/local/cuda && \
     mkdir -p inc && \
     mv *.h inc/ 2>/dev/null || true
 
-# Verify CUDA installation
+# Verify CUDA installation and CCfits (gpuvmem requires find_package(CCfits))
 RUN nvcc --version && \
     test -f /usr/local/cuda/bin/nvcc && \
     test -d /usr/local/cuda/lib64 && \
-    echo "CUDA installation verified successfully"
+    test -f /usr/include/CCfits/FITS.h && \
+    test -e /usr/lib/x86_64-linux-gnu/libCCfits.so && \
+    test -f /usr/local/cuda/samples/common/inc/helper_cuda.h && \
+    echo "CUDA + CCfits + cuda-samples headers verified"
 
 LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem" \
       org.opencontainers.image.description="Base image for gpuvmem with CUDA 12.4.1, casacore, and CCfits"

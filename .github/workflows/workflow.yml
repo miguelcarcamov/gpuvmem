@@ -81,12 +81,26 @@ jobs:
 
     - name: Build gpuvmem and test targets
       working-directory: ${{ env.BUILD_DIR }}
-      run: cmake --build . --verbose -j$(nproc)
+      run: |
+        # Limit parallelism: many parallel nvcc jobs often OOM on hosted runners
+        # (failure shows as "gmake: *** [Makefile:146: all] Error 2" with no compiler line).
+        set -o pipefail
+        cmake --build . --verbose -j2 2>&1 | tee ../build.log
 
-    - name: Verify gpuvmem binary
+    - name: Show build errors
+      if: failure()
+      run: |
+        echo "=== Likely compiler/linker errors ==="
+        grep -E 'error:|fatal error:|undefined reference|collect2: error|Killed' build.log | tail -80 || true
+        echo "=== Tail of full build log ==="
+        tail -120 build.log || true
+
+    - name: Verify gpuvmem binary and static libs
       run: |
         test -f bin/gpuvmem
         ls -lh bin/gpuvmem
+        ls -lh lib/*.a
+        ldd bin/gpuvmem | grep -E 'CCfits|cfitsio|casa|cuda' || true
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -96,6 +110,7 @@ jobs:
         path: |
           build
           bin/gpuvmem
+          lib
         retention-days: 3
 
   test:
