@@ -37,6 +37,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     container: &ci_container
       image: ghcr.io/${{ github.repository }}:base
       credentials:
@@ -116,6 +119,9 @@ jobs:
   test:
     needs: build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     container: *ci_container
 
     steps:
