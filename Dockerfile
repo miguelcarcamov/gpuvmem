@@ -24,6 +24,7 @@ RUN apt-get update && \
         libblas-dev \
         liblapacke-dev \
         libcfitsio-dev \
+        libccfits-dev \
         wcslib-dev \
         libfftw3-dev \
         libhdf5-serial-dev \
@@ -66,4 +67,4 @@ RUN nvcc --version && \
     echo "CUDA installation verified successfully"
 
 LABEL org.opencontainers.image.source="https://github.com/miguelcarcamov/gpuvmem" \
-      org.opencontainers.image.description="Base image for gpuvmem with CUDA 12.4.1 and casacore"
+      org.opencontainers.image.description="Base image for gpuvmem with CUDA 12.4.1, casacore, and CCfits"
